@@ -403,11 +403,13 @@ function renderItems() {
 function buildSeasonCard(entry) {
     const card = document.createElement('div');
     card.className = 'card';
+    // 多季组或季号≠1 时显示季标签（单季第1季保持简洁）
+    const showSeasonLabel = entry.seasonCount > 1 || entry.season !== 1;
     const badges = [];
-    if (entry.seasonCount > 1) {
+    if (showSeasonLabel) {
         badges.push(`<span class="badge">第 ${entry.season} 季</span>`);
     }
-    badges.push(`<span class="badge" style="top:${entry.seasonCount > 1 ? 32 : 8}px">全 ${entry.episodeCount} 集</span>`);
+    badges.push(`<span class="badge" style="top:${showSeasonLabel ? 32 : 8}px">全 ${entry.episodeCount} 集</span>`);
     const progressPct = entry.episodeCount > 0
         ? Math.round((entry.watchedCount / entry.episodeCount) * 100)
         : 0;
@@ -422,7 +424,7 @@ function buildSeasonCard(entry) {
             <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
         </div>
         <div class="name">${escapeHtml(entry.show.title)}</div>
-        <div class="sub">${escapeHtml(`${entry.seasonCount > 1 ? '第 ' + entry.season + ' 季 · ' : ''}${entry.watchedCount}/${entry.episodeCount} 已看`)}</div>`;
+        <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}${entry.watchedCount}/${entry.episodeCount} 已看`)}</div>`;
     const overlay = card.querySelector('.poster-wrap');
     overlay.addEventListener('click', (e) => {
         if (e.target.closest('.play-overlay-btn')) {
@@ -437,8 +439,9 @@ function buildSeasonCard(entry) {
 function buildSeasonListRow(entry) {
     const row = document.createElement('div');
     row.className = 'lrow';
+    const showSeasonLabel = entry.seasonCount > 1 || entry.season !== 1;
     row.innerHTML = `
-        <span class="ltitle">${escapeHtml(entry.show.title)}${entry.seasonCount > 1 ? ` 第 ${entry.season} 季` : ''}</span>
+        <span class="ltitle">${escapeHtml(entry.show.title)}${showSeasonLabel ? ` 第 ${entry.season} 季` : ''}</span>
         <span class="lmeta">剧集</span>
         <span class="lmeta">${escapeHtml(entry.show.year ?? '')}</span>
         <span class="lmeta">${entry.watchedCount}/${entry.episodeCount} 已看</span>`;
