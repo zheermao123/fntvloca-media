@@ -39,7 +39,7 @@ jobs:
       build-matrix: ${{ steps.matrix.outputs.value }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
@@ -97,12 +97,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -116,31 +116,23 @@ jobs:
         run: npm install --no-optional --no-audit --no-fund
         timeout-minutes: 10
 
-      - name: Install macOS specific dependencies
+      - name: Setup macOS specific dependencies
         if: runner.os == 'macOS'
         run: |
           # 确保 dmg-license 正确安装
           npm install dmg-license --save-dev
-          # 安装额外的 macOS 构建依赖
-          npm install --no-optional
         timeout-minutes: 5
 
       - name: Setup Python (for native modules)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: '1.24'
-
-      - name: Setup build environment (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-        continue-on-error: true
+          cache-dependency-path: src/modules/proxy/go.sum
 
       - name: Download third-party dependencies
         run: |
@@ -282,25 +274,24 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
-      - name: Get commit info
-        id: commit
+      - name: Get changelog
+        id: changelog
         run: |
           {
-              echo "message<<EOF"
-              git log -1 --pretty=%B
+              echo "body<<EOF"
+              cat CHANGELOG.md
               echo
               echo "EOF"
           } >> "$GITHUB_OUTPUT"
-
 
       - name: Get package version
         id: package
@@ -316,18 +307,15 @@ jobs:
         run: find artifacts -type f -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" | sort
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.package.outputs.version }}
           name: 飞牛影视 v${{ steps.package.outputs.version }}
           body: |
-            ## 🎬 飞牛影视 v${{ steps.package.outputs.version }}
+            ${{ steps.changelog.outputs.body }}
 
-            ### 🔄 更新内容
-            ```
-            ${{ steps.commit.outputs.message }}
-            ```
-            
+            ---
+
             ### 💻 支持平台
             - ✅ Windows (x64)
             - ✅ macOS (Intel & Apple Silicon)
