@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { isVideoFile } from './scanner';
 
 export type NfoMetadata = {
     title: string | null;
@@ -163,19 +164,32 @@ export async function findNfoForVideo(videoPath: string): Promise<string | null>
         return null;
     }
 
+    // 1) 仅信任与视频同名的 nfo
     const lowerBase = baseName.toLowerCase();
-    const prioritized = [
-        entries.find((name) => name.toLowerCase() === `${lowerBase}.nfo`),
-        entries.find((name) => name.toLowerCase() === 'movie.nfo'),
-        entries.find((name) => name.toLowerCase() === 'tvshow.nfo'),
-        entries.find((name) => name.toLowerCase() === 'episodedetails.nfo'),
-    ];
-    const preferred = prioritized.find((value): value is string => value !== undefined);
-    if (preferred) {
-        return path.join(dir, preferred);
+    const exact = entries.find((name) => name.toLowerCase() === `${lowerBase}.nfo`);
+    if (exact) {
+        return path.join(dir, exact);
     }
-    const fallback = [...entries].sort((a, b) => a.localeCompare(b))[0];
-    return fallback ? path.join(dir, fallback) : null;
+
+    // 2) 目录级 nfo（movie.nfo / tvshow.nfo）只在单视频目录中生效，
+    //    避免平铺目录里多个影片误用同一个 nfo 的元数据。
+    const dirNfo = entries.find((name) => {
+        const lower = name.toLowerCase();
+        return lower === 'movie.nfo' || lower === 'tvshow.nfo';
+    });
+    if (!dirNfo) {
+        return null;
+    }
+    try {
+        const all = await fs.promises.readdir(dir);
+        const videoCount = all.filter((name) => isVideoFile(name)).length;
+        if (videoCount !== 1) {
+            return null;
+        }
+    } catch {
+        return null;
+    }
+    return path.join(dir, dirNfo);
 }
 
 export async function loadNfoMetadata(videoPath: string): Promise<NfoMetadata | null> {

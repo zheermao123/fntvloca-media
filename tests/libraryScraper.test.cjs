@@ -119,6 +119,15 @@ test('pickBestResult prefers exact title then year proximity', () => {
     assert.equal(noYear.id, 27205);
 });
 
+test('pickBestResult breaks same-year ties by vote average', () => {
+    const results = [
+        { id: 1425459, title: 'Iron Man 3 Unmasked', date: '2013-09-24', voteAverage: 5.5 },
+        { id: 68721, title: '钢铁侠3', date: '2013-04-18', voteAverage: 6.9 },
+    ];
+    const best = pickBestResult(results, 'Iron Man3', 2013);
+    assert.equal(best.id, 68721);
+});
+
 test('scrapeLibrary fills movie metadata and caches poster locally', async () => {
     const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
     try {

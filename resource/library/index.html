@@ -253,8 +253,15 @@
 
 <script>
 'use strict';
+window.addEventListener('error', (event) => {
+    try {
+        if (window.log) {
+            window.log.error('媒体库页面脚本错误:', event.message, event.filename + ':' + event.lineno);
+        }
+    } catch (e) { /* 忽略日志转发失败 */ }
+});
 const ipc = window.electronAPI;
-const log = window.log;
+// 注意：window.log 是 preload 暴露的全局对象，不能再声明同名 const（会 SyntaxError 导致整个脚本失效）
 
 const state = {
     query: '',
@@ -285,11 +292,12 @@ function toast(message, isError) {
 }
 
 function send(channel, data) {
-    try { ipc.send(channel, data); } catch (e) { log.error('IPC 发送失败', channel, e); }
+    try { ipc.send(channel, data); } catch (e) { if (log) log.error('IPC 发送失败', channel, e); }
 }
 
 function onceReply(channel, handler) {
-    ipc.once(channel, handler);
+    // preload 的监听包装会把事件对象置空传入，这里统一适配为 (data) 单参回调
+    ipc.once(channel, (_event, data) => handler(data));
 }
 
 function posterImgHtml(posterPath, fallbackTitle) {
@@ -687,14 +695,14 @@ function startScrape() {
     });
 }
 
-ipc.on('library-scrape-progress', (progress) => {
+ipc.on('library-scrape-progress', (_event, progress) => {
     const btn = document.getElementById('scrapeBtn');
     if (progress && progress.total > 0) {
         btn.textContent = `刮削 ${progress.done}/${progress.total}`;
     }
 });
 
-ipc.on('library-scrape-done', (res) => {
+ipc.on('library-scrape-done', (_event, res) => {
     const btn = document.getElementById('scrapeBtn');
     btn.textContent = '刮削';
     btn.disabled = false;

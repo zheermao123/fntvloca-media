@@ -90,6 +90,32 @@ test('loadNfoMetadata reads the best-matching nfo next to the video', async () =
     assert.equal(meta.title, 'Right');
 });
 
+test('loadNfoMetadata ignores unrelated nfos in flat multi-video directories', async () => {
+    const dir = tmpDir();
+    const target = path.join(dir, 'Another.Movie.2019.mkv');
+    fs.writeFileSync(target, 'v');
+    fs.writeFileSync(path.join(dir, 'Other.Movie.2007.mkv'), 'v');
+    fs.writeFileSync(path.join(dir, 'Other.Movie.2007.nfo'), '<movie><title>Other</title><tmdbid>4588</tmdbid></movie>');
+
+    assert.equal(await loadNfoMetadata(target), null);
+});
+
+test('loadNfoMetadata uses movie.nfo only in single-video directories', async () => {
+    const single = tmpDir();
+    const soloVideo = path.join(single, 'Solo.2020.mkv');
+    fs.writeFileSync(soloVideo, 'v');
+    fs.writeFileSync(path.join(single, 'movie.nfo'), '<movie><title>Solo Title</title></movie>');
+    const solo = await loadNfoMetadata(soloVideo);
+    assert.equal(solo.title, 'Solo Title');
+
+    const multi = tmpDir();
+    const first = path.join(multi, 'First.mkv');
+    fs.writeFileSync(first, 'v');
+    fs.writeFileSync(path.join(multi, 'Second.mkv'), 'v');
+    fs.writeFileSync(path.join(multi, 'movie.nfo'), '<movie><title>Should Not Apply</title></movie>');
+    assert.equal(await loadNfoMetadata(first), null);
+});
+
 test('loadNfoMetadata returns null when no nfo exists', async () => {
     const dir = tmpDir();
     const video = path.join(dir, 'Movie.mkv');

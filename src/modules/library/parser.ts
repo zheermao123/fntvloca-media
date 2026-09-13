@@ -28,7 +28,7 @@ const CHINESE_EPISODE_PATTERN = /第\s*(\d{1,4})\s*[集話话]/;
 
 const TRAILING_EPISODE_PATTERN = /(?:^|[\s_-])(\d{1,4})$/;
 
-const RELEASE_TAG_PATTERN = /\b(BluRay|Blu-?ray|BDRip|BRRip|WEB-?DL|WEBRip|HDTV|DVDRip|DVD|HDR10?(\+)?|DV|DoVi|x264|x265|h\.?264|h\.?265|HEVC|AV1|AAC\d?|AC3|EAC3|DTS(-?HD)?|TrueHD|Atmos|10bit|8bit|60fps|Remux|REMUX|Proper|PROPER|Repack|REPACK|Extended|Unrated|Remastered|Internal|iNTERNAL|Dual[- ]?Audio|HD(-?CAM)?|Cam|Rip|RARBG|YTS|YIFY|EVO|AMIABLE|GECKOS|NgG|NNHD|WiKi|CHDBits|FRDS|DBG|ADWeb|SMURF|TNH)\b/g;
+const RELEASE_TAG_PATTERN = /\b(BluRay|Blu-?ray|BDRip|BRRip|WEB-?DL|WEBRip|HDTV|DVDRip|DVD|HDR10?(\+)?|DV|DoVi|x264|x265|h\.?264|h\.?265|HEVC|AV1|AAC\d?|AC3|EAC3|DTS(-?HD)?|TrueHD|Atmos|10bit|8bit|60fps|Remux|REMUX|Proper|PROPER|Repack|REPACK|Extended|Unrated|Remastered|Internal|iNTERNAL|Dual[- ]?Audio|HD(-?CAM)?|Cam|Rip|RARBG|YTS|YIFY|EVO|AMIABLE|GECKOS|NgG|NNHD|WiKi|CHDBits|FRDS|DBG|ADWeb|SMURF|TNH|V\d{1,2})\b/g;
 
 const KNOWN_EXTENSIONS = new Set([
     '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m2ts', '.mts',

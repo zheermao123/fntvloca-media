@@ -85,6 +85,40 @@ function runStoreSuite(label, openStore) {
         }
     });
 
+    test(`[${label}] upsertItem preserves curated metadata on rescan`, () => {
+        const dir = tmpDir();
+        const store = openStore(dir);
+        try {
+            const source = store.addSource({ type: 'local', name: 'S' });
+            const first = store.upsertItem({
+                sourceId: source.id,
+                kind: 'episode',
+                title: 'Raw Show',
+                season: 1,
+                episode: 1,
+                filePath: 'e1',
+            });
+            store.updateItemMetadata(first.item.id, {
+                title: 'Curated Show',
+                episodeTitle: 'Curated Episode',
+                metadataSource: 'tmdb',
+            });
+            const second = store.upsertItem({
+                sourceId: source.id,
+                kind: 'episode',
+                title: 'Raw Show',
+                season: 1,
+                episode: 1,
+                filePath: 'e1',
+            });
+            assert.equal(second.item.title, 'Curated Show');
+            assert.equal(second.item.episodeTitle, 'Curated Episode');
+            assert.equal(second.item.metadataSource, 'tmdb');
+        } finally {
+            store.close();
+        }
+    });
+
     test(`[${label}] listItems filters, search, sort, pagination`, () => {
         const dir = tmpDir();
         const store = openStore(dir);

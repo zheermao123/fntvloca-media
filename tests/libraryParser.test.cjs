@@ -152,3 +152,10 @@ test('parseVideoName cleans doubled bracket tails', () => {
     assert.equal(r.year, 1974);
     assert.equal(r.resolution, '2160p');
 });
+
+test('parseVideoName strips version tags like V2', () => {
+    const r = parseVideoName('[钢铁侠][DIY 美版架构 法版主视频][Iron Man V2 2008 UHD BluRay 2160p HEVC].iso');
+    assert.equal(r.title, 'Iron Man');
+    assert.equal(r.year, 2008);
+    assert.equal(r.resolution, '2160p');
+});

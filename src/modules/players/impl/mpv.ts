@@ -381,8 +381,24 @@ export class MpvPlayer extends BasePlayer {
             return parsed;
         }
 
-        const normalize = (value: string): string =>
-            value.replace(/\\/g, '/').replace(/^file:\/\//i, '').trim().toLowerCase();
+        const normalize = (value: string): string => {
+            let text = value;
+            // playLink 由 pathToFileURL 生成（中文/空格被百分号编码），mpv 回报的是解码路径，
+            // 因此先做 URI 解码再统一分隔符与大小写，保证两侧可比。
+            if (/^file:\/\//i.test(text)) {
+                try {
+                    text = decodeURIComponent(text);
+                } catch {
+                    // 解码失败时保留原始文本
+                }
+            }
+            return text
+                .replace(/^file:\/\//i, '')
+                .replace(/\\/g, '/')
+                .replace(/^\/+/, '')
+                .trim()
+                .toLowerCase();
+        };
 
         const target = normalize(filename);
         if (target.length === 0) {

@@ -329,21 +329,25 @@ export class SqliteLibraryStore implements LibraryStore {
 
     upsertItem(input: NewItem): { item: LibraryItem; created: boolean } {
         this.assertOpen();
-        const existing = this.stmt('SELECT id, added_at FROM items WHERE source_id = ? AND file_path = ?')
-            .get(input.sourceId, input.filePath) as { id: string; added_at: number } | undefined;
+        const existing = this.stmt('SELECT id, added_at, title, year, episode_title, metadata_source FROM items WHERE source_id = ? AND file_path = ?')
+            .get(input.sourceId, input.filePath) as
+            | { id: string; added_at: number; title: string; year: number | null; episode_title: string | null; metadata_source: string }
+            | undefined;
         if (existing) {
+            // 已刮削/来自 NFO 的条目不回退为文件名元数据，避免重扫覆盖
+            const keepCurated = existing.metadata_source !== 'filename';
             this.stmt(
                 `UPDATE items SET kind = ?, show_id = ?, title = ?, original_title = ?, year = ?, season = ?,
                  episode = ?, episode_title = ?, file_size = ?, mtime = ?, resolution = ? WHERE id = ?`
             ).run(
                 input.kind,
                 input.showId ?? null,
-                input.title,
+                keepCurated ? existing.title : input.title,
                 input.originalTitle ?? null,
-                input.year ?? null,
+                keepCurated ? existing.year : (input.year ?? null),
                 input.season ?? null,
                 input.episode ?? null,
-                input.episodeTitle ?? null,
+                keepCurated ? existing.episode_title : (input.episodeTitle ?? null),
                 input.fileSize ?? 0,
                 input.mtime ?? 0,
                 input.resolution ?? null,
@@ -475,9 +479,9 @@ export class SqliteLibraryStore implements LibraryStore {
         }
         const next = { ...current, ...patch };
         this.stmt(
-            `UPDATE items SET title = ?, overview = ?, rating = ?, runtime = ?, poster_path = ?,
+            `UPDATE items SET title = ?, episode_title = ?, overview = ?, rating = ?, runtime = ?, poster_path = ?,
              backdrop_path = ?, tmdb_id = ?, metadata_source = ? WHERE id = ?`
-        ).run(next.title, next.overview, next.rating, next.runtime, next.posterPath, next.backdropPath, next.tmdbId, next.metadataSource, id);
+        ).run(next.title, next.episodeTitle, next.overview, next.rating, next.runtime, next.posterPath, next.backdropPath, next.tmdbId, next.metadataSource, id);
     }
 
     removeItemsExcept(sourceId: string, keepIds: string[]): string[] {

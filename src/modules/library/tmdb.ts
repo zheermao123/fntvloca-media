@@ -126,7 +126,14 @@ export function pickBestResult(
     if (targetYear === null) {
         return pool[0];
     }
-    return [...pool].sort((a, b) => yearDistance(a, targetYear) - yearDistance(b, targetYear))[0];
+    return [...pool].sort((a, b) => {
+        const distance = yearDistance(a, targetYear) - yearDistance(b, targetYear);
+        if (distance !== 0) {
+            return distance;
+        }
+        // 年份相同（或无日期）时优先高评分条目，避免误选同年的花絮/纪录片
+        return (b.voteAverage ?? 0) - (a.voteAverage ?? 0);
+    })[0];
 }
 
 function yearDistance(result: SearchResult, targetYear: number): number {

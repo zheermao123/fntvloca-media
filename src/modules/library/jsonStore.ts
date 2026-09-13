@@ -219,16 +219,18 @@ export class JsonLibraryStore implements LibraryStore {
         );
         if (index >= 0) {
             const existing = this.data.items[index];
+            // 已刮削/来自 NFO 的条目不回退为文件名元数据，避免重扫覆盖
+            const keepCurated = existing.metadataSource !== 'filename';
             const updated: LibraryItem = {
                 ...existing,
                 kind: input.kind,
                 showId: input.showId ?? null,
-                title: input.title,
+                title: keepCurated ? existing.title : input.title,
                 originalTitle: input.originalTitle ?? existing.originalTitle,
-                year: input.year ?? existing.year,
+                year: keepCurated ? existing.year : (input.year ?? existing.year),
                 season: input.season ?? null,
                 episode: input.episode ?? null,
-                episodeTitle: input.episodeTitle ?? existing.episodeTitle,
+                episodeTitle: keepCurated ? existing.episodeTitle : (input.episodeTitle ?? existing.episodeTitle),
                 fileSize: input.fileSize ?? existing.fileSize,
                 mtime: input.mtime ?? existing.mtime,
                 resolution: input.resolution ?? existing.resolution,
