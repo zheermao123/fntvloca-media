@@ -84,12 +84,64 @@ test('non-season subdirectory inside a series folder is treated as its own show'
     assert.equal(ctx.episode, 19);
 });
 
-test('special editions fall back to filename parsing (independent entries)', () => {
+test('special editions belong to the parent show season 0', () => {
     const ctx = resolveFolderEpisodeContext(
         ['庆余年', 'S01'],
         '[庆余年第一季 特别版].Joy.of.Life.Special.Edition.S01E01.2024.2160p.mkv'
     );
-    assert.equal(ctx, null);
+    assert.ok(ctx);
+    assert.equal(ctx.showTitle, '庆余年');
+    assert.equal(ctx.season, 0);
+    assert.equal(ctx.episode, 1);
+
+    const ctx2 = resolveFolderEpisodeContext(['排球少年', 'Specials'], '02.mp4', {
+        folderVideoCount: 10,
+    });
+    assert.ok(ctx2);
+    assert.equal(ctx2.showTitle, '排球少年');
+    assert.equal(ctx2.season, 0);
+    assert.equal(ctx2.episode, 2);
+});
+
+test('season dirs with suffixes and version subdirs are transparent', () => {
+    const ctx = resolveFolderEpisodeContext(['一人之下', 'S05 2022'], '一人之下 第五季_01_4K.mp4', {
+        folderVideoCount: 24,
+    });
+    assert.ok(ctx);
+    assert.equal(ctx.showTitle, '一人之下');
+    assert.equal(ctx.season, 5);
+    assert.equal(ctx.episode, 1);
+
+    const ctx2 = resolveFolderEpisodeContext(['钢之炼金术师 (2003)', '日语版'], '[YYDM-11FANS][Fullmetal Alchemist][01][BDRIP][720P].mp4', {
+        folderVideoCount: 51,
+    });
+    assert.ok(ctx2);
+    assert.equal(ctx2.showTitle, '钢之炼金术师');
+    assert.equal(ctx2.year, 2003);
+    assert.equal(ctx2.episode, 1);
+
+    const ctx3 = resolveFolderEpisodeContext(['罗小黑战记', 'TV动画'], '01 - 喵.flv', {
+        folderVideoCount: 40,
+    });
+    assert.ok(ctx3);
+    assert.equal(ctx3.showTitle, '罗小黑战记');
+    assert.equal(ctx3.episode, 1);
+
+    const ctx4 = resolveFolderEpisodeContext(['灵笼', '灵笼 S01 4K (2019)'], '16.灵笼[特别篇].mp4', {
+        folderVideoCount: 16,
+    });
+    assert.ok(ctx4);
+    assert.equal(ctx4.showTitle, '灵笼');
+    assert.equal(ctx4.season, 0);
+    assert.equal(ctx4.episode, 16);
+});
+
+test('extra material (OP/ED/PV) is excluded', () => {
+    const { isExtraMaterial } = require('../dest/modules/library/episodeContext');
+    assert.equal(isExtraMaterial('[YYDM-11FANS][Fullmetal Alchemist][OP04][BDRIP].mp4'), true);
+    assert.equal(isExtraMaterial('[VCB-Studio] Show [NCED][Ma10p].mkv'), true);
+    assert.equal(isExtraMaterial('40_定档PV 众生之门.flv'), true);
+    assert.equal(isExtraMaterial('[YYDM-11FANS][Fullmetal Alchemist][01][BDRIP].mp4'), false);
 });
 
 test('movies and root-level files are not converted into episodes', () => {

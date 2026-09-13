@@ -3,7 +3,7 @@ import * as log from '../logger';
 import type { LibraryStore } from './store';
 import type { ScanResult } from './scanner';
 import { buildShowKey, parseVideoName } from './parser';
-import { resolveFolderEpisodeContext } from './episodeContext';
+import { resolveFolderEpisodeContext, isExtraMaterial } from './episodeContext';
 import { findPosterForVideo, loadNfoMetadata } from './nfo';
 import type { LibraryItem } from './types';
 
@@ -105,7 +105,7 @@ export async function ingestScanResult(
     for (const file of scan.files) {
         const fileName = path.basename(file.path);
         const parsed = parseVideoName(fileName);
-        if (parsed.isSample || parsed.title.length === 0) {
+        if (parsed.isSample || isExtraMaterial(fileName) || parsed.title.length === 0) {
             summary.skipped += 1;
             continue;
         }
