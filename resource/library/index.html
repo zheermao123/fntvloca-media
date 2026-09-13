@@ -490,9 +490,18 @@ function renderDetail(data) {
                 <button class="btn primary" id="detailPlay">▶ 播放${progressPct > 0 && !watch.watched ? '（续播）' : ''}</button>
                 <button class="btn" id="detailWatched">${watch && watch.watched ? '标记未看' : '标记已看'}</button>
                 <button class="btn" id="detailRescrape">重新刮削</button>
+                <button class="btn" id="detailManualMatch">手动匹配</button>
                 <button class="btn danger" id="detailClose">关闭</button>
             </div>
-            ${episodes}
+            <div id="matchPanel" style="display:none;margin-top:14px;border-top:1px solid var(--panel-border);padding-top:12px">
+                <div style="display:flex;gap:8px;margin-bottom:10px">
+                    <input id="matchQuery" type="text" placeholder="输入片名搜索 TMDB…"
+                           style="flex:1;height:34px;padding:0 10px;background:rgba(0,0,0,0.3);color:var(--text);border:1px solid var(--panel-border);border-radius:8px;outline:none;font-size:13px">
+                    <button class="btn primary" id="matchSearchBtn">搜索</button>
+                </div>
+                <div id="matchResults"></div>
+            </div>
+            ${episodesHtml}
         </div>`;
 
     panel.querySelector('#detailPlay').addEventListener('click', () => { playItem(item.id); });
@@ -509,6 +518,59 @@ function renderDetail(data) {
     panel.querySelector('#detailRescrape').addEventListener('click', () => {
         send('library:scrape-item', { id: item.id });
         toast('正在刮削该条目…');
+    });
+    panel.querySelector('#detailManualMatch').addEventListener('click', () => {
+        const matchPanel = panel.querySelector('#matchPanel');
+        matchPanel.style.display = '';
+        const queryInput = panel.querySelector('#matchQuery');
+        queryInput.value = item.title || '';
+        queryInput.focus();
+    });
+    panel.querySelector('#matchSearchBtn').addEventListener('click', () => {
+        const query = panel.querySelector('#matchQuery').value.trim();
+        const resultsEl = panel.querySelector('#matchResults');
+        if (!query) {
+            resultsEl.textContent = '请输入关键词';
+            return;
+        }
+        resultsEl.textContent = '搜索中…';
+        send('library:search-tmdb', { itemId: item.id, query, year: item.year });
+        onceReply('library:search-results', (data) => {
+            if (!data || data.error) {
+                resultsEl.textContent = (data && data.error) || '搜索失败';
+                return;
+            }
+            const list = data.results || [];
+            if (list.length === 0) {
+                resultsEl.textContent = '没有找到结果，试试更短的关键词';
+                return;
+            }
+            resultsEl.replaceChildren(...list.map((r) => {
+                const row = document.createElement('div');
+                row.className = 'ep-row';
+                const year = (r.date || '').slice(0, 4);
+                const vote = r.voteAverage != null ? `★ ${r.voteAverage.toFixed(1)}` : '';
+                row.innerHTML = `
+                    <span class="eptitle">${escapeHtml(r.title)}</span>
+                    <span class="epnum">${escapeHtml(year)}</span>
+                    <span class="epstate">${escapeHtml(vote)}</span>`;
+                row.title = r.overview || '';
+                row.addEventListener('click', () => {
+                    resultsEl.textContent = '应用中…';
+                    send('library:apply-match', { itemId: item.id, tmdbId: r.id });
+                    onceReply('library:match-applied', (res) => {
+                        if (res && res.success) {
+                            toast('已应用匹配');
+                            refreshAll();
+                            setTimeout(() => openDetail(item.id), 200);
+                        } else {
+                            toast((res && res.error) || '匹配失败', true);
+                        }
+                    });
+                });
+                return row;
+            }));
+        });
     });
     panel.querySelector('#detailClose').addEventListener('click', closeDetail);
     panel.querySelectorAll('.ep-row').forEach((row) => {

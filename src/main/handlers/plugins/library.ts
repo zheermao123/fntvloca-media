@@ -253,6 +253,80 @@ function init(): void {
             });
     });
 
+    registerHandler('library:search-tmdb', (event: IpcMainEvent, payload: { itemId?: string; query?: string; year?: number | null }) => {
+        void (async () => {
+            try {
+                const settings = fnConfig.getScraperSettings();
+                if (!settings.apiKey) {
+                    reply(event, 'library:search-results', { error: '请先在设置中填写 TMDB API Key' });
+                    return;
+                }
+                const item = store.getItem(payload?.itemId ?? '');
+                const query = (payload?.query ?? '').trim();
+                if (!item || query.length === 0) {
+                    reply(event, 'library:search-results', { error: '缺少查询条件' });
+                    return;
+                }
+                const scraper = new LibraryScraper({
+                    store,
+                    cacheDir: getLibraryCacheDir(),
+                    config: settings,
+                });
+                const year = payload?.year ?? item.year ?? undefined;
+                const results = item.kind === 'episode'
+                    ? await scraper.searchTv(query, year ?? undefined)
+                    : await scraper.searchMovie(query, year ?? undefined);
+                reply(event, 'library:search-results', {
+                    results: results.slice(0, 10).map((r) => ({
+                        id: r.id,
+                        title: r.title,
+                        date: r.date,
+                        voteAverage: r.voteAverage,
+                        overview: (r.overview ?? '').slice(0, 140),
+                    })),
+                });
+            } catch (error) {
+                log.error('[library] TMDB 搜索失败:', error);
+                reply(event, 'library:search-results', { error: error instanceof Error ? error.message : String(error) });
+            }
+        })();
+    });
+
+    registerHandler('library:apply-match', (event: IpcMainEvent, payload: { itemId?: string; tmdbId?: number }) => {
+        void (async () => {
+            try {
+                const settings = fnConfig.getScraperSettings();
+                if (!settings.apiKey) {
+                    reply(event, 'library:match-applied', { success: false, error: '请先在设置中填写 TMDB API Key' });
+                    return;
+                }
+                const item = store.getItem(payload?.itemId ?? '');
+                const tmdbId = Number(payload?.tmdbId);
+                if (!item || !Number.isFinite(tmdbId)) {
+                    reply(event, 'library:match-applied', { success: false, error: '参数无效' });
+                    return;
+                }
+                const scraper = new LibraryScraper({
+                    store,
+                    cacheDir: getLibraryCacheDir(),
+                    config: settings,
+                });
+                if (item.kind === 'episode') {
+                    if (!item.showId) {
+                        throw new Error('该剧集未关联剧集组，无法匹配');
+                    }
+                    await scraper.applyShowMatch(item.showId, tmdbId);
+                } else {
+                    await scraper.applyMovieMatch(item.id, tmdbId);
+                }
+                reply(event, 'library:match-applied', { success: true });
+            } catch (error) {
+                log.error('[library] 手动匹配失败:', error);
+                reply(event, 'library:match-applied', { success: false, error: error instanceof Error ? error.message : String(error) });
+            }
+        })();
+    });
+
     registerHandler('library:settings-get', (event: IpcMainEvent) => {
         reply(event, 'library:settings-info', { settings: fnConfig.getScraperSettings() });
     });
