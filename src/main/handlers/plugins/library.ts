@@ -5,9 +5,12 @@ import * as log from '../../../modules/logger';
 import * as fnConfig from '../../../modules/fn_config/config';
 import { getLibraryStore, getLibraryCacheDir } from '../../../modules/library/libraryService';
 import { scanLocalFolder } from '../../../modules/library/scanner';
+import { scanWebdavFolder } from '../../../modules/library/webdav';
+import { encryptSecret, decryptSecret } from '../../../modules/library/credentials';
 import { ingestScanResult } from '../../../modules/library/ingest';
 import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
+import { buildCatalog } from '../../../modules/library/catalog';
 
 /**
  * 媒体库数据与刮削插件
@@ -27,6 +30,21 @@ async function scanSource(sourceId: string): Promise<IngestSummary> {
     const source = store.getSource(sourceId);
     if (!source) {
         throw new Error(`媒体源不存在: ${sourceId}`);
+    }
+    if (source.type === 'webdav') {
+        const url = source.config.url ?? '';
+        if (!url) {
+            throw new Error('该 WebDAV 源未配置地址');
+        }
+        const scan = await scanWebdavFolder({
+            baseUrl: url,
+            username: source.config.username || undefined,
+            password: decryptSecret(source.config.passwordEnc || '') || undefined,
+        });
+        if (scan.errors.length > 0) {
+            log.warn(`[library] webdav scan ${url} errors:`, scan.errors.slice(0, 5));
+        }
+        return ingestScanResult(store, sourceId, scan);
     }
     if (source.type !== 'local') {
         throw new Error(`暂不支持扫描该源类型: ${source.type}`);
@@ -97,8 +115,29 @@ function init(): void {
             });
     });
 
-    registerHandler('library:add-source', (event: IpcMainEvent, payload: { name?: string; rootPath?: string }) => {
+    registerHandler('library:add-source', (
+        event: IpcMainEvent,
+        payload: { type?: string; name?: string; rootPath?: string; url?: string; username?: string; password?: string }
+    ) => {
         try {
+            if (payload?.type === 'webdav') {
+                const url = (payload.url ?? '').trim();
+                if (!url) {
+                    throw new Error('缺少 WebDAV 地址');
+                }
+                const username = (payload.username ?? '').trim();
+                const created = store.addSource({
+                    type: 'webdav',
+                    name: payload?.name?.trim() || url,
+                    config: {
+                        url: url.replace(/\/+$/, ''),
+                        username,
+                        passwordEnc: payload.password ? encryptSecret(payload.password) : '',
+                    },
+                });
+                reply(event, 'library:source-added', { source: created });
+                return;
+            }
             const rootPath = payload?.rootPath ?? '';
             if (!rootPath) {
                 throw new Error('缺少扫描目录');
@@ -178,6 +217,61 @@ function init(): void {
         }
     });
 
+    registerHandler('library:catalog', (event: IpcMainEvent, payload: Record<string, unknown> = {}) => {
+        try {
+            const kind = payload.kind === 'movie' || payload.kind === 'episode' ? payload.kind : 'all';
+            const sort = payload.sort;
+            const entries = buildCatalog(store, {
+                kind,
+                watched: payload.watched === true || payload.watched === false ? payload.watched : undefined,
+                query: typeof payload.query === 'string' ? payload.query : undefined,
+                sort: sort === 'title' || sort === 'year' || sort === 'recentPlayed' || sort === 'added' ? sort : 'added',
+                limit: typeof payload.limit === 'number' ? payload.limit : undefined,
+            });
+            reply(event, 'library:catalog-info', { entries });
+        } catch (error) {
+            log.error('[library] 目录查询失败:', error);
+            reply(event, 'library:catalog-info', { entries: [] });
+        }
+    });
+
+    registerHandler('library:show', (event: IpcMainEvent, payload: { id?: string; season?: number }) => {
+        try {
+            const show = payload?.id ? store.getShow(payload.id) : null;
+            if (!show) {
+                reply(event, 'library:show-info', { error: '剧集组不存在' });
+                return;
+            }
+            let episodes = store.listItems({ showId: show.id }).sort(
+                (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
+            );
+            const seasonFilter = typeof payload?.season === 'number' ? payload.season : null;
+            if (seasonFilter !== null) {
+                episodes = episodes.filter((episode) => (episode.season ?? 1) === seasonFilter);
+            }
+            const states: Record<string, { watched: boolean; positionTs: number; durationTs: number; lastPlayedAt: number | null }> = {};
+            for (const episode of episodes) {
+                const state = store.getWatchState(episode.id);
+                states[episode.id] = {
+                    watched: state?.watched ?? false,
+                    positionTs: state?.positionTs ?? 0,
+                    durationTs: state?.durationTs ?? 0,
+                    lastPlayedAt: state?.lastPlayedAt ?? null,
+                };
+            }
+            reply(event, 'library:show-info', {
+                show,
+                season: seasonFilter,
+                seasonInfo: seasonFilter !== null ? store.getSeason(show.id, seasonFilter) : null,
+                episodes,
+                states,
+            });
+        } catch (error) {
+            log.error('[library] 剧集组查询失败:', error);
+            reply(event, 'library:show-info', { error: error instanceof Error ? error.message : String(error) });
+        }
+    });
+
     registerHandler('library:continue', (event: IpcMainEvent) => {
         reply(event, 'library:continue-info', { entries: store.listContinueWatching(20) });
     });
@@ -251,6 +345,80 @@ function init(): void {
                 log.error('[library] 单条刮削失败:', error);
                 reply(event, 'library-scrape-done', { error: error instanceof Error ? error.message : String(error) });
             });
+    });
+
+    registerHandler('library:search-tmdb', (event: IpcMainEvent, payload: { itemId?: string; query?: string; year?: number | null }) => {
+        void (async () => {
+            try {
+                const settings = fnConfig.getScraperSettings();
+                if (!settings.apiKey) {
+                    reply(event, 'library:search-results', { error: '请先在设置中填写 TMDB API Key' });
+                    return;
+                }
+                const item = store.getItem(payload?.itemId ?? '');
+                const query = (payload?.query ?? '').trim();
+                if (!item || query.length === 0) {
+                    reply(event, 'library:search-results', { error: '缺少查询条件' });
+                    return;
+                }
+                const scraper = new LibraryScraper({
+                    store,
+                    cacheDir: getLibraryCacheDir(),
+                    config: settings,
+                });
+                const year = payload?.year ?? item.year ?? undefined;
+                const results = item.kind === 'episode'
+                    ? await scraper.searchTv(query, year ?? undefined)
+                    : await scraper.searchMovie(query, year ?? undefined);
+                reply(event, 'library:search-results', {
+                    results: results.slice(0, 10).map((r) => ({
+                        id: r.id,
+                        title: r.title,
+                        date: r.date,
+                        voteAverage: r.voteAverage,
+                        overview: (r.overview ?? '').slice(0, 140),
+                    })),
+                });
+            } catch (error) {
+                log.error('[library] TMDB 搜索失败:', error);
+                reply(event, 'library:search-results', { error: error instanceof Error ? error.message : String(error) });
+            }
+        })();
+    });
+
+    registerHandler('library:apply-match', (event: IpcMainEvent, payload: { itemId?: string; tmdbId?: number }) => {
+        void (async () => {
+            try {
+                const settings = fnConfig.getScraperSettings();
+                if (!settings.apiKey) {
+                    reply(event, 'library:match-applied', { success: false, error: '请先在设置中填写 TMDB API Key' });
+                    return;
+                }
+                const item = store.getItem(payload?.itemId ?? '');
+                const tmdbId = Number(payload?.tmdbId);
+                if (!item || !Number.isFinite(tmdbId)) {
+                    reply(event, 'library:match-applied', { success: false, error: '参数无效' });
+                    return;
+                }
+                const scraper = new LibraryScraper({
+                    store,
+                    cacheDir: getLibraryCacheDir(),
+                    config: settings,
+                });
+                if (item.kind === 'episode') {
+                    if (!item.showId) {
+                        throw new Error('该剧集未关联剧集组，无法匹配');
+                    }
+                    await scraper.applyShowMatch(item.showId, tmdbId);
+                } else {
+                    await scraper.applyMovieMatch(item.id, tmdbId);
+                }
+                reply(event, 'library:match-applied', { success: true });
+            } catch (error) {
+                log.error('[library] 手动匹配失败:', error);
+                reply(event, 'library:match-applied', { success: false, error: error instanceof Error ? error.message : String(error) });
+            }
+        })();
     });
 
     registerHandler('library:settings-get', (event: IpcMainEvent) => {

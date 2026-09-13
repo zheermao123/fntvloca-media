@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"net/http"
 	"proxy/pkg/fnapi"
 	"proxy/pkg/logger"
 	"proxy/pkg/utils"
@@ -101,6 +102,23 @@ func PlayVideoHandler(c *gin.Context, sessions *PlaybackSessionStore) {
 		logger.Warnf("拒绝无效播放会话: itemGuid=%s", params.ItemGuid)
 		c.JSON(401, gin.H{"error": "Invalid playback session"})
 		return
+	}
+
+	// 直接播放目标（本地文件 / 直连URL / WebDAV / STRM）：不经 fnOS 服务
+	if target, ok := session.Targets[params.ItemGuid]; ok {
+		switch target.Kind {
+		case "file":
+			// http.ServeFile 自带 Range / If-Range / HEAD 支持
+			http.ServeFile(c.Writer, c.Request, target.Path)
+			return
+		case "url":
+			utils.DynamicProxy(c, target.URL, target.Headers, false)
+			return
+		default:
+			logger.Errorf("不支持的播放目标类型: %s", target.Kind)
+			c.JSON(500, gin.H{"error": "Unsupported target kind"})
+			return
+		}
 	}
 
 	fnApi := fnapi.NewApiService(session.Domain, session.Token, session.SkipVerify, session.AccessCookie)

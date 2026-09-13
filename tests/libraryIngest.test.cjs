@@ -99,8 +99,7 @@ test('ingestScanResult is idempotent and preserves watch state across rescans', 
     }
 });
 
-test('ingestScanResult removes vanished files and their watch states', async () => {
-    const root = tmpDir();
+test('ingestScanResult removes vanished files and their watch states', async () => {    const root = tmpDir();
     const videoPath = path.join(root, 'Movies', 'Gone.2007.mkv');
     writeTree(root, { 'Movies/Gone.2007.mkv': 'v', 'Movies/Stays.2008.mkv': 'v' });
 
@@ -120,6 +119,41 @@ test('ingestScanResult removes vanished files and their watch states', async () 
         assert.equal(store.getItem(gone.id), null);
         assert.equal(store.getWatchState(gone.id), null);
         assert.equal(store.countItems(source.id), 1);
+    } finally {
+        store.close();
+    }
+});
+
+test('ingestScanResult groups series folders with bare-numbered episodes', async () => {
+    const root = tmpDir();
+    writeTree(root, {
+        '剧集A/01.mkv': 'v',
+        '剧集A/02.mkv': 'v',
+        '剧集A/S02/剧集A 01.mkv': 'v',
+        'Movies/Inception.2010.1080p.mkv': 'v',
+    });
+
+    const store = createJsonLibraryStore(path.join(root, 'library.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'Test', config: { rootPath: root } });
+        const scan = await scanLocalFolder({ rootPath: root });
+        const summary = await ingestScanResult(store, source.id, scan);
+        assert.equal(summary.added, 4);
+
+        const shows = store.listShows(source.id);
+        assert.equal(shows.length, 1);
+        assert.equal(shows[0].title, '剧集A');
+
+        const episodes = store.listItems({ showId: shows[0].id });
+        episodes.sort((a, b) => a.season - b.season || a.episode - b.episode);
+        assert.deepEqual(
+            episodes.map((e) => `${e.season}-${e.episode}`),
+            ['1-1', '1-2', '2-1']
+        );
+
+        const movies = store.listItems({ kind: 'movie', sourceId: source.id });
+        assert.equal(movies.length, 1);
+        assert.equal(movies[0].title, 'Inception');
     } finally {
         store.close();
     }

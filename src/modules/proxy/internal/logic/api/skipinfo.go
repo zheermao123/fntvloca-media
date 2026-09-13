@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func GetSkipInfoHandler(c *gin.Context, sessions *PlaybackSessionStore) {
+func GetSkipInfoHandler(c *gin.Context, sessions *PlaybackSessionStore, skipStore *LocalSkipStore) {
 	// 解析参数
 	var params GetSkipInfoParams
 	if err := c.ShouldBindUri(&params); err != nil {
@@ -33,6 +33,25 @@ func GetSkipInfoHandler(c *gin.Context, sessions *PlaybackSessionStore) {
 		c.JSON(401, ResponseBase{Code: InternalErrorCode, Msg: "Invalid playback session"})
 		return
 	}
+
+	// 直接播放目标（本地文件/直连URL）使用本地跳过信息存储
+	if target, ok := session.Targets[params.ItemGuid]; ok {
+		key := params.ItemGuid
+		if target.SkipKey != "" {
+			key = target.SkipKey
+		}
+		skipInfo := &SkipInfo{}
+		if entry, found := skipStore.Get(key); found {
+			skipInfo.SkipStart = entry.SkipStart
+			skipInfo.SkipEnd = entry.SkipEnd
+		}
+		c.JSON(200, GetSkipInfoResp{
+			ResponseBase: ResponseBase{Code: 0, Msg: "success"},
+			Data:         skipInfo,
+		})
+		return
+	}
+
 	fnApi := fnapi.NewApiService(session.Domain, session.Token, session.SkipVerify, session.AccessCookie)
 
 	// 获取跳过片头片尾信息
@@ -64,7 +83,7 @@ func GetSkipInfoHandler(c *gin.Context, sessions *PlaybackSessionStore) {
 	})
 }
 
-func SetSkipInfoHandler(c *gin.Context, sessions *PlaybackSessionStore) {
+func SetSkipInfoHandler(c *gin.Context, sessions *PlaybackSessionStore, skipStore *LocalSkipStore) {
 	// 解析参数
 	var req SetSkipInfoReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -90,6 +109,23 @@ func SetSkipInfoHandler(c *gin.Context, sessions *PlaybackSessionStore) {
 		c.JSON(401, ResponseBase{Code: InternalErrorCode, Msg: "Invalid playback session"})
 		return
 	}
+
+	// 直接播放目标（本地文件/直连URL）写入本地跳过信息存储
+	if target, ok := session.Targets[req.Guid]; ok {
+		key := req.Guid
+		if target.SkipKey != "" {
+			key = target.SkipKey
+		}
+		if err := skipStore.Set(key, req.SkipStart, req.SkipEnd); err != nil {
+			logger.Errorf("写入本地跳过信息失败: %v", err)
+			c.JSON(500, ResponseBase{Code: InternalErrorCode, Msg: "Failed to set skip info"})
+			return
+		}
+		logger.Infof("已保存本地跳过信息: key=%s, skipStart=%d, skipEnd=%d", key, req.SkipStart, req.SkipEnd)
+		c.JSON(200, ResponseBase{Code: 0, Msg: "success"})
+		return
+	}
+
 	fnApi := fnapi.NewApiService(session.Domain, session.Token, session.SkipVerify, session.AccessCookie)
 
 	// 获取播放信息缓存

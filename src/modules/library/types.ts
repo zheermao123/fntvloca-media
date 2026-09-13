@@ -66,6 +66,15 @@ export type SkipInfo = {
     skipEnd: number;
 };
 
+export type SeasonInfo = {
+    showId: string;
+    season: number;
+    posterPath: string | null;
+    name: string | null;
+    overview: string | null;
+    airDate: string | null;
+};
+
 export type ListItemSort = 'added' | 'title' | 'year' | 'recentPlayed';
 
 export type ListItemQuery = {

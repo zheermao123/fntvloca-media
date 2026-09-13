@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -15,14 +16,25 @@ import (
 
 const playbackSessionTTL = 24 * time.Hour
 
+// PlaybackTarget 描述一个直接播放目标（本地文件或远程URL），
+// 用于不经过 fnOS 服务的播放源（本地库 / WebDAV / STRM 等）。
+type PlaybackTarget struct {
+	Kind    string            `json:"kind"`              // "file" 或 "url"
+	Path    string            `json:"path,omitempty"`    // 本地文件路径（kind=file）
+	URL     string            `json:"url,omitempty"`     // 远程地址（kind=url）
+	Headers map[string]string `json:"headers,omitempty"` // 附加请求头（kind=url）
+	SkipKey string            `json:"skipKey,omitempty"` // 本地跳过信息存储键（剧集组或条目ID）
+}
+
 type PlaybackSessionRequest struct {
-	Token        string   `json:"token"`
-	Account      string   `json:"account"`
-	Domain       string   `json:"domain"`
-	AccessCookie string   `json:"accessCookie,omitempty"`
-	SkipVerify   bool     `json:"skipVerify"`
-	UseNasLocal  bool     `json:"useNasLocal"`
-	ItemGuids    []string `json:"itemGuids"`
+	Token        string                    `json:"token"`
+	Account      string                    `json:"account"`
+	Domain       string                    `json:"domain"`
+	AccessCookie string                    `json:"accessCookie,omitempty"`
+	SkipVerify   bool                      `json:"skipVerify"`
+	UseNasLocal  bool                      `json:"useNasLocal"`
+	ItemGuids    []string                  `json:"itemGuids"`
+	Targets      map[string]PlaybackTarget `json:"targets,omitempty"`
 }
 
 type PlaybackSession struct {
@@ -44,8 +56,48 @@ func NewPlaybackSessionStore() *PlaybackSessionStore {
 	return &PlaybackSessionStore{sessions: make(map[string]*PlaybackSession)}
 }
 
+const maxPlaybackTargets = 2000
+
+// validateTargets 校验直接播放目标，防止畸形路径与请求头注入。
+func validateTargets(targets map[string]PlaybackTarget) error {
+	if len(targets) > maxPlaybackTargets {
+		return errors.New("too many playback targets")
+	}
+	for guid, target := range targets {
+		if guid == "" {
+			return errors.New("empty target guid")
+		}
+		switch target.Kind {
+		case "file":
+			if target.Path == "" || strings.ContainsAny(target.Path, "\r\n") {
+				return errors.New("invalid target path")
+			}
+		case "url":
+			parsed, err := url.Parse(target.URL)
+			if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+				return errors.New("invalid target url")
+			}
+			for name, value := range target.Headers {
+				if name == "" || strings.ContainsAny(name, ":\r\n") || strings.ContainsAny(value, "\r\n") {
+					return errors.New("invalid target header")
+				}
+			}
+		default:
+			return errors.New("unsupported target kind")
+		}
+	}
+	return nil
+}
+
 func (s *PlaybackSessionStore) Create(req PlaybackSessionRequest) (string, error) {
-	if req.Token == "" || req.Account == "" || req.Domain == "" || len(req.ItemGuids) == 0 {
+	if len(req.ItemGuids) == 0 {
+		return "", errors.New("missing required session parameters")
+	}
+	if len(req.Targets) > 0 {
+		if err := validateTargets(req.Targets); err != nil {
+			return "", err
+		}
+	} else if req.Token == "" || req.Account == "" || req.Domain == "" {
 		return "", errors.New("missing required session parameters")
 	}
 	if len(req.ItemGuids) > 10000 {

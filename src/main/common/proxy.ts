@@ -29,7 +29,12 @@ export function getProxySecret(): string {
 }
 
 function getProxyEnvironment(): NodeJS.ProcessEnv {
-    return { ...process.env, LANG: 'C.UTF-8' };
+    return {
+        ...process.env,
+        LANG: 'C.UTF-8',
+        // 本地播放的跳过片头片尾信息持久化位置
+        FNTV_SKIP_STORE: path.join(app.getPath('userData'), 'skip-info.json'),
+    };
 }
 
 function sendProxySecret(proxyProcess: ChildProcess, secret: string): void {

@@ -16,6 +16,8 @@ export type LibraryPlayEntry = {
     episodeNumber: number;
     ts: number;
     duration: number;
+    /** 跳过片头片尾的存储键：剧集用剧集组ID（同组共享），电影用条目ID */
+    skipKey: string;
     source: LibraryPlaySource;
 };
 
@@ -37,6 +39,10 @@ function defaultReadStrm(filePath: string): string | null {
 }
 
 function resolveSource(filePath: string, readStrm: ReadStrmFn): LibraryPlaySource {
+    // WebDAV 等远程源直接以 URL 形式入库
+    if (/^https?:\/\//i.test(filePath)) {
+        return { kind: 'url', url: filePath };
+    }
     if (filePath.toLowerCase().endsWith(STRM_EXTENSION)) {
         const content = readStrm(filePath);
         const url = content !== null ? content.trim().split(/\r?\n/)[0]?.trim() ?? '' : '';
@@ -79,6 +85,7 @@ function toEntry(store: LibraryStore, item: LibraryItem, showTitle: string, read
         episodeNumber: item.episode ?? 0,
         ts: resumeTs(store, item),
         duration: 0,
+        skipKey: item.kind === 'episode' && item.showId ? item.showId : item.id,
         source: resolveSource(item.filePath, readStrm),
     };
 }

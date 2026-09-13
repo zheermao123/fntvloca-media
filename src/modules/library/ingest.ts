@@ -3,6 +3,7 @@ import * as log from '../logger';
 import type { LibraryStore } from './store';
 import type { ScanResult } from './scanner';
 import { buildShowKey, parseVideoName } from './parser';
+import { resolveFolderEpisodeContext, isExtraMaterial, isNoisyNonEpisodeName } from './episodeContext';
 import { findPosterForVideo, loadNfoMetadata } from './nfo';
 import type { LibraryItem } from './types';
 
@@ -22,6 +23,20 @@ type NameParseResult = ReturnType<typeof parseVideoName>;
 function originalTitleOf(filePath: string): string {
     const base = path.basename(filePath, path.extname(filePath));
     return base.replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** 相对源根目录的目录链（不含文件名），支持本地路径与 URL */
+function relativeDirsOf(filePath: string, rootPath: string): string[] {
+    let relative = filePath;
+    if (rootPath.length > 0 && filePath.startsWith(rootPath)) {
+        relative = filePath.slice(rootPath.length);
+    }
+    const segments = relative
+        .replace(/\\/g, '/')
+        .split('/')
+        .filter((segment) => segment.length > 0);
+    segments.pop();
+    return segments;
 }
 
 async function enrichWithNfo(videoPath: string, parsed: NameParseResult): Promise<Partial<LibraryItem>> {
@@ -77,27 +92,48 @@ export async function ingestScanResult(
     const summary: IngestSummary = { added: 0, updated: 0, removed: 0, skipped: 0 };
     const showIdsByGroupKey = new Map<string, string>();
     const keptIds = new Set<string>();
+    const sourceInfo = store.getSource(sourceId);
+    const sourceRoot = sourceInfo?.config.rootPath ?? sourceInfo?.config.url ?? '';
+
+    // 每目录视频数量：用于区分"剧集文件夹"与"单片电影文件夹"
+    const videosPerDir = new Map<string, number>();
+    for (const scanned of scan.files) {
+        const dir = path.dirname(scanned.path);
+        videosPerDir.set(dir, (videosPerDir.get(dir) ?? 0) + 1);
+    }
 
     for (const file of scan.files) {
-        const parsed = parseVideoName(path.basename(file.path));
-        if (parsed.isSample || parsed.title.length === 0) {
+        const fileName = path.basename(file.path);
+        const parsed = parseVideoName(fileName);
+        if (parsed.isSample || isExtraMaterial(fileName) || parsed.title.length === 0) {
             summary.skipped += 1;
             continue;
         }
 
-        let showId: string | null = null;
-        let title = parsed.title;
-        let year = parsed.year;
+        // 文件夹感知：剧名取目录、季号取季目录、集数取文件名数字（Kodi/Jellyfin 惯例），
+        // 解析不出剧集特征时回退为文件名解析（电影、根目录文件等）。
+        const folderCtx = resolveFolderEpisodeContext(relativeDirsOf(file.path, sourceRoot), fileName, {
+            folderVideoCount: videosPerDir.get(path.dirname(file.path)) ?? 0,
+        });
 
-        if (parsed.episode !== null) {
-            const groupKey = buildShowKey(parsed.title, parsed.year);
+        let showId: string | null = null;
+        let title = folderCtx ? folderCtx.showTitle : parsed.title;
+        let year = folderCtx ? (folderCtx.year ?? parsed.year) : parsed.year;
+        let season = folderCtx ? folderCtx.season : parsed.season;
+        let episode = folderCtx ? folderCtx.episode : parsed.episode;
+        if (!folderCtx && episode !== null && isNoisyNonEpisodeName(fileName)) {
+            episode = null;
+        }
+
+        if (episode !== null) {
+            const groupKey = buildShowKey(title, year);
             let cachedShowId = showIdsByGroupKey.get(groupKey);
             if (!cachedShowId) {
                 const result = store.upsertShow({
                     sourceId,
                     groupKey,
-                    title: parsed.title,
-                    year: parsed.year,
+                    title,
+                    year,
                 });
                 cachedShowId = result.show.id;
                 showIdsByGroupKey.set(groupKey, cachedShowId);
@@ -115,13 +151,13 @@ export async function ingestScanResult(
 
         const { item, created } = store.upsertItem({
             sourceId,
-            kind: parsed.episode !== null ? 'episode' : 'movie',
+            kind: episode !== null ? 'episode' : 'movie',
             showId,
             title,
             originalTitle: originalTitleOf(file.path),
             year,
-            season: enrich.season ?? parsed.season,
-            episode: enrich.episode ?? parsed.episode,
+            season: enrich.season ?? season,
+            episode: enrich.episode ?? episode,
             episodeTitle: parsed.episodeTitle,
             filePath: file.path,
             fileSize: file.size,

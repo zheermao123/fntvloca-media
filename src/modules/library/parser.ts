@@ -22,7 +22,33 @@ const EPISODE_WORD_PATTERN = /(?:[eE]pisode|\b[eE][pP])[\s._-]*(\d{1,3})\b/;
 
 const EPISODE_TOKEN_PATTERN = /(?:^|[\s._\-\[])e[pP]?(\d{1,3})(?!\d)/i;
 
-const CHINESE_SEASON_PATTERN = /第\s*(\d{1,2})\s*季/;
+const CHINESE_SEASON_PATTERN = /第\s*([一二三四五六七八九十\d]{1,3})\s*季/;
+
+const CN_DIGITS: Record<string, number> = {
+    一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
+};
+
+function chineseSeasonToNumber(raw: string): number | null {
+    if (/^\d+$/.test(raw)) {
+        return Number(raw);
+    }
+    if (raw === '十') {
+        return 10;
+    }
+    const tens = /^十([一二三四五六七八九])$/.exec(raw);
+    if (tens) {
+        return 10 + CN_DIGITS[tens[1]];
+    }
+    const compound = /^([一二三四五六七八九])十([一二三四五六七八九])$/.exec(raw);
+    if (compound) {
+        return CN_DIGITS[compound[1]] * 10 + CN_DIGITS[compound[2]];
+    }
+    const scored = /^([一二三四五六七八九])十$/.exec(raw);
+    if (scored) {
+        return CN_DIGITS[scored[1]] * 10;
+    }
+    return CN_DIGITS[raw] ?? null;
+}
 
 const CHINESE_EPISODE_PATTERN = /第\s*(\d{1,4})\s*[集話话]/;
 
@@ -130,13 +156,16 @@ function findSeasonEpisodeMarkers(name: string): Marker[] {
     }
     const chineseSeason = CHINESE_SEASON_PATTERN.exec(name);
     if (chineseSeason) {
-        markers.push({
-            start: chineseSeason.index,
-            end: chineseSeason.index + chineseSeason[0].length,
-            kind: 'season',
-            season: Number(chineseSeason[1]),
-            episode: null,
-        });
+        const value = chineseSeasonToNumber(chineseSeason[1]);
+        if (value !== null) {
+            markers.push({
+                start: chineseSeason.index,
+                end: chineseSeason.index + chineseSeason[0].length,
+                kind: 'season',
+                season: value,
+                episode: null,
+            });
+        }
     }
     const chineseEpisode = CHINESE_EPISODE_PATTERN.exec(name);
     if (chineseEpisode) {

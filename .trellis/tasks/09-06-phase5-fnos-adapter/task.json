@@ -22,5 +22,8 @@
   "parent": "09-06-local-media-manager",
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "status-note": "FROZEN: user has no fnOS server; code retained for future revival",
+    "frozen": "true"
+  }
 }

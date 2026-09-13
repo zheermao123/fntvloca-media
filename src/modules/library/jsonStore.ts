@@ -7,6 +7,7 @@ import type {
     ListItemQuery,
     NewItem,
     NewShow,
+    SeasonInfo,
     Show,
     SkipInfo,
     SourceConfig,
@@ -23,13 +24,14 @@ type JsonDbShape = {
     version: 1;
     sources: SourceConfig[];
     shows: Show[];
+    seasons: SeasonInfo[];
     items: LibraryItem[];
     watchStates: Record<string, WatchState>;
     skipInfos: Record<string, SkipInfo>;
 };
 
 function emptyDb(): JsonDbShape {
-    return { version: 1, sources: [], shows: [], items: [], watchStates: {}, skipInfos: {} };
+    return { version: 1, sources: [], shows: [], seasons: [], items: [], watchStates: {}, skipInfos: {} };
 }
 
 function sanitizeDb(raw: unknown): JsonDbShape {
@@ -41,6 +43,7 @@ function sanitizeDb(raw: unknown): JsonDbShape {
         version: 1,
         sources: Array.isArray(data.sources) ? data.sources : [],
         shows: Array.isArray(data.shows) ? data.shows : [],
+        seasons: Array.isArray(data.seasons) ? data.seasons : [],
         items: Array.isArray(data.items) ? data.items : [],
         watchStates: data.watchStates !== null && typeof data.watchStates === 'object' ? data.watchStates : {},
         skipInfos: data.skipInfos !== null && typeof data.skipInfos === 'object' ? data.skipInfos : {},
@@ -147,6 +150,7 @@ export class JsonLibraryStore implements LibraryStore {
         const removedShowIds = new Set(this.data.shows.filter((s) => s.sourceId === id).map((s) => s.id));
         this.data.items = this.data.items.filter((i) => i.sourceId !== id);
         this.data.shows = this.data.shows.filter((s) => s.sourceId !== id);
+        this.data.seasons = this.data.seasons.filter((s) => !removedShowIds.has(s.showId));
         this.data.sources = this.data.sources.filter((s) => s.id !== id);
         for (const item of removedItems) {
             delete this.data.watchStates[item.id];
@@ -210,6 +214,52 @@ export class JsonLibraryStore implements LibraryStore {
             this.data.shows[index] = { ...this.data.shows[index], ...patch };
             this.markDirty();
         }
+    }
+
+    upsertSeason(input: {
+        showId: string;
+        season: number;
+        posterPath?: string | null;
+        name?: string | null;
+        overview?: string | null;
+        airDate?: string | null;
+    }): void {
+        this.assertOpen();
+        const index = this.data.seasons.findIndex(
+            (s) => s.showId === input.showId && s.season === input.season
+        );
+        if (index >= 0) {
+            const current = this.data.seasons[index];
+            this.data.seasons[index] = {
+                ...current,
+                posterPath: input.posterPath ?? current.posterPath,
+                name: input.name ?? current.name,
+                overview: input.overview ?? current.overview,
+                airDate: input.airDate ?? current.airDate,
+            };
+        } else {
+            this.data.seasons.push({
+                showId: input.showId,
+                season: input.season,
+                posterPath: input.posterPath ?? null,
+                name: input.name ?? null,
+                overview: input.overview ?? null,
+                airDate: input.airDate ?? null,
+            });
+        }
+        this.markDirty();
+    }
+
+    getSeason(showId: string, season: number): SeasonInfo | null {
+        this.assertOpen();
+        return this.data.seasons.find((s) => s.showId === showId && s.season === season) ?? null;
+    }
+
+    listSeasons(showId: string): SeasonInfo[] {
+        this.assertOpen();
+        return this.data.seasons
+            .filter((s) => s.showId === showId)
+            .sort((a, b) => a.season - b.season);
     }
 
     upsertItem(input: NewItem): { item: LibraryItem; created: boolean } {
@@ -358,9 +408,11 @@ export class JsonLibraryStore implements LibraryStore {
         }
         const referencedShowIds = new Set(this.data.items.map((i) => i.showId).filter((v): v is string => v !== null));
         const orphanShows = this.data.shows.filter((s) => s.sourceId === sourceId && !referencedShowIds.has(s.id));
+        const orphanShowIds = new Set(orphanShows.map((s) => s.id));
         for (const show of orphanShows) {
             delete this.data.skipInfos[show.id];
         }
+        this.data.seasons = this.data.seasons.filter((s) => !orphanShowIds.has(s.showId));
         this.data.shows = this.data.shows.filter(
             (s) => !(s.sourceId === sourceId && !referencedShowIds.has(s.id))
         );

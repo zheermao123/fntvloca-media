@@ -150,6 +150,11 @@ function shouldSkipDir(name: string): boolean {
     return JUNK_DIRS.has(name.toLowerCase());
 }
 
+/** 暴露给 WebDAV 等其他扫描器复用的目录过滤规则 */
+export function shouldSkipDirectory(name: string): boolean {
+    return shouldSkipDir(name);
+}
+
 export async function scanLocalFolder(options: ScanOptions): Promise<ScanResult> {
     const rootPath = options.rootPath;
     const maxDepth = options.maxDepth ?? 12;

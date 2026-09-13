@@ -79,9 +79,9 @@
         #continueRow { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px; }
         #continueRow::-webkit-scrollbar { height: 8px; }
         #continueRow::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
-        .continue-card { width: 190px; flex: 0 0 auto; cursor: pointer; }
+        .continue-card { width: 120px; flex: 0 0 auto; cursor: pointer; }
         .continue-card .thumb {
-            position: relative; height: 107px; border-radius: 8px; overflow: hidden;
+            position: relative; aspect-ratio: 2/3; border-radius: 8px; overflow: hidden;
             background: linear-gradient(135deg, #2a2f3a, #1b1e25);
         }
         .continue-card img { width: 100%; height: 100%; object-fit: cover; }
@@ -270,6 +270,7 @@ const state = {
     sort: 'added',
     view: 'grid',
     items: [],
+    entries: [],
     currentDetailId: null,
     sources: [],
     continueMap: new Map(),
@@ -365,9 +366,9 @@ async function loadItems() {
         limit: 600,
     };
     if (state.kind !== 'all') payload.kind = state.kind;
-    send('library:items', payload);
-    onceReply('library:items-info', (data) => {
-        state.items = (data && data.items) || [];
+    send('library:catalog', payload);
+    onceReply('library:catalog-info', (data) => {
+        state.entries = (data && data.entries) || [];
         renderItems();
     });
 }
@@ -377,10 +378,10 @@ function renderItems() {
     const list = document.getElementById('listView');
     const empty = document.getElementById('emptyHint');
     const title = document.getElementById('sectionTitle');
-    title.textContent = `媒体库 (${state.items.length})`;
+    title.textContent = `媒体库 (${state.entries.length})`;
     grid.style.display = state.view === 'grid' ? '' : 'none';
     list.style.display = state.view === 'grid' ? 'none' : '';
-    if (state.items.length === 0) {
+    if (state.entries.length === 0) {
         empty.style.display = '';
         grid.replaceChildren();
         list.replaceChildren();
@@ -389,10 +390,148 @@ function renderItems() {
     empty.style.display = 'none';
 
     if (state.view === 'grid') {
-        grid.replaceChildren(...state.items.map((item) => buildCard(item)));
+        grid.replaceChildren(...state.entries.map((entry) =>
+            entry.type === 'season' ? buildSeasonCard(entry) : buildCard(entry.item)
+        ));
     } else {
-        list.replaceChildren(...state.items.map((item) => buildListRow(item)));
+        list.replaceChildren(...state.entries.map((entry) =>
+            entry.type === 'season' ? buildSeasonListRow(entry) : buildListRow(entry.item)
+        ));
     }
+}
+
+function buildSeasonCard(entry) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    // 多季组或季号≠1 时显示季标签（单季第1季保持简洁）
+    const showSeasonLabel = entry.seasonCount > 1 || entry.season !== 1;
+    const badges = [];
+    if (showSeasonLabel) {
+        badges.push(`<span class="badge">第 ${entry.season} 季</span>`);
+    }
+    badges.push(`<span class="badge" style="top:${showSeasonLabel ? 32 : 8}px">全 ${entry.episodeCount} 集</span>`);
+    const progressPct = entry.episodeCount > 0
+        ? Math.round((entry.watchedCount / entry.episodeCount) * 100)
+        : 0;
+    const progressHtml = progressPct > 0
+        ? `<div class="poster-prog"><i style="width:${progressPct}%"></i></div>`
+        : '';
+    card.innerHTML = `
+        <div class="poster-wrap">
+            ${posterImgHtml(entry.posterPath, entry.show.title)}
+            ${badges.join('')}
+            ${progressHtml}
+            <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
+        </div>
+        <div class="name">${escapeHtml(entry.show.title)}</div>
+        <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}已看 ${entry.watchedCount}/${entry.episodeCount}`)}</div>`;
+    const overlay = card.querySelector('.poster-wrap');
+    overlay.addEventListener('click', (e) => {
+        if (e.target.closest('.play-overlay-btn')) {
+            playItem(entry.resumeItemId);
+        } else {
+            openSeasonDetail(entry.show.id, entry.season);
+        }
+    });
+    return card;
+}
+
+function buildSeasonListRow(entry) {
+    const row = document.createElement('div');
+    row.className = 'lrow';
+    const showSeasonLabel = entry.seasonCount > 1 || entry.season !== 1;
+    row.innerHTML = `
+        <span class="ltitle">${escapeHtml(entry.show.title)}${showSeasonLabel ? ` 第 ${entry.season} 季` : ''}</span>
+        <span class="lmeta">剧集</span>
+        <span class="lmeta">${escapeHtml(entry.show.year ?? '')}</span>
+        <span class="lmeta">已看 ${entry.watchedCount}/${entry.episodeCount}</span>`;
+    row.addEventListener('click', () => openSeasonDetail(entry.show.id, entry.season));
+    return row;
+}
+
+function openSeasonDetail(showId, season) {
+    send('library:show', { id: showId, season });
+    onceReply('library:show-info', (data) => {
+        if (!data || data.error) {
+            toast((data && data.error) || '加载剧集失败', true);
+            return;
+        }
+        renderShowDetail(data);
+        document.getElementById('detail').classList.add('open');
+    });
+}
+
+function renderShowDetail(data) {
+    const show = data.show;
+    const episodes = data.episodes || [];
+    const states = data.states || {};
+    const panel = document.getElementById('detailPanel');
+    const detailPoster = (data.seasonInfo && data.seasonInfo.posterPath) || show.posterPath;
+    const watchedCount = episodes.filter((ep) => states[ep.id] && states[ep.id].watched).length;
+
+    let resumeId = null;
+    let bestPlayed = 0;
+    for (const ep of episodes) {
+        const st = states[ep.id];
+        if (st && !st.watched && st.positionTs > 0 && (st.lastPlayedAt || 0) > bestPlayed) {
+            resumeId = ep.id;
+            bestPlayed = st.lastPlayedAt || 0;
+        }
+    }
+    if (!resumeId) {
+        const firstUnwatched = episodes.find((ep) => !(states[ep.id] && states[ep.id].watched));
+        resumeId = ((firstUnwatched || episodes[0] || {}).id) || null;
+    }
+
+    const seasons = [...new Set(episodes.map((ep) => ep.season ?? 0))].sort((a, b) => a - b);
+    let episodesHtml = '';
+    for (const season of seasons) {
+        episodesHtml += `<div class="row-title" style="font-size:13px;margin:10px 0 4px">第 ${season || 1} 季</div>`;
+        episodesHtml += episodes
+            .filter((ep) => (ep.season ?? 0) === season)
+            .map((ep) => {
+                const st = states[ep.id] || {};
+                return `
+                <div class="ep-row" data-ep="${ep.id}">
+                    <span class="epnum">E${ep.episode ?? 0}</span>
+                    <span class="eptitle">${escapeHtml(ep.episodeTitle || `第 ${ep.episode ?? 0} 集`)}</span>
+                    <span class="epstate">${st.watched ? '✓ 已看' : ''}</span>
+                </div>`;
+            })
+            .join('');
+    }
+
+    panel.innerHTML = `
+        <div class="dposter">${posterImgHtml(detailPoster, show.title)}</div>
+        <div class="dbody">
+            <h2>${escapeHtml(show.title)}${data.season != null ? ` 第 ${data.season} 季` : ''}</h2>
+            <div class="dmeta">
+                ${show.year ? `<span>${escapeHtml(show.year)}</span>` : ''}
+                <span>全 ${episodes.length} 集</span>
+                <span>已看 ${watchedCount}</span>
+            </div>
+            <div class="doverview">${escapeHtml(show.overview || '暂无简介，可通过刮削获取更多信息')}</div>
+            <div class="dbtns">
+                <button class="btn primary" id="showPlay">▶ 播放${resumeId ? '（续播）' : ''}</button>
+                <button class="btn danger" id="showClose">关闭</button>
+            </div>
+            <div class="episodes">${episodesHtml}</div>
+        </div>`;
+
+    panel.querySelector('#showPlay').addEventListener('click', () => {
+        if (resumeId) {
+            playItem(resumeId);
+        }
+    });
+    panel.querySelector('#showClose').addEventListener('click', closeDetail);
+    panel.querySelectorAll('.ep-row').forEach((row) => {
+        row.addEventListener('click', () => {
+            const epId = row.getAttribute('data-ep');
+            if (epId) {
+                playItem(epId);
+            }
+        });
+    });
 }
 
 function buildCard(item) {
@@ -490,9 +629,18 @@ function renderDetail(data) {
                 <button class="btn primary" id="detailPlay">▶ 播放${progressPct > 0 && !watch.watched ? '（续播）' : ''}</button>
                 <button class="btn" id="detailWatched">${watch && watch.watched ? '标记未看' : '标记已看'}</button>
                 <button class="btn" id="detailRescrape">重新刮削</button>
+                <button class="btn" id="detailManualMatch">手动匹配</button>
                 <button class="btn danger" id="detailClose">关闭</button>
             </div>
-            ${episodes}
+            <div id="matchPanel" style="display:none;margin-top:14px;border-top:1px solid var(--panel-border);padding-top:12px">
+                <div style="display:flex;gap:8px;margin-bottom:10px">
+                    <input id="matchQuery" type="text" placeholder="输入片名搜索 TMDB…"
+                           style="flex:1;height:34px;padding:0 10px;background:rgba(0,0,0,0.3);color:var(--text);border:1px solid var(--panel-border);border-radius:8px;outline:none;font-size:13px">
+                    <button class="btn primary" id="matchSearchBtn">搜索</button>
+                </div>
+                <div id="matchResults"></div>
+            </div>
+            ${episodesHtml}
         </div>`;
 
     panel.querySelector('#detailPlay').addEventListener('click', () => { playItem(item.id); });
@@ -509,6 +657,59 @@ function renderDetail(data) {
     panel.querySelector('#detailRescrape').addEventListener('click', () => {
         send('library:scrape-item', { id: item.id });
         toast('正在刮削该条目…');
+    });
+    panel.querySelector('#detailManualMatch').addEventListener('click', () => {
+        const matchPanel = panel.querySelector('#matchPanel');
+        matchPanel.style.display = '';
+        const queryInput = panel.querySelector('#matchQuery');
+        queryInput.value = item.title || '';
+        queryInput.focus();
+    });
+    panel.querySelector('#matchSearchBtn').addEventListener('click', () => {
+        const query = panel.querySelector('#matchQuery').value.trim();
+        const resultsEl = panel.querySelector('#matchResults');
+        if (!query) {
+            resultsEl.textContent = '请输入关键词';
+            return;
+        }
+        resultsEl.textContent = '搜索中…';
+        send('library:search-tmdb', { itemId: item.id, query, year: item.year });
+        onceReply('library:search-results', (data) => {
+            if (!data || data.error) {
+                resultsEl.textContent = (data && data.error) || '搜索失败';
+                return;
+            }
+            const list = data.results || [];
+            if (list.length === 0) {
+                resultsEl.textContent = '没有找到结果，试试更短的关键词';
+                return;
+            }
+            resultsEl.replaceChildren(...list.map((r) => {
+                const row = document.createElement('div');
+                row.className = 'ep-row';
+                const year = (r.date || '').slice(0, 4);
+                const vote = r.voteAverage != null ? `★ ${r.voteAverage.toFixed(1)}` : '';
+                row.innerHTML = `
+                    <span class="eptitle">${escapeHtml(r.title)}</span>
+                    <span class="epnum">${escapeHtml(year)}</span>
+                    <span class="epstate">${escapeHtml(vote)}</span>`;
+                row.title = r.overview || '';
+                row.addEventListener('click', () => {
+                    resultsEl.textContent = '应用中…';
+                    send('library:apply-match', { itemId: item.id, tmdbId: r.id });
+                    onceReply('library:match-applied', (res) => {
+                        if (res && res.success) {
+                            toast('已应用匹配');
+                            refreshAll();
+                            setTimeout(() => openDetail(item.id), 200);
+                        } else {
+                            toast((res && res.error) || '匹配失败', true);
+                        }
+                    });
+                });
+                return row;
+            }));
+        });
     });
     panel.querySelector('#detailClose').addEventListener('click', closeDetail);
     panel.querySelectorAll('.ep-row').forEach((row) => {
@@ -542,38 +743,93 @@ function openSourcesModal() {
                     <div class="source-item">
                         <div class="sinfo">
                             <div class="sname">${escapeHtml(s.name)}</div>
-                            <div class="smeta">${escapeHtml(s.config.rootPath || '')} · ${s.itemCount} 个条目 · ${s.type === 'local' ? '本地/SMB' : escapeHtml(s.type)}</div>
+                            <div class="smeta">${escapeHtml(s.config.rootPath || s.config.url || '')} · ${s.itemCount} 个条目 · ${s.type === 'local' ? '本地/SMB' : s.type === 'webdav' ? 'WebDAV' : escapeHtml(s.type)}</div>
                         </div>
                         <button class="btn" data-act="rescan" data-id="${s.id}">重新扫描</button>
                         <button class="btn danger" data-act="remove" data-id="${s.id}">移除</button>
                     </div>`).join('')}
             </div>
+            <div class="tabs" style="margin:8px 0 12px" id="srcTypeTabs">
+                <button data-stype="local" class="active">本地文件夹</button>
+                <button data-stype="webdav">WebDAV</button>
+            </div>
             <div class="form-row">
-                <label>名称（可选，默认使用目录名）</label>
-                <input id="srcName" type="text" placeholder="例如：电影硬盘">
+                <label>名称（可选）</label>
+                <input id="srcName" type="text" placeholder="例如：电影硬盘 / 远端片库">
+            </div>
+            <div id="srcLocalFields">
+                <div class="mfooter" style="justify-content:flex-start;margin-top:0">
+                    <button class="btn" id="srcPick">选择文件夹…</button>
+                </div>
+            </div>
+            <div id="srcWebdavFields" style="display:none">
+                <div class="form-row">
+                    <label>WebDAV 地址</label>
+                    <input id="srcUrl" type="text" placeholder="https://nas.example:5006/dav">
+                </div>
+                <div class="form-row">
+                    <label>用户名（可选）</label>
+                    <input id="srcUser" type="text" autocomplete="off">
+                </div>
+                <div class="form-row">
+                    <label>密码（可选）</label>
+                    <input id="srcPass" type="password" autocomplete="new-password">
+                </div>
             </div>
             <div class="mfooter">
-                <button class="btn" id="srcPick">选择文件夹…</button>
                 <button class="btn primary" id="srcAdd" disabled>添加并扫描</button>
             </div>`;
 
         let pickedPath = null;
+        let srcType = 'local';
         const pickBtn = panel.querySelector('#srcPick');
         const addBtn = panel.querySelector('#srcAdd');
+        const localFields = panel.querySelector('#srcLocalFields');
+        const webdavFields = panel.querySelector('#srcWebdavFields');
+        const urlInput = panel.querySelector('#srcUrl');
+        const refreshAddState = () => {
+            addBtn.disabled = srcType === 'local' ? !pickedPath : urlInput.value.trim().length === 0;
+        };
+        panel.querySelectorAll('#srcTypeTabs button').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                panel.querySelectorAll('#srcTypeTabs button').forEach((b) => b.classList.remove('active'));
+                btn.classList.add('active');
+                srcType = btn.dataset.stype;
+                localFields.style.display = srcType === 'local' ? '' : 'none';
+                webdavFields.style.display = srcType === 'webdav' ? '' : 'none';
+                refreshAddState();
+            });
+        });
+        urlInput.addEventListener('input', refreshAddState);
         pickBtn.addEventListener('click', () => {
             send('library:pick-folder');
             onceReply('library:pick-folder-result', (res) => {
                 if (res && res.path) {
                     pickedPath = res.path;
                     pickBtn.textContent = pickedPath;
-                    addBtn.disabled = false;
+                    refreshAddState();
                 }
             });
         });
         addBtn.addEventListener('click', () => {
-            if (!pickedPath) return;
             const nameInput = panel.querySelector('#srcName');
-            send('library:add-source', { name: nameInput ? nameInput.value : '', rootPath: pickedPath });
+            const baseName = nameInput ? nameInput.value : '';
+            if (srcType === 'local' && !pickedPath) {
+                return;
+            }
+            if (srcType === 'webdav' && !urlInput.value.trim()) {
+                return;
+            }
+            const payload = srcType === 'webdav'
+                ? {
+                    type: 'webdav',
+                    name: baseName,
+                    url: urlInput.value.trim(),
+                    username: panel.querySelector('#srcUser').value.trim(),
+                    password: panel.querySelector('#srcPass').value,
+                }
+                : { type: 'local', name: baseName, rootPath: pickedPath };
+            send('library:add-source', payload);
             onceReply('library:source-added', (res) => {
                 if (res && res.source) {
                     send('library:scan', { sourceId: res.source.id });

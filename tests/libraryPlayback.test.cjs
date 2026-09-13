@@ -35,6 +35,7 @@ test('buildLibraryPlaylist builds a single movie entry with resume position', ()
         assert.equal(entry.title, 'Inception');
         assert.equal(entry.tvTitle, '');
         assert.equal(entry.ts, 600);
+        assert.equal(entry.skipKey, item.id);
         assert.deepEqual(entry.source, { kind: 'file', path: 'D:/Movies/Inception.2010.1080p.mkv' });
     } finally {
         store.close();
@@ -71,6 +72,7 @@ test('buildLibraryPlaylist builds ordered episode list for a show', () => {
         assert.deepEqual(result.entries.map((e) => e.itemGuid), [e1.id, e2.id, e3.id]);
         assert.equal(result.entries[1].tvTitle, 'Game of Thrones');
         assert.equal(result.entries[1].episodeTitle ?? result.entries[1].title, 'The Kingsroad');
+        assert.equal(result.entries[1].skipKey, show.id);
         assert.equal(result.entries[2].ts, 100);
         assert.equal(result.entries[0].ts, 0);
     } finally {
@@ -95,6 +97,26 @@ test('buildLibraryPlaylist resolves strm files to urls', () => {
         const reader = (filePath) => (filePath.endsWith('.strm') ? ' https://example.com/video.mkv \n' : null);
         const result = buildLibraryPlaylist(store, item.id, { readStrm: reader });
         assert.deepEqual(result.entries[0].source, { kind: 'url', url: 'https://example.com/video.mkv' });
+    } finally {
+        store.close();
+    }
+});
+
+test('buildLibraryPlaylist treats http(s) paths as url sources', () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
+    try {
+        const source = store.addSource({ type: 'webdav', name: 'dav', config: { url: 'https://nas.example/dav' } });
+        const { item } = store.upsertItem({
+            sourceId: source.id,
+            kind: 'movie',
+            title: 'Remote Movie',
+            filePath: 'https://nas.example/dav/Movies/Remote.2020.1080p.mkv',
+        });
+        const result = buildLibraryPlaylist(store, item.id);
+        assert.deepEqual(result.entries[0].source, {
+            kind: 'url',
+            url: 'https://nas.example/dav/Movies/Remote.2020.1080p.mkv',
+        });
     } finally {
         store.close();
     }
