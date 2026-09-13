@@ -67,5 +67,7 @@ Delivery order updated by user decision (fast-usable path first):
 - 09-06-phase3-playback — media.ts rework, proxy direct-target sessions, STRM
 - 09-06-phase6-library-ui — unified library page + preload API + flows
 - 09-06-phase7-cleanup-packaging — tray/settings integration, cleanup, builds
-- 09-06-phase4-webdav — DEFERRED (post-first-release)
-- 09-06-phase5-fnos-adapter — DEFERRED (post-first-release)
+- 09-06-phase4-webdav — WebDAV scanner + direct-target playback (in progress)
+- 09-06-phase5-fnos-adapter — **FROZEN (2026-09-13)**: user has no fnOS server to
+  verify against; fnOS code (login/API/OAuth/access-code) is retained in the
+  repository and the task can be revived unchanged when a NAS is available.

@@ -35,6 +35,7 @@ test('buildLibraryPlaylist builds a single movie entry with resume position', ()
         assert.equal(entry.title, 'Inception');
         assert.equal(entry.tvTitle, '');
         assert.equal(entry.ts, 600);
+        assert.equal(entry.skipKey, item.id);
         assert.deepEqual(entry.source, { kind: 'file', path: 'D:/Movies/Inception.2010.1080p.mkv' });
     } finally {
         store.close();
@@ -71,6 +72,7 @@ test('buildLibraryPlaylist builds ordered episode list for a show', () => {
         assert.deepEqual(result.entries.map((e) => e.itemGuid), [e1.id, e2.id, e3.id]);
         assert.equal(result.entries[1].tvTitle, 'Game of Thrones');
         assert.equal(result.entries[1].episodeTitle ?? result.entries[1].title, 'The Kingsroad');
+        assert.equal(result.entries[1].skipKey, show.id);
         assert.equal(result.entries[2].ts, 100);
         assert.equal(result.entries[0].ts, 0);
     } finally {

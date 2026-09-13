@@ -1,14 +1,21 @@
 import * as http from 'node:http';
 import { PROXY_HOST, PROXY_PORT } from './proxyHealth';
 
+export type ProxyPlaybackTarget =
+    | { kind: 'file'; path: string; skipKey?: string }
+    | { kind: 'url'; url: string; headers?: Record<string, string>; skipKey?: string };
+
 interface PlaybackSessionInput {
-    token: string;
-    account: string;
-    domain: string;
+    /** fnOS 源的播放凭据；直连目标模式下可省略 */
+    token?: string;
+    account?: string;
+    domain?: string;
     accessCookie?: string;
-    skipVerify: boolean;
-    useNasLocal: boolean;
+    skipVerify?: boolean;
+    useNasLocal?: boolean;
     itemGuids: string[];
+    /** 直接播放目标（本地文件 / 直连URL），与 fnOS 模式二选一 */
+    targets?: Record<string, ProxyPlaybackTarget>;
 }
 
 interface PlaybackSessionResponse {

@@ -16,6 +16,7 @@ import { getMpvConfigDir } from './mpvConfig';
 import { resolveBundledMpvPath } from '../../common/mpvConfigHelpers';
 import { getProxySecret } from '../../common/proxy';
 import { createProxyPlaybackUrl, registerPlaybackSession } from '../../common/proxySession';
+import type { ProxyPlaybackTarget } from '../../common/proxySession';
 import { getAccessCookieHeader } from '../../../modules/fn_api/accessGrant';
 import { getLibraryStore } from '../../../modules/library/libraryService';
 import { buildLibraryPlaylist, findSidecarSubtitles } from '../../../modules/library/playback';
@@ -406,11 +407,8 @@ function buildMpvArgs(): string[] {
     return mpvArgs;
 }
 
-// 库条目 → MPV 播放项转换（本地路径转 file:// URL，strm 内容直出）
-function libraryEntryToPlayItem(entry: LibraryPlayEntry): ply.PlayItem {
-    const playLink = entry.source.kind === 'file'
-        ? pathToFileURL(entry.source.path).href
-        : entry.source.url;
+// 库条目 → MPV 播放项转换
+function libraryEntryToPlayItem(entry: LibraryPlayEntry, playLink: string): ply.PlayItem {
     return {
         itemGuid: entry.itemGuid,
         title: entry.title,
@@ -421,6 +419,13 @@ function libraryEntryToPlayItem(entry: LibraryPlayEntry): ply.PlayItem {
         duration: entry.duration,
         playLink,
     };
+}
+
+// 直连播放地址（代理不可用时的回退：本地文件转 file:// URL，strm 直出）
+function directPlayLink(entry: LibraryPlayEntry): string {
+    return entry.source.kind === 'file'
+        ? pathToFileURL(entry.source.path).href
+        : entry.source.url;
 }
 
 // 库播放事件处理器：进度写入本地库，无服务器回传
@@ -505,8 +510,29 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     if (currentIndex < 0) {
         currentIndex = 0;
     }
-    const playList = validEntries.map(libraryEntryToPlayItem);
     const currentEntry = validEntries[currentIndex];
+
+    // 通过本地代理注册直接播放目标：mpv 的跳过片头片尾插件（smart_skip）
+    // 依赖播放 URL 中的会话参数访问代理接口；代理不可用时回退为直连播放。
+    let playList: ply.PlayItem[] = [];
+    try {
+        const targets: Record<string, ProxyPlaybackTarget> = {};
+        for (const entry of validEntries) {
+            targets[entry.itemGuid] = entry.source.kind === 'file'
+                ? { kind: 'file', path: entry.source.path, skipKey: entry.skipKey }
+                : { kind: 'url', url: entry.source.url, skipKey: entry.skipKey };
+        }
+        const session = await registerPlaybackSession(getProxySecret(), {
+            targets,
+            itemGuids: validEntries.map((entry) => entry.itemGuid),
+        });
+        playList = validEntries.map((entry) =>
+            libraryEntryToPlayItem(entry, createProxyPlaybackUrl(session, entry.itemGuid))
+        );
+    } catch (error) {
+        log.warn('[library] 代理会话创建失败，回退为直连播放（跳过片头片尾不可用）:', error);
+        playList = validEntries.map((entry) => libraryEntryToPlayItem(entry, directPlayLink(entry)));
+    }
 
     const playerPath = getMpvPlayerPath();
     if (!playerPath) {

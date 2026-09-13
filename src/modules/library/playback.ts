@@ -16,6 +16,8 @@ export type LibraryPlayEntry = {
     episodeNumber: number;
     ts: number;
     duration: number;
+    /** 跳过片头片尾的存储键：剧集用剧集组ID（同组共享），电影用条目ID */
+    skipKey: string;
     source: LibraryPlaySource;
 };
 
@@ -79,6 +81,7 @@ function toEntry(store: LibraryStore, item: LibraryItem, showTitle: string, read
         episodeNumber: item.episode ?? 0,
         ts: resumeTs(store, item),
         duration: 0,
+        skipKey: item.kind === 'episode' && item.showId ? item.showId : item.id,
         source: resolveSource(item.filePath, readStrm),
     };
 }
