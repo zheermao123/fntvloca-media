@@ -142,6 +142,41 @@ test('extra material (OP/ED/PV) is excluded', () => {
     assert.equal(isExtraMaterial('[VCB-Studio] Show [NCED][Ma10p].mkv'), true);
     assert.equal(isExtraMaterial('40_定档PV 众生之门.flv'), true);
     assert.equal(isExtraMaterial('[YYDM-11FANS][Fullmetal Alchemist][01][BDRIP].mp4'), false);
+    assert.equal(isExtraMaterial('(BD)鋼の錬金術師 FULLMETAL ALCHEMIST 映像特典 盲目の錬金術師.mkv'), true);
+});
+
+test('underscore-leading episode numbers and season+year folders', () => {
+    const ctx = resolveFolderEpisodeContext(['一人之下', 'S06 2026'], '01_4K.mp4', {
+        folderVideoCount: 26,
+    });
+    assert.ok(ctx);
+    assert.equal(ctx.showTitle, '一人之下');
+    assert.equal(ctx.season, 6);
+    assert.equal(ctx.episode, 1);
+
+    const ctx2 = resolveFolderEpisodeContext(['进击的巨人', 'TV动画'], '39_巨木之林的大逃杀.flv', {
+        folderVideoCount: 59,
+    });
+    assert.ok(ctx2);
+    assert.equal(ctx2.showTitle, '进击的巨人');
+    assert.equal(ctx2.episode, 39);
+});
+
+test('preview specials go to season 0; release noise is not an episode number', () => {
+    const ctx = resolveFolderEpisodeContext(['灵笼', '灵笼 S02 4K（2025）'], '第二季前瞻篇：长夜将至.mp4', {
+        folderVideoCount: 14,
+    });
+    assert.ok(ctx);
+    assert.equal(ctx.showTitle, '灵笼');
+    assert.equal(ctx.season, 0);
+    assert.equal(ctx.episode, 1);
+
+    const ctx2 = resolveFolderEpisodeContext(
+        ['钢之炼金术师 (2003)', '剧场版', '叹息之丘的圣星'],
+        '[Moozzi2] Fullmetal Alchemist The Sacred Star of Milos (BD 1920x1080 x.264 5.mkv',
+        { folderVideoCount: 3 }
+    );
+    assert.equal(ctx2, null);
 });
 
 test('movies and root-level files are not converted into episodes', () => {

@@ -37,9 +37,11 @@ export function chineseToNumber(raw: string): number | null {
 
 const SPECIAL_DIR_PATTERN = /^(specials?|特别篇|特别版|番外(篇)?|sp)$/i;
 const VERSION_DIR_PATTERN = /^(日语版?|国语版?|粤语版?|中配版?|台配|原声|原版|双语版?|tv动画|tv版|tv|web版|bd版?)$/i;
-const SPECIAL_FILE_PATTERN = /特别版|特别篇|番外|specials?[\s._-]*edition/i;
-const EXTRAS_PATTERN = /\[(nc)?(op|ed)\d{0,2}\]|\[pv\d?\]|\[cm\]|\[menu\]|定档PV|正式PV|预告片?|花絮/i;
+const SPECIAL_FILE_PATTERN = /特别版|特别篇|番外|前瞻|specials?[\s._-]*edition/i;
+const EXTRAS_PATTERN = /\[(nc)?(op|ed)\d{0,2}\]|\[pv\d?\]|\[cm\]|\[menu\]|定档PV|正式PV|预告片?|花絮|特典/i;
 const YEAR_IN_NAME = /[（(]\s*(19\d{2}|20\d{2})\s*[）)]/;
+const RELEASE_NOISE = /(1080|2160|720)[pi]|x[._-]?26[45]|bluray|bdrip|web-?dl|hevc|ma10p|flac|10bit/i;
+const EXPLICIT_EPISODE = /[sS]\d{1,2}[\s._-]*[eE]\d{1,3}|第\s*\d{1,3}\s*[集话]|\[\d{1,3}\]/;
 
 export type SeasonDirInfo = { season: number; showPrefix: string | null };
 
@@ -103,6 +105,11 @@ export function isExtraMaterial(fileName: string): boolean {
     return EXTRAS_PATTERN.test(fileName);
 }
 
+/** 发行版本噪音文件名（分辨率/编码等）且无显式集号标记 → 不应据文件名回退为剧集 */
+export function isNoisyNonEpisodeName(fileName: string): boolean {
+    return RELEASE_NOISE.test(fileName) && !EXPLICIT_EPISODE.test(fileName);
+}
+
 function extractEpisodeNumber(stem: string): number | null {
     if (/^\d{1,3}$/.test(stem)) {
         const value = Number(stem);
@@ -116,8 +123,8 @@ function extractEpisodeNumber(stem: string): number | null {
             return value;
         }
     }
-    // 前导集号：01 - 标题 / 01.标题 / 01 标题
-    const leading = /^(\d{1,3})\s*[-–—.]\s*\S/.exec(stem);
+    // 前导集号：01 - 标题 / 01.标题 / 01_标题 / 01 标题 / 03 4K
+    const leading = /^(\d{1,3})(?:\s*[-–—._]\s*|\s+)\S/.exec(stem);
     if (leading) {
         const value = Number(leading[1]);
         if (value >= 1 && value <= 200) {
@@ -132,7 +139,10 @@ function extractEpisodeNumber(stem: string): number | null {
             return value;
         }
     }
-    // 标题+数字粘连：琅琊榜01
+    // 标题+数字粘连：琅琊榜01（发行版本噪音里结尾数字不可信）
+    if (RELEASE_NOISE.test(stem)) {
+        return null;
+    }
     const glued = /^(.+?)[\s._-]*(\d{1,3})$/.exec(stem);
     if (glued) {
         const prefix = glued[1];
@@ -188,7 +198,12 @@ export function resolveFolderEpisodeContext(
     const stem = extension.length > 0 ? fileName.slice(0, -extension.length) : fileName;
 
     const parsed = parseVideoName(fileName);
+    let parsedSeason = parsed.season;
     let episode = parsed.episode;
+    if (episode !== null && RELEASE_NOISE.test(fileName) && !EXPLICIT_EPISODE.test(fileName)) {
+        episode = null;
+        parsedSeason = null;
+    }
     if (episode === null && ((options?.folderVideoCount ?? 0) >= 2 || isSpecial)) {
         episode = extractEpisodeNumber(stem);
     }
@@ -204,11 +219,12 @@ export function resolveFolderEpisodeContext(
         return null;
     }
 
-    const dirYear = extractDirectoryYear(showSource) ?? extractDirectoryYear(dirs.join('/'));
+    // 年份只信任剧名目录本身：季子目录的年份用于区分剧集组会导致同剧按季拆分成多个"剧"
+    const dirYear = extractDirectoryYear(showSource);
     return {
         showTitle,
         year: dirYear,
-        season: isSpecial ? 0 : (season ?? parsed.season ?? 1),
+        season: isSpecial ? 0 : (season ?? parsedSeason ?? 1),
         episode,
     };
 }

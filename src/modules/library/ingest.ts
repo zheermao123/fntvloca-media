@@ -3,7 +3,7 @@ import * as log from '../logger';
 import type { LibraryStore } from './store';
 import type { ScanResult } from './scanner';
 import { buildShowKey, parseVideoName } from './parser';
-import { resolveFolderEpisodeContext, isExtraMaterial } from './episodeContext';
+import { resolveFolderEpisodeContext, isExtraMaterial, isNoisyNonEpisodeName } from './episodeContext';
 import { findPosterForVideo, loadNfoMetadata } from './nfo';
 import type { LibraryItem } from './types';
 
@@ -121,6 +121,9 @@ export async function ingestScanResult(
         let year = folderCtx ? (folderCtx.year ?? parsed.year) : parsed.year;
         let season = folderCtx ? folderCtx.season : parsed.season;
         let episode = folderCtx ? folderCtx.episode : parsed.episode;
+        if (!folderCtx && episode !== null && isNoisyNonEpisodeName(fileName)) {
+            episode = null;
+        }
 
         if (episode !== null) {
             const groupKey = buildShowKey(title, year);
