@@ -5,6 +5,8 @@ import * as log from '../../../modules/logger';
 import * as fnConfig from '../../../modules/fn_config/config';
 import { getLibraryStore, getLibraryCacheDir } from '../../../modules/library/libraryService';
 import { scanLocalFolder } from '../../../modules/library/scanner';
+import { scanWebdavFolder } from '../../../modules/library/webdav';
+import { encryptSecret, decryptSecret } from '../../../modules/library/credentials';
 import { ingestScanResult } from '../../../modules/library/ingest';
 import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
@@ -27,6 +29,21 @@ async function scanSource(sourceId: string): Promise<IngestSummary> {
     const source = store.getSource(sourceId);
     if (!source) {
         throw new Error(`媒体源不存在: ${sourceId}`);
+    }
+    if (source.type === 'webdav') {
+        const url = source.config.url ?? '';
+        if (!url) {
+            throw new Error('该 WebDAV 源未配置地址');
+        }
+        const scan = await scanWebdavFolder({
+            baseUrl: url,
+            username: source.config.username || undefined,
+            password: decryptSecret(source.config.passwordEnc || '') || undefined,
+        });
+        if (scan.errors.length > 0) {
+            log.warn(`[library] webdav scan ${url} errors:`, scan.errors.slice(0, 5));
+        }
+        return ingestScanResult(store, sourceId, scan);
     }
     if (source.type !== 'local') {
         throw new Error(`暂不支持扫描该源类型: ${source.type}`);
@@ -97,8 +114,29 @@ function init(): void {
             });
     });
 
-    registerHandler('library:add-source', (event: IpcMainEvent, payload: { name?: string; rootPath?: string }) => {
+    registerHandler('library:add-source', (
+        event: IpcMainEvent,
+        payload: { type?: string; name?: string; rootPath?: string; url?: string; username?: string; password?: string }
+    ) => {
         try {
+            if (payload?.type === 'webdav') {
+                const url = (payload.url ?? '').trim();
+                if (!url) {
+                    throw new Error('缺少 WebDAV 地址');
+                }
+                const username = (payload.username ?? '').trim();
+                const created = store.addSource({
+                    type: 'webdav',
+                    name: payload?.name?.trim() || url,
+                    config: {
+                        url: url.replace(/\/+$/, ''),
+                        username,
+                        passwordEnc: payload.password ? encryptSecret(payload.password) : '',
+                    },
+                });
+                reply(event, 'library:source-added', { source: created });
+                return;
+            }
             const rootPath = payload?.rootPath ?? '';
             if (!rootPath) {
                 throw new Error('缺少扫描目录');

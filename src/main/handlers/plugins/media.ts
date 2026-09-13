@@ -19,6 +19,7 @@ import { createProxyPlaybackUrl, registerPlaybackSession } from '../../common/pr
 import type { ProxyPlaybackTarget } from '../../common/proxySession';
 import { getAccessCookieHeader } from '../../../modules/fn_api/accessGrant';
 import { getLibraryStore } from '../../../modules/library/libraryService';
+import { decryptSecret } from '../../../modules/library/credentials';
 import { buildLibraryPlaylist, findSidecarSubtitles } from '../../../modules/library/playback';
 import type { LibraryPlayEntry } from '../../../modules/library/playback';
 import type { LibraryStore } from '../../../modules/library/store';
@@ -517,10 +518,35 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     let playList: ply.PlayItem[] = [];
     try {
         const targets: Record<string, ProxyPlaybackTarget> = {};
+        const headerCache = new Map<string, Record<string, string> | null>();
         for (const entry of validEntries) {
-            targets[entry.itemGuid] = entry.source.kind === 'file'
-                ? { kind: 'file', path: entry.source.path, skipKey: entry.skipKey }
-                : { kind: 'url', url: entry.source.url, skipKey: entry.skipKey };
+            if (entry.source.kind === 'file') {
+                targets[entry.itemGuid] = { kind: 'file', path: entry.source.path, skipKey: entry.skipKey };
+                continue;
+            }
+            // 远程源（WebDAV 等）：按源配置附加鉴权头
+            let headers: Record<string, string> | undefined;
+            const item = store.getItem(entry.itemGuid);
+            if (item) {
+                let cached = headerCache.get(item.sourceId);
+                if (cached === undefined) {
+                    const source = store.getSource(item.sourceId);
+                    if (source && source.type === 'webdav' && source.config.username) {
+                        const password = decryptSecret(source.config.passwordEnc || '');
+                        cached = {
+                            Authorization:
+                                'Basic ' + Buffer.from(`${source.config.username}:${password}`).toString('base64'),
+                        };
+                    } else {
+                        cached = null;
+                    }
+                    headerCache.set(item.sourceId, cached);
+                }
+                if (cached) {
+                    headers = cached;
+                }
+            }
+            targets[entry.itemGuid] = { kind: 'url', url: entry.source.url, headers, skipKey: entry.skipKey };
         }
         const session = await registerPlaybackSession(getProxySecret(), {
             targets,

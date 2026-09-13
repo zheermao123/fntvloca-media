@@ -39,6 +39,10 @@ function defaultReadStrm(filePath: string): string | null {
 }
 
 function resolveSource(filePath: string, readStrm: ReadStrmFn): LibraryPlaySource {
+    // WebDAV 等远程源直接以 URL 形式入库
+    if (/^https?:\/\//i.test(filePath)) {
+        return { kind: 'url', url: filePath };
+    }
     if (filePath.toLowerCase().endsWith(STRM_EXTENSION)) {
         const content = readStrm(filePath);
         const url = content !== null ? content.trim().split(/\r?\n/)[0]?.trim() ?? '' : '';

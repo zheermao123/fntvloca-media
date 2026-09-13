@@ -604,38 +604,93 @@ function openSourcesModal() {
                     <div class="source-item">
                         <div class="sinfo">
                             <div class="sname">${escapeHtml(s.name)}</div>
-                            <div class="smeta">${escapeHtml(s.config.rootPath || '')} · ${s.itemCount} 个条目 · ${s.type === 'local' ? '本地/SMB' : escapeHtml(s.type)}</div>
+                            <div class="smeta">${escapeHtml(s.config.rootPath || s.config.url || '')} · ${s.itemCount} 个条目 · ${s.type === 'local' ? '本地/SMB' : s.type === 'webdav' ? 'WebDAV' : escapeHtml(s.type)}</div>
                         </div>
                         <button class="btn" data-act="rescan" data-id="${s.id}">重新扫描</button>
                         <button class="btn danger" data-act="remove" data-id="${s.id}">移除</button>
                     </div>`).join('')}
             </div>
+            <div class="tabs" style="margin:8px 0 12px" id="srcTypeTabs">
+                <button data-stype="local" class="active">本地文件夹</button>
+                <button data-stype="webdav">WebDAV</button>
+            </div>
             <div class="form-row">
-                <label>名称（可选，默认使用目录名）</label>
-                <input id="srcName" type="text" placeholder="例如：电影硬盘">
+                <label>名称（可选）</label>
+                <input id="srcName" type="text" placeholder="例如：电影硬盘 / 远端片库">
+            </div>
+            <div id="srcLocalFields">
+                <div class="mfooter" style="justify-content:flex-start;margin-top:0">
+                    <button class="btn" id="srcPick">选择文件夹…</button>
+                </div>
+            </div>
+            <div id="srcWebdavFields" style="display:none">
+                <div class="form-row">
+                    <label>WebDAV 地址</label>
+                    <input id="srcUrl" type="text" placeholder="https://nas.example:5006/dav">
+                </div>
+                <div class="form-row">
+                    <label>用户名（可选）</label>
+                    <input id="srcUser" type="text" autocomplete="off">
+                </div>
+                <div class="form-row">
+                    <label>密码（可选）</label>
+                    <input id="srcPass" type="password" autocomplete="new-password">
+                </div>
             </div>
             <div class="mfooter">
-                <button class="btn" id="srcPick">选择文件夹…</button>
                 <button class="btn primary" id="srcAdd" disabled>添加并扫描</button>
             </div>`;
 
         let pickedPath = null;
+        let srcType = 'local';
         const pickBtn = panel.querySelector('#srcPick');
         const addBtn = panel.querySelector('#srcAdd');
+        const localFields = panel.querySelector('#srcLocalFields');
+        const webdavFields = panel.querySelector('#srcWebdavFields');
+        const urlInput = panel.querySelector('#srcUrl');
+        const refreshAddState = () => {
+            addBtn.disabled = srcType === 'local' ? !pickedPath : urlInput.value.trim().length === 0;
+        };
+        panel.querySelectorAll('#srcTypeTabs button').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                panel.querySelectorAll('#srcTypeTabs button').forEach((b) => b.classList.remove('active'));
+                btn.classList.add('active');
+                srcType = btn.dataset.stype;
+                localFields.style.display = srcType === 'local' ? '' : 'none';
+                webdavFields.style.display = srcType === 'webdav' ? '' : 'none';
+                refreshAddState();
+            });
+        });
+        urlInput.addEventListener('input', refreshAddState);
         pickBtn.addEventListener('click', () => {
             send('library:pick-folder');
             onceReply('library:pick-folder-result', (res) => {
                 if (res && res.path) {
                     pickedPath = res.path;
                     pickBtn.textContent = pickedPath;
-                    addBtn.disabled = false;
+                    refreshAddState();
                 }
             });
         });
         addBtn.addEventListener('click', () => {
-            if (!pickedPath) return;
             const nameInput = panel.querySelector('#srcName');
-            send('library:add-source', { name: nameInput ? nameInput.value : '', rootPath: pickedPath });
+            const baseName = nameInput ? nameInput.value : '';
+            if (srcType === 'local' && !pickedPath) {
+                return;
+            }
+            if (srcType === 'webdav' && !urlInput.value.trim()) {
+                return;
+            }
+            const payload = srcType === 'webdav'
+                ? {
+                    type: 'webdav',
+                    name: baseName,
+                    url: urlInput.value.trim(),
+                    username: panel.querySelector('#srcUser').value.trim(),
+                    password: panel.querySelector('#srcPass').value,
+                }
+                : { type: 'local', name: baseName, rootPath: pickedPath };
+            send('library:add-source', payload);
             onceReply('library:source-added', (res) => {
                 if (res && res.source) {
                     send('library:scan', { sourceId: res.source.id });

@@ -102,6 +102,26 @@ test('buildLibraryPlaylist resolves strm files to urls', () => {
     }
 });
 
+test('buildLibraryPlaylist treats http(s) paths as url sources', () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
+    try {
+        const source = store.addSource({ type: 'webdav', name: 'dav', config: { url: 'https://nas.example/dav' } });
+        const { item } = store.upsertItem({
+            sourceId: source.id,
+            kind: 'movie',
+            title: 'Remote Movie',
+            filePath: 'https://nas.example/dav/Movies/Remote.2020.1080p.mkv',
+        });
+        const result = buildLibraryPlaylist(store, item.id);
+        assert.deepEqual(result.entries[0].source, {
+            kind: 'url',
+            url: 'https://nas.example/dav/Movies/Remote.2020.1080p.mkv',
+        });
+    } finally {
+        store.close();
+    }
+});
+
 test('buildLibraryPlaylist falls back to file source when strm is unreadable', () => {
     const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
     try {
