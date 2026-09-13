@@ -5,6 +5,7 @@ import type { LibraryStore } from './store';
 import type { ItemMetadataPatch, LibraryItem, Show } from './types';
 import { TmdbClient, createDefaultTransport, pickBestResult } from './tmdb';
 import type { ScraperConfig, SearchResult, TmdbTransport } from './tmdb';
+import { extractTmdbIdHint } from './episodeContext';
 
 export type ScrapeProgress = {
     done: number;
@@ -165,6 +166,15 @@ export class LibraryScraper {
 
     private async scrapeMovie(item: LibraryItem): Promise<boolean> {
         await this.delayFn(this.delayMs);
+        // 目录/文件名内嵌 TMDB ID（如 ｛tmdb-813032｝）时直接按 ID 取详情，跳过搜索
+        const hint = extractTmdbIdHint(item.filePath);
+        if (hint !== null) {
+            const hinted = await this.client.getMovie(hint);
+            if (hinted) {
+                await this.writeMovieMetadata(item, hinted);
+                return true;
+            }
+        }
         // 防御：纯数字/超短标题（历史脏数据或异常命名）不做在线搜索，避免乱匹配
         const normalizedTitle = item.title.trim();
         if (normalizedTitle.length < 2 || /^\d{1,4}$/.test(normalizedTitle)) {
@@ -204,6 +214,19 @@ export class LibraryScraper {
 
     private async scrapeShow(show: Show): Promise<boolean> {
         await this.delayFn(this.delayMs);
+        // 任一剧集路径内嵌 TMDB ID 时直接按 ID 取详情，跳过搜索
+        const hintedId = this.store
+            .listItems({ showId: show.id })
+            .map((i) => extractTmdbIdHint(i.filePath))
+            .find((value): value is number => value !== null);
+        if (hintedId !== undefined) {
+            const tv = await this.client.getTv(hintedId);
+            if (tv) {
+                await this.writeShowMetadata(show, tv);
+                await this.refreshEpisodes(show.id, tv);
+                return true;
+            }
+        }
         const results = await this.client.searchTv(show.title, show.year ?? undefined);
         const best = pickBestResult(results, show.title, show.year);
         if (!best) {

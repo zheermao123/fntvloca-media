@@ -424,7 +424,7 @@ function buildSeasonCard(entry) {
             <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
         </div>
         <div class="name">${escapeHtml(entry.show.title)}</div>
-        <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}${entry.watchedCount}/${entry.episodeCount} 已看`)}</div>`;
+        <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}已看 ${entry.watchedCount}/${entry.episodeCount}`)}</div>`;
     const overlay = card.querySelector('.poster-wrap');
     overlay.addEventListener('click', (e) => {
         if (e.target.closest('.play-overlay-btn')) {
@@ -444,7 +444,7 @@ function buildSeasonListRow(entry) {
         <span class="ltitle">${escapeHtml(entry.show.title)}${showSeasonLabel ? ` 第 ${entry.season} 季` : ''}</span>
         <span class="lmeta">剧集</span>
         <span class="lmeta">${escapeHtml(entry.show.year ?? '')}</span>
-        <span class="lmeta">${entry.watchedCount}/${entry.episodeCount} 已看</span>`;
+        <span class="lmeta">已看 ${entry.watchedCount}/${entry.episodeCount}</span>`;
     row.addEventListener('click', () => openSeasonDetail(entry.show.id, entry.season));
     return row;
 }

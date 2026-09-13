@@ -6,6 +6,7 @@ export type FolderEpisodeContext = {
     year: number | null;
     season: number;
     episode: number;
+    tmdbId: number | null;
 };
 
 const CN_DIGITS: Record<string, number> = {
@@ -40,8 +41,19 @@ const VERSION_DIR_PATTERN = /^(日语版?|国语版?|粤语版?|中配版?|台�
 const SPECIAL_FILE_PATTERN = /特别版|特别篇|番外|前瞻|specials?[\s._-]*edition/i;
 const EXTRAS_PATTERN = /\[(nc)?(op|ed)\d{0,2}\]|\[pv\d?\]|\[cm\]|\[menu\]|定档PV|正式PV|预告片?|花絮|特典/i;
 const YEAR_IN_NAME = /[（(]\s*(19\d{2}|20\d{2})\s*[）)]/;
+const TMDB_HINT_PATTERN = /[｛{［[(【]\s*tmdb(?:id)?\s*[-_ ]?\s*(\d{1,8})\s*[｝}］\])】]/i;
+
+/** 目录/文件名内嵌的 TMDB ID（tinyMediaManager 风格 ｛tmdb-12345｝ / [tmdbid-12345]） */
+export function extractTmdbIdHint(text: string): number | null {
+    const match = TMDB_HINT_PATTERN.exec(text) ?? /(?:tmdb|tmdbid)[-_ ]?(\d{3,8})/i.exec(text);
+    if (!match) {
+        return null;
+    }
+    const value = Number(match[1]);
+    return Number.isFinite(value) && value > 0 ? value : null;
+}
 const RELEASE_NOISE = /(1080|2160|720)[pi]|x[._-]?26[45]|bluray|bdrip|web-?dl|hevc|ma10p|flac|10bit/i;
-const EXPLICIT_EPISODE = /[sS]\d{1,2}[\s._-]*[eE]\d{1,3}|第\s*\d{1,3}\s*[集话]|\[\d{1,3}\]/;
+const EXPLICIT_EPISODE = /[sS]\d{1,2}[\s._-]*[eE]\d{1,3}|第\s*\d{1,3}\s*[集话]|\[\d{1,3}\]|(?:^|[\s._-])[eE][pP]?[._-]?\d{1,3}(?!\d)/;
 
 export type SeasonDirInfo = { season: number; showPrefix: string | null };
 
@@ -64,6 +76,13 @@ export function parseSeasonDir(name: string): SeasonDirInfo | null {
         const value = chineseToNumber(match[1]);
         return value === null ? null : { season: value, showPrefix: null };
     }
+    // "剑来(2024)第二季[tmdbid-259537](1)" / "一人之下 第五季"
+    match = /^(.*?)第\s*([一二三四五六七八九十\d]{1,3})\s*季/.exec(trimmed);
+    if (match) {
+        const value = chineseToNumber(match[2]);
+        const prefix = match[1].replace(/[\s._-]+$/g, '').trim();
+        return value === null ? null : { season: value, showPrefix: prefix.length > 0 ? prefix : null };
+    }
     match = /^[sS](\d{1,2})(?:[\s._(（-].*)?$/.exec(trimmed);
     if (match) {
         return { season: Number(match[1]), showPrefix: null };
@@ -85,7 +104,9 @@ export function parseSeasonDirName(name: string): number | null {
 export function cleanDirectoryTitle(name: string): string {
     let title = name.replace(/^\[[^\]]*\]/, ' ');
     title = title.replace(/[（(]\s*(19\d{2}|20\d{2})\s*[）)]/g, ' ');
+    title = title.replace(/[｛{［[(【]\s*tmdb(?:id)?\s*[-_ ]?\s*\d{1,8}\s*[｝}］\])】]/gi, ' ');
     title = title.replace(/[\s._-]+[sS]\d{1,2}[\s._-]*\d*[kKpP]?.*$/g, ' ');
+    title = title.replace(/[（(]\s*\d{1,2}\s*[）)]\s*$/g, ' ');
     title = title.replace(/[._]+/g, ' ');
     title = title.replace(/\s+/g, ' ');
     return title.replace(/^[\s\-–—]+|[\s\-–—_.]+$/g, '').trim();
@@ -119,6 +140,14 @@ function extractEpisodeNumber(stem: string): number | null {
     const bracket = /\[(\d{1,3})\]/.exec(stem);
     if (bracket) {
         const value = Number(bracket[1]);
+        if (value >= 1 && value <= 200) {
+            return value;
+        }
+    }
+    // EP01 / E01 / EP.01 / EP-01（显式集号，防误伤：要求前面是分隔符，BDE4 之类不算）
+    const epMarker = /(?:^|[\s._-])[eE][pP]?[._-]?(\d{1,3})(?!\d)/.exec(stem);
+    if (epMarker) {
+        const value = Number(epMarker[1]);
         if (value >= 1 && value <= 200) {
             return value;
         }
@@ -194,6 +223,14 @@ export function resolveFolderEpisodeContext(
         return null;
     }
 
+    let tmdbHint: number | null = null;
+    for (let i = dirs.length - 1; i >= 0 && tmdbHint === null; i -= 1) {
+        tmdbHint = extractTmdbIdHint(dirs[i]);
+    }
+    if (tmdbHint === null) {
+        tmdbHint = extractTmdbIdHint(fileName);
+    }
+
     const extension = path.extname(fileName);
     const stem = extension.length > 0 ? fileName.slice(0, -extension.length) : fileName;
 
@@ -226,5 +263,6 @@ export function resolveFolderEpisodeContext(
         year: dirYear,
         season: isSpecial ? 0 : (season ?? parsedSeason ?? 1),
         episode,
+        tmdbId: tmdbHint,
     };
 }

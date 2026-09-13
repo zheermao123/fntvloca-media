@@ -145,6 +145,52 @@ test('extra material (OP/ED/PV) is excluded', () => {
     assert.equal(isExtraMaterial('(BD)鋼の錬金術師 FULLMETAL ALCHEMIST 映像特典 盲目の錬金術師.mkv'), true);
 });
 
+test('embedded tmdb ids in folder names become hints and are stripped from titles', () => {
+    const ctx = resolveFolderEpisodeContext(
+        ['剑来(2024)第二季[tmdbid-259537](1)'],
+        '剑来.Sword.of.Coming.S02E01.2024.2160p.WEB-DL.mp4',
+        { folderVideoCount: 27 }
+    );
+    assert.ok(ctx);
+    assert.equal(ctx.showTitle, '剑来');
+    assert.equal(ctx.season, 2);
+    assert.equal(ctx.episode, 1);
+    assert.equal(ctx.tmdbId, 259537);
+
+    const ctx2 = resolveFolderEpisodeContext(
+        ['罗小黑战记｛tmdb-88319｝'],
+        'The.Legend.Of.Luoxiaohei.S01E01.mp4',
+        { folderVideoCount: 40 }
+    );
+    assert.ok(ctx2);
+    assert.equal(ctx2.showTitle, '罗小黑战记');
+    assert.equal(ctx2.tmdbId, 88319);
+
+    const ctx3 = resolveFolderEpisodeContext(['庆余年', 'S01'], '01.mp4', { folderVideoCount: 20 });
+    assert.ok(ctx3);
+    assert.equal(ctx3.tmdbId, null);
+});
+
+test('EPxx markers survive release-noise suppression (大明王朝1566)', () => {
+    const ctx = resolveFolderEpisodeContext(
+        ['大明王朝1566（2007）'],
+        '大明王朝1566.2007.EP01.HD1080P.X264.AAC.Mandarin.CHS.BDE4.mp4',
+        { folderVideoCount: 46 }
+    );
+    assert.ok(ctx);
+    assert.equal(ctx.showTitle, '大明王朝1566');
+    assert.equal(ctx.season, 1);
+    assert.equal(ctx.episode, 1);
+
+    const ctx2 = resolveFolderEpisodeContext(
+        ['大明王朝1566（2007）'],
+        '大明王朝1566.2007.EP46.HD1080P.X264.AAC.Mandarin.CHS.BDE4.mp4',
+        { folderVideoCount: 46 }
+    );
+    assert.ok(ctx2);
+    assert.equal(ctx2.episode, 46);
+});
+
 test('underscore-leading episode numbers and season+year folders', () => {
     const ctx = resolveFolderEpisodeContext(['一人之下', 'S06 2026'], '01_4K.mp4', {
         folderVideoCount: 26,
