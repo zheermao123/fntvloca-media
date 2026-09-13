@@ -10,6 +10,7 @@ import { encryptSecret, decryptSecret } from '../../../modules/library/credentia
 import { ingestScanResult } from '../../../modules/library/ingest';
 import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
+import { buildCatalog } from '../../../modules/library/catalog';
 
 /**
  * 媒体库数据与刮削插件
@@ -213,6 +214,51 @@ function init(): void {
             });
         } catch (error) {
             reply(event, 'library:item-info', { error: error instanceof Error ? error.message : String(error) });
+        }
+    });
+
+    registerHandler('library:catalog', (event: IpcMainEvent, payload: Record<string, unknown> = {}) => {
+        try {
+            const kind = payload.kind === 'movie' || payload.kind === 'episode' ? payload.kind : 'all';
+            const sort = payload.sort;
+            const entries = buildCatalog(store, {
+                kind,
+                watched: payload.watched === true || payload.watched === false ? payload.watched : undefined,
+                query: typeof payload.query === 'string' ? payload.query : undefined,
+                sort: sort === 'title' || sort === 'year' || sort === 'recentPlayed' || sort === 'added' ? sort : 'added',
+                limit: typeof payload.limit === 'number' ? payload.limit : undefined,
+            });
+            reply(event, 'library:catalog-info', { entries });
+        } catch (error) {
+            log.error('[library] 目录查询失败:', error);
+            reply(event, 'library:catalog-info', { entries: [] });
+        }
+    });
+
+    registerHandler('library:show', (event: IpcMainEvent, payload: { id?: string }) => {
+        try {
+            const show = payload?.id ? store.getShow(payload.id) : null;
+            if (!show) {
+                reply(event, 'library:show-info', { error: '剧集组不存在' });
+                return;
+            }
+            const episodes = store.listItems({ showId: show.id }).sort(
+                (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
+            );
+            const states: Record<string, { watched: boolean; positionTs: number; durationTs: number; lastPlayedAt: number | null }> = {};
+            for (const episode of episodes) {
+                const state = store.getWatchState(episode.id);
+                states[episode.id] = {
+                    watched: state?.watched ?? false,
+                    positionTs: state?.positionTs ?? 0,
+                    durationTs: state?.durationTs ?? 0,
+                    lastPlayedAt: state?.lastPlayedAt ?? null,
+                };
+            }
+            reply(event, 'library:show-info', { show, episodes, states });
+        } catch (error) {
+            log.error('[library] 剧集组查询失败:', error);
+            reply(event, 'library:show-info', { error: error instanceof Error ? error.message : String(error) });
         }
     });
 

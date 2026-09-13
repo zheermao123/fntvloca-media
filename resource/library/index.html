@@ -270,6 +270,7 @@ const state = {
     sort: 'added',
     view: 'grid',
     items: [],
+    entries: [],
     currentDetailId: null,
     sources: [],
     continueMap: new Map(),
@@ -365,9 +366,9 @@ async function loadItems() {
         limit: 600,
     };
     if (state.kind !== 'all') payload.kind = state.kind;
-    send('library:items', payload);
-    onceReply('library:items-info', (data) => {
-        state.items = (data && data.items) || [];
+    send('library:catalog', payload);
+    onceReply('library:catalog-info', (data) => {
+        state.entries = (data && data.entries) || [];
         renderItems();
     });
 }
@@ -377,10 +378,10 @@ function renderItems() {
     const list = document.getElementById('listView');
     const empty = document.getElementById('emptyHint');
     const title = document.getElementById('sectionTitle');
-    title.textContent = `媒体库 (${state.items.length})`;
+    title.textContent = `媒体库 (${state.entries.length})`;
     grid.style.display = state.view === 'grid' ? '' : 'none';
     list.style.display = state.view === 'grid' ? 'none' : '';
-    if (state.items.length === 0) {
+    if (state.entries.length === 0) {
         empty.style.display = '';
         grid.replaceChildren();
         list.replaceChildren();
@@ -389,10 +390,143 @@ function renderItems() {
     empty.style.display = 'none';
 
     if (state.view === 'grid') {
-        grid.replaceChildren(...state.items.map((item) => buildCard(item)));
+        grid.replaceChildren(...state.entries.map((entry) =>
+            entry.type === 'show' ? buildShowCard(entry) : buildCard(entry.item)
+        ));
     } else {
-        list.replaceChildren(...state.items.map((item) => buildListRow(item)));
+        list.replaceChildren(...state.entries.map((entry) =>
+            entry.type === 'show' ? buildShowListRow(entry) : buildListRow(entry.item)
+        ));
     }
+}
+
+function buildShowCard(entry) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const badges = [`<span class="badge">全 ${entry.episodeCount} 集</span>`];
+    if (entry.show.year) {
+        badges.push(`<span class="badge" style="top:32px">${entry.show.year}</span>`);
+    }
+    const progressPct = entry.episodeCount > 0
+        ? Math.round((entry.watchedCount / entry.episodeCount) * 100)
+        : 0;
+    const progressHtml = progressPct > 0
+        ? `<div class="poster-prog"><i style="width:${progressPct}%"></i></div>`
+        : '';
+    card.innerHTML = `
+        <div class="poster-wrap">
+            ${posterImgHtml(entry.posterPath, entry.show.title)}
+            ${badges.join('')}
+            ${progressHtml}
+            <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
+        </div>
+        <div class="name">${escapeHtml(entry.show.title)}</div>
+        <div class="sub">${escapeHtml(`${entry.watchedCount}/${entry.episodeCount} 已看`)}</div>`;
+    const overlay = card.querySelector('.poster-wrap');
+    overlay.addEventListener('click', (e) => {
+        if (e.target.closest('.play-overlay-btn')) {
+            playItem(entry.resumeItemId);
+        } else {
+            openShowDetail(entry.show.id);
+        }
+    });
+    return card;
+}
+
+function buildShowListRow(entry) {
+    const row = document.createElement('div');
+    row.className = 'lrow';
+    row.innerHTML = `
+        <span class="ltitle">${escapeHtml(entry.show.title)}</span>
+        <span class="lmeta">剧集</span>
+        <span class="lmeta">${escapeHtml(entry.show.year ?? '')}</span>
+        <span class="lmeta">${entry.watchedCount}/${entry.episodeCount} 已看</span>`;
+    row.addEventListener('click', () => openShowDetail(entry.show.id));
+    return row;
+}
+
+function openShowDetail(showId) {
+    send('library:show', { id: showId });
+    onceReply('library:show-info', (data) => {
+        if (!data || data.error) {
+            toast((data && data.error) || '加载剧集失败', true);
+            return;
+        }
+        renderShowDetail(data);
+        document.getElementById('detail').classList.add('open');
+    });
+}
+
+function renderShowDetail(data) {
+    const show = data.show;
+    const episodes = data.episodes || [];
+    const states = data.states || {};
+    const panel = document.getElementById('detailPanel');
+    const watchedCount = episodes.filter((ep) => states[ep.id] && states[ep.id].watched).length;
+
+    let resumeId = null;
+    let bestPlayed = 0;
+    for (const ep of episodes) {
+        const st = states[ep.id];
+        if (st && !st.watched && st.positionTs > 0 && (st.lastPlayedAt || 0) > bestPlayed) {
+            resumeId = ep.id;
+            bestPlayed = st.lastPlayedAt || 0;
+        }
+    }
+    if (!resumeId) {
+        const firstUnwatched = episodes.find((ep) => !(states[ep.id] && states[ep.id].watched));
+        resumeId = ((firstUnwatched || episodes[0] || {}).id) || null;
+    }
+
+    const seasons = [...new Set(episodes.map((ep) => ep.season ?? 0))].sort((a, b) => a - b);
+    let episodesHtml = '';
+    for (const season of seasons) {
+        episodesHtml += `<div class="row-title" style="font-size:13px;margin:10px 0 4px">第 ${season || 1} 季</div>`;
+        episodesHtml += episodes
+            .filter((ep) => (ep.season ?? 0) === season)
+            .map((ep) => {
+                const st = states[ep.id] || {};
+                return `
+                <div class="ep-row" data-ep="${ep.id}">
+                    <span class="epnum">E${ep.episode ?? 0}</span>
+                    <span class="eptitle">${escapeHtml(ep.episodeTitle || `第 ${ep.episode ?? 0} 集`)}</span>
+                    <span class="epstate">${st.watched ? '✓ 已看' : ''}</span>
+                </div>`;
+            })
+            .join('');
+    }
+
+    panel.innerHTML = `
+        <div class="dposter">${posterImgHtml(show.posterPath, show.title)}</div>
+        <div class="dbody">
+            <h2>${escapeHtml(show.title)}</h2>
+            <div class="dmeta">
+                ${show.year ? `<span>${escapeHtml(show.year)}</span>` : ''}
+                <span>全 ${episodes.length} 集</span>
+                <span>已看 ${watchedCount}</span>
+            </div>
+            <div class="doverview">${escapeHtml(show.overview || '暂无简介，可通过刮削获取更多信息')}</div>
+            <div class="dbtns">
+                <button class="btn primary" id="showPlay">▶ 播放${resumeId ? '（续播）' : ''}</button>
+                <button class="btn danger" id="showClose">关闭</button>
+            </div>
+            <div class="episodes">${episodesHtml}</div>
+        </div>`;
+
+    panel.querySelector('#showPlay').addEventListener('click', () => {
+        if (resumeId) {
+            playItem(resumeId);
+        }
+    });
+    panel.querySelector('#showClose').addEventListener('click', closeDetail);
+    panel.querySelectorAll('.ep-row').forEach((row) => {
+        row.addEventListener('click', () => {
+            const epId = row.getAttribute('data-ep');
+            if (epId) {
+                playItem(epId);
+            }
+        });
+    });
 }
 
 function buildCard(item) {

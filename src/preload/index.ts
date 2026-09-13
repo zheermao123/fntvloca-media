@@ -18,6 +18,7 @@ const SEND_CHANNELS = new Set([
     'library:continue', 'library:set-watched', 'library:scrape',
     'library:scrape-status', 'library:settings-get', 'library:settings-set',
     'library:scrape-item', 'library:search-tmdb', 'library:apply-match',
+    'library:catalog', 'library:show',
 ]);
 const RECEIVE_CHANNELS = new Set([
     'config-data', 'history-item-deleted', 'login-error', 'login-success',
@@ -29,6 +30,7 @@ const RECEIVE_CHANNELS = new Set([
     'library:scrape-started', 'library-scrape-progress', 'library-scrape-done',
     'library:settings-info', 'library:settings-set',
     'library:search-results', 'library:match-applied',
+    'library:catalog-info', 'library:show-info',
 ]);
 type PageListener = (...args: unknown[]) => void;
 const listenerWrappers = new Map<string, Map<PageListener, (...args: unknown[]) => void>>();
