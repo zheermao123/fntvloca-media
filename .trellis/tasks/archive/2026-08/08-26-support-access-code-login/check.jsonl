@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify rejected codes and network/certificate errors remain distinguishable."}
+{"file":".trellis/spec/backend/quality.md","reason":"Check imports, logging, typing, and test coverage."}
+{"file":".trellis/spec/backend/external-runtime.md","reason":"Review Proxy credential boundaries and URL/log isolation."}
+{"file":".trellis/spec/frontend/ipc-electron.md","reason":"Review renderer isolation and IPC payload handling."}
+{"file":".trellis/spec/frontend/components.md","reason":"Review form semantics, keyboard behavior, and layout stability."}
+{"file":".trellis/spec/shared/code-quality.md","reason":"Apply the mandatory quality gate."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace the complete credential and Cookie flow across every consumer."}

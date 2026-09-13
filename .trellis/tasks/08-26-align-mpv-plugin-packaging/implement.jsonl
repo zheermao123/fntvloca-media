@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"Main-process and external-process integration guidelines."}
+{"file":".trellis/spec/backend/quality.md","reason":"Relative imports, error handling, and test requirements for Electron main code."}
+{"file":".trellis/spec/shared/code-quality.md","reason":"Mandatory TypeScript quality and test rules."}
+{"file":".trellis/spec/shared/typescript.md","reason":"Explicit typing and strict runtime validation conventions."}
+{"file":".trellis/spec/shared/git-conventions.md","reason":"Commit format and pre-commit checks."}
+{"file":".trellis/spec/guides/pre-implementation-checklist.md","reason":"Search and boundary checks before adding shared helpers."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Playback preference crosses config, IPC, and preload boundaries."}
+{"file":".trellis/spec/guides/semantic-change-checklist.md","reason":"The missing-value playback default changes semantics across layers."}

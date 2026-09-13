@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+    <title>媒体库</title>
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: rgba(30, 33, 40, 0.9);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text: #e8eaed;
+            --text-dim: #9aa0a6;
+            --accent: #4c8dff;
+            --accent-soft: rgba(76, 141, 255, 0.18);
+            --danger: #e85a5a;
+            --radius: 12px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 14px;
+            overflow: hidden;
+            user-select: none;
+        }
+        #titlebar {
+            position: fixed; top: 0; left: 0; right: 0; height: 34px;
+            -webkit-app-region: drag; z-index: 200; display: flex; align-items: center;
+        }
+        #titlebar .tb-title { font-size: 12px; color: var(--text-dim); margin-left: 14px; }
+        #titlebar .tb-btns { -webkit-app-region: no-drag; margin-left: auto; display: flex; height: 100%; }
+        #titlebar .tb-btns button {
+            width: 46px; height: 100%; border: none; background: transparent; color: var(--text-dim);
+            cursor: pointer; outline: none;
+        }
+        #titlebar .tb-btns button:hover { background: rgba(255,255,255,0.12); }
+        #titlebar .tb-btns button.close:hover { background: rgba(232,17,35,0.85); color: #fff; }
+        #titlebar svg { width: 11px; height: 11px; }
+
+        #topbar {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 46px 24px 12px;
+        }
+        .logo { font-size: 18px; font-weight: 600; margin-right: 6px; }
+        .logo span { color: var(--accent); }
+        #search {
+            flex: 1; min-width: 180px; max-width: 380px; height: 34px; padding: 0 12px;
+            background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px;
+            color: var(--text); outline: none; font-size: 13px;
+        }
+        #search:focus { border-color: var(--accent); }
+        .tabs { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; padding: 3px; }
+        .tabs button {
+            border: none; background: transparent; color: var(--text-dim); padding: 5px 14px;
+            border-radius: 6px; cursor: pointer; font-size: 13px;
+        }
+        .tabs button.active { background: var(--accent-soft); color: var(--accent); }
+        .actions { margin-left: auto; display: flex; gap: 8px; }
+        .btn {
+            height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--panel-border);
+            background: var(--panel); color: var(--text); cursor: pointer; font-size: 13px;
+        }
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+        .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn.primary:hover { opacity: 0.9; color: #fff; }
+        .btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+        .btn:disabled { opacity: 0.5; cursor: default; }
+        select.btn { padding-right: 8px; }
+
+        #content { padding: 6px 24px 40px; overflow-y: auto; height: calc(100vh - 92px); }
+        #content::-webkit-scrollbar { width: 10px; }
+        #content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 5px; }
+
+        .row-title { font-size: 15px; font-weight: 600; margin: 14px 0 10px; color: var(--text); }
+        #continueRow { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px; }
+        #continueRow::-webkit-scrollbar { height: 8px; }
+        #continueRow::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+        .continue-card { width: 190px; flex: 0 0 auto; cursor: pointer; }
+        .continue-card .thumb {
+            position: relative; height: 107px; border-radius: 8px; overflow: hidden;
+            background: linear-gradient(135deg, #2a2f3a, #1b1e25);
+        }
+        .continue-card img { width: 100%; height: 100%; object-fit: cover; }
+        .continue-card .prog { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: rgba(255,255,255,0.2); }
+        .continue-card .prog > i { display: block; height: 100%; background: var(--accent); }
+        .continue-card .name { font-size: 12px; color: var(--text-dim); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; margin-top: 10px; }
+        .card { cursor: pointer; }
+        .poster-wrap { position: relative; aspect-ratio: 2/3; border-radius: var(--radius); overflow: hidden;
+            background: linear-gradient(160deg, #262b34, #16181d); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+        .poster-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .poster-wrap:hover { outline: 2px solid var(--accent); }
+        .badge {
+            position: absolute; top: 8px; right: 8px; padding: 2px 7px; font-size: 10px; border-radius: 5px;
+            background: rgba(0,0,0,0.65); color: #fff; backdrop-filter: blur(4px);
+        }
+        .badge.watched { top: auto; bottom: 8px; right: 8px; background: var(--accent-soft); color: var(--accent); }
+        .no-poster { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            padding: 10px; text-align: center; color: var(--text-dim); font-size: 13px; }
+        .poster-prog { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: rgba(255,255,255,0.25); }
+        .poster-prog > i { display: block; height: 100%; background: var(--accent); }
+        .play-overlay {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.35); opacity: 0; transition: opacity 0.15s;
+        }
+        .card:hover .play-overlay { opacity: 1; }
+        .play-overlay .play-btn {
+            width: 46px; height: 46px; border-radius: 50%; background: var(--accent); border: none;
+            color: #fff; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;
+        }
+        .card .name { margin-top: 8px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .card .sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+        #listView .lrow {
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; cursor: pointer;
+        }
+        #listView .lrow:hover { background: var(--panel); }
+        #listView .lrow .ltitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #listView .lrow .lmeta { color: var(--text-dim); font-size: 12px; }
+        #listView .lrow .lstate { font-size: 12px; color: var(--accent); }
+
+        .empty { text-align: center; color: var(--text-dim); padding: 60px 0; }
+        .empty .big { font-size: 40px; margin-bottom: 12px; }
+
+        #detail {
+            position: fixed; inset: 0; z-index: 60; display: none;
+            background: rgba(8, 9, 12, 0.72); backdrop-filter: blur(8px);
+        }
+        #detail.open { display: flex; align-items: center; justify-content: center; }
+        #detailPanel {
+            width: min(860px, 92vw); max-height: 86vh; overflow-y: auto;
+            background: var(--panel); border: 1px solid var(--panel-border); border-radius: 16px;
+            padding: 24px; display: flex; gap: 22px;
+        }
+        #detail::-webkit-scrollbar { width: 8px; }
+        #detail .dposter { width: 200px; flex: 0 0 auto; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; background: #22252c; }
+        #detail .dposter img { width: 100%; height: 100%; object-fit: cover; }
+        #detail .dbody { flex: 1; min-width: 0; }
+        #detail h2 { font-size: 20px; margin-bottom: 8px; }
+        #detail .dmeta { color: var(--text-dim); font-size: 12px; margin-bottom: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+        #detail .doverview { color: var(--text-dim); line-height: 1.7; font-size: 13px; margin: 10px 0 16px; white-space: pre-wrap; }
+        #detail .dbtns { display: flex; gap: 10px; flex-wrap: wrap; }
+        #detail .episodes { margin-top: 18px; max-height: 260px; overflow-y: auto; border-top: 1px solid var(--panel-border); padding-top: 10px; }
+        #detail .episodes::-webkit-scrollbar { width: 8px; }
+        .ep-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-radius: 8px; cursor: pointer; }
+        .ep-row:hover { background: var(--accent-soft); }
+        .ep-row.current { background: var(--accent-soft); }
+        .ep-row .epnum { width: 46px; color: var(--text-dim); font-size: 12px; flex: 0 0 auto; }
+        .ep-row .eptitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ep-row .epstate { font-size: 11px; color: var(--accent); flex: 0 0 auto; }
+
+        #modal {
+            position: fixed; inset: 0; z-index: 70; display: none;
+            background: rgba(8,9,12,0.72); backdrop-filter: blur(8px);
+            align-items: center; justify-content: center;
+        }
+        #modal.open { display: flex; }
+        #modal .mpanel {
+            width: min(560px, 92vw); max-height: 84vh; overflow-y: auto;
+            background: var(--panel); border: 1px solid var(--panel-border); border-radius: 16px; padding: 22px;
+        }
+        #modal h3 { margin-bottom: 16px; font-size: 16px; }
+        .form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        .form-row label { font-size: 12px; color: var(--text-dim); }
+        .form-row input {
+            height: 34px; padding: 0 10px; background: rgba(0,0,0,0.3); color: var(--text);
+            border: 1px solid var(--panel-border); border-radius: 8px; outline: none; font-size: 13px;
+        }
+        .form-row input:focus { border-color: var(--accent); }
+        .source-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px;
+            background: rgba(0,0,0,0.25); margin-bottom: 8px;
+        }
+        .source-item .sinfo { flex: 1; min-width: 0; }
+        .source-item .sname { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .source-item .smeta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+        .source-item .btn { height: 28px; padding: 0 10px; font-size: 12px; }
+        .mfooter { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+
+        #toast {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 90;
+            background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px;
+            padding: 10px 18px; font-size: 13px; display: none; box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+            max-width: 70vw; text-align: center;
+        }
+        #toast.show { display: block; }
+        #toast.error { border-color: var(--danger); color: #ffb1b1; }
+    </style>
+</head>
+<body>
+<div id="titlebar">
+    <span class="tb-title">媒体库</span>
+    <div class="tb-btns">
+        <button id="winMin" title="最小化"><svg viewBox="0 0 12 12"><rect y="5.5" width="12" height="1" fill="currentColor"/></svg></button>
+        <button id="winMax" title="最大化"><svg viewBox="0 0 12 12"><rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor"/></svg></button>
+        <button id="winClose" class="close" title="关闭"><svg viewBox="0 0 12 12"><path d="M1 1 L11 11 M11 1 L1 11" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    </div>
+</div>
+
+<div id="topbar">
+    <span class="logo">飞牛<span>媒体库</span></span>
+    <input id="search" type="text" placeholder="搜索标题或文件名…" autocomplete="off">
+    <div class="tabs" id="kindTabs">
+        <button data-kind="all" class="active">全部</button>
+        <button data-kind="movie">电影</button>
+        <button data-kind="episode">剧集</button>
+    </div>
+    <select id="watchFilter" class="btn">
+        <option value="all">观看状态</option>
+        <option value="unwatched">未看</option>
+        <option value="watched">已看</option>
+    </select>
+    <select id="sortSelect" class="btn">
+        <option value="added">最近添加</option>
+        <option value="title">标题</option>
+        <option value="year">年份</option>
+        <option value="recentPlayed">最近播放</option>
+    </select>
+    <div class="actions">
+        <button id="viewToggle" class="btn" title="切换视图">▦</button>
+        <button id="scanBtn" class="btn">扫描</button>
+        <button id="scrapeBtn" class="btn">刮削</button>
+        <button id="sourcesBtn" class="btn">源管理</button>
+        <button id="settingsBtn" class="btn">设置</button>
+    </div>
+</div>
+
+<div id="content">
+    <div id="continueSection" style="display:none">
+        <div class="row-title">继续观看</div>
+        <div id="continueRow"></div>
+    </div>
+    <div class="row-title" id="sectionTitle">媒体库</div>
+    <div id="grid"></div>
+    <div id="listView" style="display:none"></div>
+    <div class="empty" id="emptyHint" style="display:none">
+        <div class="big">🎬</div>
+        <div id="emptyText">媒体库为空，请先在「源管理」中添加本地文件夹并扫描</div>
+    </div>
+</div>
+
+<div id="detail">
+    <div id="detailPanel"></div>
+</div>
+
+<div id="modal"><div class="mpanel" id="modalPanel"></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const ipc = window.electronAPI;
+const log = window.log;
+
+const state = {
+    query: '',
+    kind: 'all',
+    watched: 'all',
+    sort: 'added',
+    view: 'grid',
+    items: [],
+    currentDetailId: null,
+    sources: [],
+    continueMap: new Map(),
+};
+
+function fileUrl(p) {
+    if (!p) return '';
+    if (p.startsWith('\\\\')) {
+        return 'file:' + p.replace(/\\/g, '/');
+    }
+    return 'file:///' + p.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function toast(message, isError) {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.className = isError ? 'error show' : 'show';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.className = ''; }, isError ? 4200 : 2600);
+}
+
+function send(channel, data) {
+    try { ipc.send(channel, data); } catch (e) { log.error('IPC 发送失败', channel, e); }
+}
+
+function onceReply(channel, handler) {
+    ipc.once(channel, handler);
+}
+
+function posterImgHtml(posterPath, fallbackTitle) {
+    if (posterPath) {
+        return `<img src="${fileUrl(posterPath)}" loading="lazy" alt="">`;
+    }
+    return `<div class="no-poster">${escapeHtml(fallbackTitle || '')}</div>`;
+}
+
+function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s == null ? '' : String(s);
+    return div.innerHTML;
+}
+
+function fmtDuration(seconds) {
+    if (!seconds || seconds <= 0) return '';
+    const m = Math.round(seconds / 60);
+    return m >= 60 ? `${Math.floor(m / 60)} 小时 ${m % 60} 分` : `${m} 分钟`;
+}
+
+function displayTitle(item) {
+    if (item.kind === 'episode' && item.season != null && item.episode != null) {
+        return `S${String(item.season).padStart(2, '0')}E${String(item.episode).padStart(2, '0')} ${item.episodeTitle || item.title}`;
+    }
+    return item.episodeTitle || item.title;
+}
+
+function loadContinue() {
+    send('library:continue');
+    onceReply('library:continue-info', (data) => {
+        const section = document.getElementById('continueSection');
+        const row = document.getElementById('continueRow');
+        const entries = (data && data.entries) || [];
+        state.continueMap = new Map(entries.map(({ item, state: st }) => [item.id, pct(st)]));
+        if (entries.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = '';
+        row.replaceChildren(...entries.map(({ item, state: st }) => {
+            const card = document.createElement('div');
+            card.className = 'continue-card';
+            card.innerHTML = `
+                <div class="thumb">${posterImgHtml(item.posterPath, item.title)}
+                    <div class="prog"><i style="width:${pct(st)}%"></i></div>
+                </div>
+                <div class="name">${escapeHtml(displayTitle(item))}</div>`;
+            card.addEventListener('click', () => playItem(item.id));
+            return card;
+        }));
+    });
+}
+
+function pct(st) {
+    if (!st || !st.durationTs) return 0;
+    return Math.min(100, Math.max(1, Math.round((st.positionTs / st.durationTs) * 100)));
+}
+
+async function loadItems() {
+    const payload = {
+        query: state.query,
+        watched: state.watched === 'all' ? undefined : state.watched === 'watched',
+        sort: state.sort,
+        limit: 600,
+    };
+    if (state.kind !== 'all') payload.kind = state.kind;
+    send('library:items', payload);
+    onceReply('library:items-info', (data) => {
+        state.items = (data && data.items) || [];
+        renderItems();
+    });
+}
+
+function renderItems() {
+    const grid = document.getElementById('grid');
+    const list = document.getElementById('listView');
+    const empty = document.getElementById('emptyHint');
+    const title = document.getElementById('sectionTitle');
+    title.textContent = `媒体库 (${state.items.length})`;
+    grid.style.display = state.view === 'grid' ? '' : 'none';
+    list.style.display = state.view === 'grid' ? 'none' : '';
+    if (state.items.length === 0) {
+        empty.style.display = '';
+        grid.replaceChildren();
+        list.replaceChildren();
+        return;
+    }
+    empty.style.display = 'none';
+
+    if (state.view === 'grid') {
+        grid.replaceChildren(...state.items.map((item) => buildCard(item)));
+    } else {
+        list.replaceChildren(...state.items.map((item) => buildListRow(item)));
+    }
+}
+
+function buildCard(item) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const badges = [];
+    if (item.kind === 'episode') {
+        badges.push(`<span class="badge">S${item.season ?? 0}E${String(item.episode ?? 0).padStart(2, '0')}</span>`);
+    }
+    if (item.resolution) {
+        badges.push(`<span class="badge" style="top:32px">${escapeHtml(item.resolution.toUpperCase())}</span>`);
+    }
+    const progressPct = state.continueMap.get(item.id);
+    const progressHtml = progressPct
+        ? `<div class="poster-prog"><i style="width:${progressPct}%"></i></div>`
+        : '';
+    card.innerHTML = `
+        <div class="poster-wrap">
+            ${posterImgHtml(item.posterPath, item.title)}
+            ${badges.join('')}
+            ${progressHtml}
+            <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
+        </div>
+        <div class="name">${escapeHtml(displayTitle(item))}</div>
+        <div class="sub">${escapeHtml([item.year, item.resolution].filter(Boolean).join(' · '))}</div>`;
+    const overlay = card.querySelector('.poster-wrap');
+    overlay.addEventListener('click', (e) => {
+        if (e.target.closest('.play-overlay-btn')) {
+            playItem(item.id);
+        } else {
+            openDetail(item.id);
+        }
+    });
+    return card;
+}
+
+function buildListRow(item) {
+    const row = document.createElement('div');
+    row.className = 'lrow';
+    row.innerHTML = `
+        <span class="ltitle">${escapeHtml(displayTitle(item))}</span>
+        <span class="lmeta">${escapeHtml(item.kind === 'movie' ? '电影' : `S${item.season ?? 0}E${item.episode ?? 0}`)}</span>
+        <span class="lmeta">${escapeHtml(item.year ?? '')}</span>
+        <span class="lmeta">${escapeHtml(item.resolution ? item.resolution.toUpperCase() : '')}</span>`;
+    row.addEventListener('click', () => playItem(item.id));
+    return row;
+}
+
+async function openDetail(itemId) {
+    state.currentDetailId = itemId;
+    send('library:item', { id: itemId });
+    onceReply('library:item-info', (data) => {
+        if (!data || data.error) {
+            toast((data && data.error) || '加载详情失败', true);
+            return;
+        }
+        renderDetail(data);
+        document.getElementById('detail').classList.add('open');
+    });
+}
+
+function renderDetail(data) {
+    const item = data.item;
+    const show = data.show;
+    const watch = data.watchState;
+    const panel = document.getElementById('detailPanel');
+    const watchedBadge = watch && watch.watched ? '已观看' : '';
+    const progressPct = watch && watch.durationTs > 0 ? Math.round((watch.positionTs / watch.durationTs) * 100) : 0;
+
+    const episodesHtml = (data.episodes || []).length > 0 ? `
+        <div class="episodes">
+            ${(data.episodes || []).map((ep) => `
+                <div class="ep-row ${ep.id === item.id ? 'current' : ''}" data-ep="${ep.id}">
+                    <span class="epnum">S${ep.season ?? 0}E${ep.episode ?? 0}</span>
+                    <span class="eptitle">${escapeHtml(ep.episodeTitle || ep.title)}</span>
+                    <span class="epstate"></span>
+                </div>`).join('')}
+        </div>` : '';
+
+    panel.innerHTML = `
+        <div class="dposter">${posterImgHtml(item.posterPath, item.title)}</div>
+        <div class="dbody">
+            <h2>${escapeHtml(item.title)}</h2>
+            <div class="dmeta">
+                ${item.year ? `<span>${escapeHtml(item.year)}</span>` : ''}
+                ${item.rating ? `<span>★ ${escapeHtml(item.rating)}</span>` : ''}
+                ${item.runtime ? `<span>${escapeHtml(fmtDuration(item.runtime))}</span>` : ''}
+                ${item.resolution ? `<span>${escapeHtml(item.resolution.toUpperCase())}</span>` : ''}
+                <span>${escapeHtml(item.kind === 'movie' ? '电影' : '剧集')}</span>
+                ${watchedBadge ? `<span>${watchedBadge}</span>` : ''}
+            </div>
+            ${progressPct > 0 ? `<div class="poster-prog" style="position:static;margin:8px 0"><i style="width:${progressPct}%"></i></div>` : ''}
+            <div class="doverview">${escapeHtml(item.overview || '暂无简介，可通过刮削获取更多信息')}</div>
+            <div class="dbtns">
+                <button class="btn primary" id="detailPlay">▶ 播放${progressPct > 0 && !watch.watched ? '（续播）' : ''}</button>
+                <button class="btn" id="detailWatched">${watch && watch.watched ? '标记未看' : '标记已看'}</button>
+                <button class="btn" id="detailRescrape">重新刮削</button>
+                <button class="btn danger" id="detailClose">关闭</button>
+            </div>
+            ${episodes}
+        </div>`;
+
+    panel.querySelector('#detailPlay').addEventListener('click', () => { playItem(item.id); });
+    panel.querySelector('#detailWatched').addEventListener('click', () => {
+        const next = !(watch && watch.watched);
+        send('library:set-watched', { id: item.id, watched: next });
+        onceReply('library:watched-set', () => {
+            toast(next ? '已标记为已观看' : '已标记为未观看');
+            closeDetail();
+            loadItems();
+            loadContinue();
+        });
+    });
+    panel.querySelector('#detailRescrape').addEventListener('click', () => {
+        send('library:scrape-item', { id: item.id });
+        toast('正在刮削该条目…');
+    });
+    panel.querySelector('#detailClose').addEventListener('click', closeDetail);
+    panel.querySelectorAll('.ep-row').forEach((row) => {
+        row.addEventListener('click', () => {
+            const epId = row.getAttribute('data-ep');
+            if (epId) playItem(epId);
+        });
+    });
+}
+
+function closeDetail() {
+    document.getElementById('detail').classList.remove('open');
+    state.currentDetailId = null;
+}
+
+function playItem(itemId) {
+    log.info('播放媒体库条目', itemId);
+    send('play-library-item', { itemId });
+}
+
+/* ---------- 源管理 ---------- */
+function openSourcesModal() {
+    send('library:list-sources');
+    onceReply('library:sources-info', (data) => {
+        const sources = (data && data.sources) || [];
+        const panel = document.getElementById('modalPanel');
+        panel.innerHTML = `
+            <h3>媒体源管理</h3>
+            <div id="sourceList">
+                ${sources.length === 0 ? '<div class="empty" style="padding:20px">尚未添加媒体源</div>' : sources.map((s) => `
+                    <div class="source-item">
+                        <div class="sinfo">
+                            <div class="sname">${escapeHtml(s.name)}</div>
+                            <div class="smeta">${escapeHtml(s.config.rootPath || '')} · ${s.itemCount} 个条目 · ${s.type === 'local' ? '本地/SMB' : escapeHtml(s.type)}</div>
+                        </div>
+                        <button class="btn" data-act="rescan" data-id="${s.id}">重新扫描</button>
+                        <button class="btn danger" data-act="remove" data-id="${s.id}">移除</button>
+                    </div>`).join('')}
+            </div>
+            <div class="form-row">
+                <label>名称（可选，默认使用目录名）</label>
+                <input id="srcName" type="text" placeholder="例如：电影硬盘">
+            </div>
+            <div class="mfooter">
+                <button class="btn" id="srcPick">选择文件夹…</button>
+                <button class="btn primary" id="srcAdd" disabled>添加并扫描</button>
+            </div>`;
+
+        let pickedPath = null;
+        const pickBtn = panel.querySelector('#srcPick');
+        const addBtn = panel.querySelector('#srcAdd');
+        pickBtn.addEventListener('click', () => {
+            send('library:pick-folder');
+            onceReply('library:pick-folder-result', (res) => {
+                if (res && res.path) {
+                    pickedPath = res.path;
+                    pickBtn.textContent = pickedPath;
+                    addBtn.disabled = false;
+                }
+            });
+        });
+        addBtn.addEventListener('click', () => {
+            if (!pickedPath) return;
+            const nameInput = panel.querySelector('#srcName');
+            send('library:add-source', { name: nameInput ? nameInput.value : '', rootPath: pickedPath });
+            onceReply('library:source-added', (res) => {
+                if (res && res.source) {
+                    send('library:scan', { sourceId: res.source.id });
+                    toast('已添加源，开始扫描…');
+                    closeModal();
+                    onceReply('library:scan-done', () => { toast('扫描完成'); refreshAll(); });
+                } else {
+                    toast((res && res.error) || '添加失败', true);
+                }
+            });
+        });
+        panel.querySelectorAll('.source-item .btn[data-act]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const act = btn.dataset.act;
+                if (act === 'remove') {
+                    send('library:remove-source', { id: btn.dataset.id });
+                    onceReply('library:source-removed', (res) => {
+                        if (res && res.success) { toast('已移除'); refreshAll(); openSourcesModal(); }
+                        else { toast((res && res.error) || '移除失败', true); }
+                    });
+                } else if (act === 'rescan') {
+                    send('library:scan', { sourceId: btn.dataset.id });
+                    toast('开始扫描…');
+                    onceReply('library:scan-done', () => { toast('扫描完成'); refreshAll(); });
+                }
+            });
+        });
+        openModal();
+    });
+}
+
+/* ---------- 设置 ---------- */
+function openSettingsModal() {
+    send('library:settings-get');
+    onceReply('library:settings-info', (data) => {
+        const settings = (data && data.settings) || {};
+        const panel = document.getElementById('modalPanel');
+        panel.innerHTML = `
+            <h3>刮削设置</h3>
+            <div class="form-row">
+                <label>TMDB API Key（必填才能在线刮削）</label>
+                <input id="setKey" type="password" placeholder="粘贴 TMDB v3 API Key" value="${escapeHtml(settings.apiKey || '')}">
+            </div>
+            <div class="form-row">
+                <label>API 地址（国内可用镜像替换）</label>
+                <input id="setApiBase" type="text" value="${escapeHtml(settings.apiBaseUrl || '')}">
+            </div>
+            <div class="form-row">
+                <label>图片地址（国内可用镜像替换）</label>
+                <input id="setImgBase" type="text" value="${escapeHtml(settings.imageBaseUrl || '')}">
+            </div>
+            <div class="form-row">
+                <label>元数据语言</label>
+                <input id="setLang" type="text" value="${escapeHtml(settings.language || '')}" placeholder="zh-CN">
+            </div>
+            <div class="mfooter">
+                <button class="btn" id="setCancel">取消</button>
+                <button class="btn primary" id="setSave">保存</button>
+            </div>`;
+        panel.querySelector('#setCancel').addEventListener('click', closeModal);
+        panel.querySelector('#setSave').addEventListener('click', () => {
+            send('library:settings-set', {
+                apiKey: panel.querySelector('#setKey').value,
+                apiBaseUrl: panel.querySelector('#setApiBase').value,
+                imageBaseUrl: panel.querySelector('#setImgBase').value,
+                language: panel.querySelector('#setLang').value,
+            });
+            onceReply('library:settings-set', (res) => {
+                if (res && res.success) {
+                    toast('设置已保存');
+                    closeModal();
+                } else {
+                    toast((res && res.error) || '保存失败', true);
+                }
+            });
+        });
+        openModal();
+    });
+}
+
+/* ---------- 弹窗与流程控制 ---------- */
+function openModal() {
+    document.getElementById('modal').classList.add('open');
+}
+function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+}
+function refreshAll() {
+    loadItems();
+    loadContinue();
+}
+
+function startScan() {
+    send('library:scan');
+    toast('开始扫描全部媒体源…');
+    const btn = document.getElementById('scanBtn');
+    btn.disabled = true;
+    onceReply('library:scan-done', (res) => {
+        btn.disabled = false;
+        if (res && res.error) {
+            toast(`扫描失败: ${res.error}`, true);
+            return;
+        }
+        toast(`扫描完成：新增 ${res.added ?? 0}，更新 ${res.updated ?? 0}，移除 ${res.removed ?? 0}`);
+        refreshAll();
+    });
+}
+
+function startScrape() {
+    const btn = document.getElementById('scrapeBtn');
+    send('library:scrape');
+    onceReply('library:scrape-started', (res) => {
+        if (res && res.started) {
+            toast('开始在线刮削…');
+            btn.disabled = true;
+        } else {
+            toast((res && res.error) || '无法开始刮削', true);
+        }
+    });
+}
+
+ipc.on('library-scrape-progress', (progress) => {
+    const btn = document.getElementById('scrapeBtn');
+    if (progress && progress.total > 0) {
+        btn.textContent = `刮削 ${progress.done}/${progress.total}`;
+    }
+});
+
+ipc.on('library-scrape-done', (res) => {
+    const btn = document.getElementById('scrapeBtn');
+    btn.textContent = '刮削';
+    btn.disabled = false;
+    if (res && res.error) {
+        toast(`刮削失败: ${res.error}`, true);
+        return;
+    }
+    const summary = res && res.summary;
+    if (summary) {
+        toast(`刮削完成：成功 ${summary.scraped}，跳过 ${summary.skipped}，失败 ${summary.failed}`);
+    }
+    refreshAll();
+});
+
+/* ---------- 顶栏事件 ---------- */
+function initEvents() {
+    document.getElementById('winMin').addEventListener('click', () => send('window-minimize'));
+    document.getElementById('winMax').addEventListener('click', () => send('window-maximize'));
+    document.getElementById('winClose').addEventListener('click', () => send('window-close'));
+
+    const searchInput = document.getElementById('search');
+    let searchTimer = null;
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            state.query = searchInput.value;
+            loadItems();
+        }, 300);
+    });
+
+    document.querySelectorAll('#kindTabs button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#kindTabs button').forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.kind = btn.dataset.kind;
+            loadItems();
+        });
+    });
+
+    document.getElementById('watchFilter').addEventListener('change', (e) => {
+        state.watched = e.target.value;
+        loadItems();
+    });
+    document.getElementById('sortSelect').addEventListener('change', (e) => {
+        state.sort = e.target.value;
+        loadItems();
+    });
+    document.getElementById('viewToggle').addEventListener('click', () => {
+        state.view = state.view === 'grid' ? 'list' : 'grid';
+        document.getElementById('viewToggle').textContent = state.view === 'grid' ? '▦' : '☰';
+        renderItems();
+    });
+
+    document.getElementById('scanBtn').addEventListener('click', startScan);
+    document.getElementById('scrapeBtn').addEventListener('click', startScrape);
+    document.getElementById('sourcesBtn').addEventListener('click', openSourcesModal);
+    document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
+
+    document.getElementById('modal').addEventListener('click', (e) => {
+        if (e.target.id === 'modal') closeModal();
+    });
+    document.getElementById('detail').addEventListener('click', (e) => {
+        if (e.target.id === 'detail') closeDetail();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+            closeDetail();
+        }
+    });
+
+    if (window.log) {
+        window.log.info('媒体库页面已加载');
+    }
+}
+
+function initVersion() {
+    send('get-version');
+    onceReply('version-info', (data) => {
+        document.title = data && data.version ? `媒体库 v${data.version}` : '媒体库';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initEvents();
+    initVersion();
+    refreshAll();
+});
+</script>
+</body>
+</html>
+

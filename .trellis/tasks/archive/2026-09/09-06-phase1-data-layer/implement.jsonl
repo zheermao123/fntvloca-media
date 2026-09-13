@@ -1,0 +1,5 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend layer rules and navigation"}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "TypeScript conventions"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Code quality baseline"}
+{"file": ".trellis/tasks/09-06-local-media-manager/prd.md", "reason": "Parent PRD with overall requirements"}

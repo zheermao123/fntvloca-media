@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/error-handling.md","reason":"Access-code verification is a critical external dependency with user-facing errors."}
+{"file":".trellis/spec/backend/quality.md","reason":"Main-process imports, typing, logging, and focused test requirements."}
+{"file":".trellis/spec/backend/external-runtime.md","reason":"The access grant crosses the authenticated local Proxy boundary."}
+{"file":".trellis/spec/frontend/ipc-electron.md","reason":"The login field crosses the restricted preload IPC bridge."}
+{"file":".trellis/spec/frontend/components.md","reason":"The optional credential field and controls must remain semantic and accessible."}
+{"file":".trellis/spec/shared/code-quality.md","reason":"Mandatory TypeScript quality and validation rules."}
+{"file":".trellis/spec/shared/typescript.md","reason":"Explicit exported types and runtime boundary conventions."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Access-code state flows through UI, IPC, main API, Electron session, and Go Proxy."}
+{"file":".trellis/spec/guides/pre-implementation-checklist.md","reason":"Search and boundary checks before adding the shared grant helper."}
