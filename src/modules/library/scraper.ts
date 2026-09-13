@@ -165,6 +165,12 @@ export class LibraryScraper {
 
     private async scrapeMovie(item: LibraryItem): Promise<boolean> {
         await this.delayFn(this.delayMs);
+        // 防御：纯数字/超短标题（历史脏数据或异常命名）不做在线搜索，避免乱匹配
+        const normalizedTitle = item.title.trim();
+        if (normalizedTitle.length < 2 || /^\d{1,4}$/.test(normalizedTitle)) {
+            log.w(`[scraper] skip low-quality title: ${item.title}`);
+            return false;
+        }
         const results = await this.client.searchMovie(item.title, item.year ?? undefined);
         const best = pickBestResult(results, item.title, item.year);
         if (!best) {
