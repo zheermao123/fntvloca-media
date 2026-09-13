@@ -245,11 +245,25 @@ export class LibraryScraper {
             if (season < 0 || season > MAX_SEASONS) {
                 continue;
             }
-            const info = await this.client.getSeason(tv.id, season);
-            if (!info) {
+            const detail = await this.client.getSeason(tv.id, season);
+            if (!detail) {
                 continue;
             }
-            const byEpisode = new Map(info.map((e) => [e.episodeNumber, e]));
+            const seasonPoster = await this.cacheImage(
+                'tv',
+                tv.id,
+                `season_${season}_poster`,
+                detail.posterPath,
+                'w342'
+            );
+            this.store.upsertSeason({
+                showId,
+                season,
+                posterPath: seasonPoster,
+                name: detail.name,
+                overview: detail.overview,
+            });
+            const byEpisode = new Map(detail.episodes.map((e) => [e.episodeNumber, e]));
             for (const episode of episodes) {
                 if ((episode.season ?? 1) !== season) {
                     continue;

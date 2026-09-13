@@ -6,6 +6,7 @@ import type {
     MetadataSource,
     NewItem,
     NewShow,
+    SeasonInfo,
     Show,
     SkipInfo,
     SourceConfig,
@@ -78,6 +79,15 @@ CREATE TABLE IF NOT EXISTS skip_info (
   key TEXT PRIMARY KEY,
   skip_start REAL NOT NULL DEFAULT 0,
   skip_end REAL NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS seasons (
+  show_id TEXT NOT NULL,
+  season INTEGER NOT NULL,
+  poster_path TEXT,
+  name TEXT,
+  overview TEXT,
+  air_date TEXT,
+  PRIMARY KEY (show_id, season)
 );
 `;
 
@@ -274,6 +284,7 @@ export class SqliteLibraryStore implements LibraryStore {
         this.stmt(`DELETE FROM watch_state WHERE item_id IN (SELECT id FROM items WHERE source_id = ?)`).run(id);
         this.stmt(`DELETE FROM skip_info WHERE key IN (SELECT id FROM items WHERE source_id = ?)
             OR key IN (SELECT id FROM shows WHERE source_id = ?)`).run(id, id);
+        this.stmt(`DELETE FROM seasons WHERE show_id IN (SELECT id FROM shows WHERE source_id = ?)`).run(id);
         this.stmt('DELETE FROM items WHERE source_id = ?').run(id);
         this.stmt('DELETE FROM shows WHERE source_id = ?').run(id);
         this.stmt('DELETE FROM sources WHERE id = ?').run(id);
@@ -325,6 +336,78 @@ export class SqliteLibraryStore implements LibraryStore {
         const next = { ...current, ...patch };
         this.stmt('UPDATE shows SET title = ?, year = ?, overview = ?, poster_path = ?, backdrop_path = ?, tmdb_id = ? WHERE id = ?')
             .run(next.title, next.year, next.overview, next.posterPath, next.backdropPath, next.tmdbId, id);
+    }
+
+    upsertSeason(input: {
+        showId: string;
+        season: number;
+        posterPath?: string | null;
+        name?: string | null;
+        overview?: string | null;
+        airDate?: string | null;
+    }): void {
+        this.assertOpen();
+        this.stmt(
+            `INSERT INTO seasons (show_id, season, poster_path, name, overview, air_date)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(show_id, season) DO UPDATE SET
+             poster_path = COALESCE(excluded.poster_path, seasons.poster_path),
+             name = COALESCE(excluded.name, seasons.name),
+             overview = COALESCE(excluded.overview, seasons.overview),
+             air_date = COALESCE(excluded.air_date, seasons.air_date)`
+        ).run(
+            input.showId,
+            input.season,
+            input.posterPath ?? null,
+            input.name ?? null,
+            input.overview ?? null,
+            input.airDate ?? null
+        );
+    }
+
+    getSeason(showId: string, season: number): SeasonInfo | null {
+        this.assertOpen();
+        const row = this.stmt('SELECT * FROM seasons WHERE show_id = ? AND season = ?')
+            .get(showId, season) as {
+            show_id: string;
+            season: number;
+            poster_path: string | null;
+            name: string | null;
+            overview: string | null;
+            air_date: string | null;
+        } | undefined;
+        if (!row) {
+            return null;
+        }
+        return {
+            showId: row.show_id,
+            season: row.season,
+            posterPath: row.poster_path,
+            name: row.name,
+            overview: row.overview,
+            airDate: row.air_date,
+        };
+    }
+
+    listSeasons(showId: string): SeasonInfo[] {
+        this.assertOpen();
+        const rows = this.stmt('SELECT * FROM seasons WHERE show_id = ? ORDER BY season ASC')
+            .all(showId) as Array<{
+            show_id: string;
+            season: number;
+            poster_path: string | null;
+            name: string | null;
+            overview: string | null;
+            air_date: string | null;
+        }>;
+        return rows.map((row) => ({
+            showId: row.show_id,
+            season: row.season,
+            posterPath: row.poster_path,
+            name: row.name,
+            overview: row.overview,
+            airDate: row.air_date,
+        }));
     }
 
     upsertItem(input: NewItem): { item: LibraryItem; created: boolean } {
@@ -496,6 +579,13 @@ export class SqliteLibraryStore implements LibraryStore {
         }
         this.stmt(
             `DELETE FROM skip_info WHERE key IN (
+               SELECT s.id FROM shows s
+               LEFT JOIN items i ON i.show_id = s.id
+               WHERE s.source_id = ? AND i.id IS NULL
+             )`
+        ).run(sourceId);
+        this.stmt(
+            `DELETE FROM seasons WHERE show_id IN (
                SELECT s.id FROM shows s
                LEFT JOIN items i ON i.show_id = s.id
                WHERE s.source_id = ? AND i.id IS NULL

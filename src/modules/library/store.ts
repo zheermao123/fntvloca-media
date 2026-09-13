@@ -8,6 +8,7 @@ import type {
     NewItem,
     NewShow,
     NewSource,
+    SeasonInfo,
     Show,
     SkipInfo,
     SourceConfig,
@@ -33,6 +34,17 @@ export type LibraryStore = {
     getShow(id: string): Show | null;
     listShows(sourceId?: string): Show[];
     updateShowMetadata(id: string, patch: ShowMetadataPatch): void;
+
+    upsertSeason(input: {
+        showId: string;
+        season: number;
+        posterPath?: string | null;
+        name?: string | null;
+        overview?: string | null;
+        airDate?: string | null;
+    }): void;
+    getSeason(showId: string, season: number): SeasonInfo | null;
+    listSeasons(showId: string): SeasonInfo[];
 
     upsertItem(input: NewItem): { item: LibraryItem; created: boolean };
     getItem(id: string): LibraryItem | null;

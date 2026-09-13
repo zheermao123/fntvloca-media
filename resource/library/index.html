@@ -391,22 +391,23 @@ function renderItems() {
 
     if (state.view === 'grid') {
         grid.replaceChildren(...state.entries.map((entry) =>
-            entry.type === 'show' ? buildShowCard(entry) : buildCard(entry.item)
+            entry.type === 'season' ? buildSeasonCard(entry) : buildCard(entry.item)
         ));
     } else {
         list.replaceChildren(...state.entries.map((entry) =>
-            entry.type === 'show' ? buildShowListRow(entry) : buildListRow(entry.item)
+            entry.type === 'season' ? buildSeasonListRow(entry) : buildListRow(entry.item)
         ));
     }
 }
 
-function buildShowCard(entry) {
+function buildSeasonCard(entry) {
     const card = document.createElement('div');
     card.className = 'card';
-    const badges = [`<span class="badge">全 ${entry.episodeCount} 集</span>`];
-    if (entry.show.year) {
-        badges.push(`<span class="badge" style="top:32px">${entry.show.year}</span>`);
+    const badges = [];
+    if (entry.seasonCount > 1) {
+        badges.push(`<span class="badge">第 ${entry.season} 季</span>`);
     }
+    badges.push(`<span class="badge" style="top:${entry.seasonCount > 1 ? 32 : 8}px">全 ${entry.episodeCount} 集</span>`);
     const progressPct = entry.episodeCount > 0
         ? Math.round((entry.watchedCount / entry.episodeCount) * 100)
         : 0;
@@ -421,32 +422,32 @@ function buildShowCard(entry) {
             <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
         </div>
         <div class="name">${escapeHtml(entry.show.title)}</div>
-        <div class="sub">${escapeHtml(`${entry.watchedCount}/${entry.episodeCount} 已看`)}</div>`;
+        <div class="sub">${escapeHtml(`${entry.seasonCount > 1 ? '第 ' + entry.season + ' 季 · ' : ''}${entry.watchedCount}/${entry.episodeCount} 已看`)}</div>`;
     const overlay = card.querySelector('.poster-wrap');
     overlay.addEventListener('click', (e) => {
         if (e.target.closest('.play-overlay-btn')) {
             playItem(entry.resumeItemId);
         } else {
-            openShowDetail(entry.show.id);
+            openSeasonDetail(entry.show.id, entry.season);
         }
     });
     return card;
 }
 
-function buildShowListRow(entry) {
+function buildSeasonListRow(entry) {
     const row = document.createElement('div');
     row.className = 'lrow';
     row.innerHTML = `
-        <span class="ltitle">${escapeHtml(entry.show.title)}</span>
+        <span class="ltitle">${escapeHtml(entry.show.title)}${entry.seasonCount > 1 ? ` 第 ${entry.season} 季` : ''}</span>
         <span class="lmeta">剧集</span>
         <span class="lmeta">${escapeHtml(entry.show.year ?? '')}</span>
         <span class="lmeta">${entry.watchedCount}/${entry.episodeCount} 已看</span>`;
-    row.addEventListener('click', () => openShowDetail(entry.show.id));
+    row.addEventListener('click', () => openSeasonDetail(entry.show.id, entry.season));
     return row;
 }
 
-function openShowDetail(showId) {
-    send('library:show', { id: showId });
+function openSeasonDetail(showId, season) {
+    send('library:show', { id: showId, season });
     onceReply('library:show-info', (data) => {
         if (!data || data.error) {
             toast((data && data.error) || '加载剧集失败', true);
@@ -462,6 +463,7 @@ function renderShowDetail(data) {
     const episodes = data.episodes || [];
     const states = data.states || {};
     const panel = document.getElementById('detailPanel');
+    const detailPoster = (data.seasonInfo && data.seasonInfo.posterPath) || show.posterPath;
     const watchedCount = episodes.filter((ep) => states[ep.id] && states[ep.id].watched).length;
 
     let resumeId = null;
@@ -497,9 +499,9 @@ function renderShowDetail(data) {
     }
 
     panel.innerHTML = `
-        <div class="dposter">${posterImgHtml(show.posterPath, show.title)}</div>
+        <div class="dposter">${posterImgHtml(detailPoster, show.title)}</div>
         <div class="dbody">
-            <h2>${escapeHtml(show.title)}</h2>
+            <h2>${escapeHtml(show.title)}${data.season != null ? ` 第 ${data.season} 季` : ''}</h2>
             <div class="dmeta">
                 ${show.year ? `<span>${escapeHtml(show.year)}</span>` : ''}
                 <span>全 ${episodes.length} 集</span>

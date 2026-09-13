@@ -1,4 +1,4 @@
-const { test } = require('node:test');
+﻿const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -47,6 +47,8 @@ const TV_DETAIL = JSON.stringify({
 });
 
 const SEASON_DETAIL = JSON.stringify({
+    name: 'Season 1',
+    poster_path: '/season1.jpg',
     episodes: [
         { episode_number: 1, name: 'Winter Is Coming', still_path: '/s1e1.jpg' },
         { episode_number: 2, name: 'The Kingsroad', still_path: null },
@@ -223,6 +225,9 @@ test('scrapeLibrary scrapes shows and maps episode names and stills', async () =
         assert.equal(ep1.metadataSource, 'tmdb');
         assert.equal(ep2.episodeTitle, 'The Kingsroad');
         assert.equal(ep2.posterPath, null);
+        const seasons = store.listSeasons(show.id);
+        assert.ok(seasons.length >= 1);
+        assert.ok(fs.existsSync(seasons[0].posterPath));
     } finally {
         store.close();
     }

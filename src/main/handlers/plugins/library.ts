@@ -235,16 +235,20 @@ function init(): void {
         }
     });
 
-    registerHandler('library:show', (event: IpcMainEvent, payload: { id?: string }) => {
+    registerHandler('library:show', (event: IpcMainEvent, payload: { id?: string; season?: number }) => {
         try {
             const show = payload?.id ? store.getShow(payload.id) : null;
             if (!show) {
                 reply(event, 'library:show-info', { error: '剧集组不存在' });
                 return;
             }
-            const episodes = store.listItems({ showId: show.id }).sort(
+            let episodes = store.listItems({ showId: show.id }).sort(
                 (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
             );
+            const seasonFilter = typeof payload?.season === 'number' ? payload.season : null;
+            if (seasonFilter !== null) {
+                episodes = episodes.filter((episode) => (episode.season ?? 1) === seasonFilter);
+            }
             const states: Record<string, { watched: boolean; positionTs: number; durationTs: number; lastPlayedAt: number | null }> = {};
             for (const episode of episodes) {
                 const state = store.getWatchState(episode.id);
@@ -255,7 +259,13 @@ function init(): void {
                     lastPlayedAt: state?.lastPlayedAt ?? null,
                 };
             }
-            reply(event, 'library:show-info', { show, episodes, states });
+            reply(event, 'library:show-info', {
+                show,
+                season: seasonFilter,
+                seasonInfo: seasonFilter !== null ? store.getSeason(show.id, seasonFilter) : null,
+                episodes,
+                states,
+            });
         } catch (error) {
             log.error('[library] 剧集组查询失败:', error);
             reply(event, 'library:show-info', { error: error instanceof Error ? error.message : String(error) });

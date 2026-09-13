@@ -51,6 +51,13 @@ export type SeasonEpisodeInfo = {
     stillPath: string | null;
 };
 
+export type SeasonDetail = {
+    name: string | null;
+    overview: string | null;
+    posterPath: string | null;
+    episodes: SeasonEpisodeInfo[];
+};
+
 export function createDefaultTransport(): TmdbTransport {
     return {
         async getJson(url: string): Promise<unknown> {
@@ -239,7 +246,7 @@ export class TmdbClient {
         };
     }
 
-    async getSeason(tvId: number, season: number): Promise<SeasonEpisodeInfo[] | null> {
+    async getSeason(tvId: number, season: number): Promise<SeasonDetail | null> {
         const data = asRecord(await this.transport.getJson(this.url(`/tv/${tvId}/season/${season}`, {})));
         if (!data || !Array.isArray(data.episodes)) {
             return null;
@@ -256,6 +263,11 @@ export class TmdbClient {
                 stillPath: asString(record.still_path),
             });
         }
-        return episodes;
+        return {
+            name: asString(data.name),
+            overview: asString(data.overview),
+            posterPath: asString(data.poster_path),
+            episodes,
+        };
     }
 }

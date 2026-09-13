@@ -1,4 +1,4 @@
-const { test } = require('node:test');
+﻿const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
@@ -24,7 +24,7 @@ test('buildCatalog merges episodes into show entries with resume pointer', () =>
 
         const entries = buildCatalog(store, {});
         assert.equal(entries.length, 2);
-        const showEntry = entries.find((e) => e.type === 'show');
+        const showEntry = entries.find((e) => e.type === 'season');
         assert.equal(showEntry.episodeCount, 2);
         assert.equal(showEntry.watchedCount, 1);
         assert.equal(showEntry.posterPath, 'cache/show.jpg');
@@ -32,7 +32,7 @@ test('buildCatalog merges episodes into show entries with resume pointer', () =>
 
         // 观看筛选语义 A：未看=还有未看的集（剧集组出现）；已看=全部看完（无）
         const hasUnwatched = buildCatalog(store, { watched: false });
-        assert.equal(hasUnwatched.filter((e) => e.type === 'show').length, 1);
+        assert.equal(hasUnwatched.filter((e) => e.type === 'season').length, 1);
         const allWatched = buildCatalog(store, { watched: true });
         assert.equal(allWatched.length, 0);
     } finally {
@@ -48,7 +48,7 @@ test('buildCatalog falls back to episode poster when show has none', () => {
         const ep = store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'B', season: 1, episode: 1, filePath: 'x' }).item;
         store.updateItemMetadata(ep.id, { posterPath: 'cache/ep.jpg' });
         const entries = buildCatalog(store, {});
-        assert.equal(entries[0].type, 'show');
+        assert.equal(entries[0].type, 'season');
         assert.equal(entries[0].posterPath, 'cache/ep.jpg');
     } finally {
         store.close();
@@ -66,11 +66,11 @@ test('buildCatalog filters by kind/query and sorts by title', () => {
         assert.equal(buildCatalog(store, { kind: 'movie' }).length, 1);
         const showsOnly = buildCatalog(store, { kind: 'episode' });
         assert.equal(showsOnly.length, 1);
-        assert.equal(showsOnly[0].type, 'show');
+        assert.equal(showsOnly[0].type, 'season');
 
         const searched = buildCatalog(store, { query: 'beta' });
         assert.equal(searched.length, 1);
-        assert.equal(searched[0].type, 'show');
+        assert.equal(searched[0].type, 'season');
 
         const byTitle = buildCatalog(store, { sort: 'title' });
         assert.equal(byTitle[0].type, 'movie');

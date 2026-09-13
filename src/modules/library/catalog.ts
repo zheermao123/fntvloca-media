@@ -9,9 +9,12 @@ export type CatalogQuery = {
     limit?: number;
 };
 
-export type ShowCatalogEntry = {
-    type: 'show';
+export type SeasonCatalogEntry = {
+    type: 'season';
     show: Show;
+    season: number;
+    /** 该剧总季数（用于 UI 决定是否显示季角标） */
+    seasonCount: number;
     episodeCount: number;
     watchedCount: number;
     posterPath: string | null;
@@ -27,7 +30,7 @@ export type MovieCatalogEntry = {
     lastPlayedAt: number;
 };
 
-export type CatalogEntry = MovieCatalogEntry | ShowCatalogEntry;
+export type CatalogEntry = MovieCatalogEntry | SeasonCatalogEntry;
 
 type EpisodeState = {
     watched: boolean;
@@ -41,16 +44,35 @@ function compareEpisodes(a: LibraryItem, b: LibraryItem): number {
 }
 
 function entryTitle(entry: CatalogEntry): string {
-    return entry.type === 'movie' ? entry.item.title : entry.show.title;
+    if (entry.type === 'movie') {
+        return entry.item.title;
+    }
+    return `${entry.show.title} ${String(entry.season).padStart(2, '0')}`;
 }
 
 function entryYear(entry: CatalogEntry): number {
     return (entry.type === 'movie' ? entry.item.year : entry.show.year) ?? 0;
 }
 
+function pickResume(episodes: LibraryItem[], states: Map<string, EpisodeState>): LibraryItem {
+    let resume: LibraryItem | undefined;
+    let bestPlayed = 0;
+    for (const episode of episodes) {
+        const state = states.get(episode.id);
+        if (state && !state.watched && state.positionTs > 0 && (state.lastPlayedAt ?? 0) > bestPlayed) {
+            resume = episode;
+            bestPlayed = state.lastPlayedAt ?? 0;
+        }
+    }
+    if (!resume) {
+        resume = episodes.find((e) => states.get(e.id)?.watched !== true) ?? episodes[0];
+    }
+    return resume;
+}
+
 /**
- * 聚合媒体库目录：电影条目 + 剧集组（含集数/已看数/续播指针）。
- * 观看筛选语义（方案A）：未看=还有未看的集；已看=全部集均已看。
+ * 聚合媒体库目录：电影条目 + 剧集季条目（每季一张卡片，含季专属海报）。
+ * 观看筛选语义：未看=该季还有未看的集；已看=该季全部集均已看。
  */
 export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): CatalogEntry[] {
     const entries: CatalogEntry[] = [];
@@ -98,45 +120,51 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
                     lastPlayedAt: state?.lastPlayedAt ?? null,
                 });
             }
-            const watchedCount = episodes.filter((e) => states.get(e.id)?.watched === true).length;
-            if (query.watched === true && watchedCount !== episodes.length) {
-                continue;
-            }
-            if (query.watched === false && watchedCount === episodes.length) {
-                continue;
-            }
 
-            let resume: LibraryItem | undefined;
-            let bestPlayed = 0;
+            const seasonGroups = new Map<number, LibraryItem[]>();
             for (const episode of episodes) {
-                const state = states.get(episode.id);
-                if (state && !state.watched && state.positionTs > 0 && (state.lastPlayedAt ?? 0) > bestPlayed) {
-                    resume = episode;
-                    bestPlayed = state.lastPlayedAt ?? 0;
+                const season = episode.season ?? 1;
+                const group = seasonGroups.get(season);
+                if (group) {
+                    group.push(episode);
+                } else {
+                    seasonGroups.set(season, [episode]);
                 }
             }
-            if (!resume) {
-                resume = episodes.find((e) => states.get(e.id)?.watched !== true) ?? episodes[0];
+            const seasonCount = seasonGroups.size;
+
+            for (const [season, seasonEpisodes] of seasonGroups) {
+                const watchedCount = seasonEpisodes.filter((e) => states.get(e.id)?.watched === true).length;
+                if (query.watched === true && watchedCount !== seasonEpisodes.length) {
+                    continue;
+                }
+                if (query.watched === false && watchedCount === seasonEpisodes.length) {
+                    continue;
+                }
+                const seasonInfo = store.getSeason(show.id, season);
+                const posterPath =
+                    seasonInfo?.posterPath ??
+                    show.posterPath ??
+                    seasonEpisodes.map((e) => e.posterPath).find((p): p is string => p !== null) ??
+                    null;
+                const addedAt = seasonEpisodes.reduce((max, e) => Math.max(max, e.addedAt), 0);
+                const lastPlayedAt = seasonEpisodes.reduce(
+                    (max, e) => Math.max(max, states.get(e.id)?.lastPlayedAt ?? 0),
+                    0
+                );
+                entries.push({
+                    type: 'season',
+                    show,
+                    season,
+                    seasonCount,
+                    episodeCount: seasonEpisodes.length,
+                    watchedCount,
+                    posterPath,
+                    resumeItemId: pickResume(seasonEpisodes, states).id,
+                    addedAt,
+                    lastPlayedAt,
+                });
             }
-
-            const posterPath =
-                show.posterPath ?? episodes.map((e) => e.posterPath).find((p): p is string => p !== null) ?? null;
-            const addedAt = episodes.reduce((max, e) => Math.max(max, e.addedAt), 0);
-            const lastPlayedAt = episodes.reduce(
-                (max, e) => Math.max(max, states.get(e.id)?.lastPlayedAt ?? 0),
-                0
-            );
-
-            entries.push({
-                type: 'show',
-                show,
-                episodeCount: episodes.length,
-                watchedCount,
-                posterPath,
-                resumeItemId: resume.id,
-                addedAt,
-                lastPlayedAt,
-            });
         }
     }
 
