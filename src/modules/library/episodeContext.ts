@@ -67,7 +67,7 @@ export function parseSeasonDir(name: string): SeasonDirInfo | null {
     if (match) {
         return { season: Number(match[1]), showPrefix: null };
     }
-    match = /^[sS]eason[\s._-]*(\d{1,2})$/i.exec(trimmed);
+    match = /^[sS]eason[\s._-]*(\d{1,2})(?:[\s._-]|$)/i.exec(trimmed);
     if (match) {
         return { season: Number(match[1]), showPrefix: null };
     }
@@ -160,10 +160,10 @@ function extractEpisodeNumber(stem: string): number | null {
             return value;
         }
     }
-    // 下划线/连字符中的集号：怪獣8号_第二季_13_1080P
-    const mid = /[_-](\d{1,3})[_-]/.exec(stem);
-    if (mid) {
-        const value = Number(mid[1]);
+    // 下划线/连字符中的集号：怪獣8号_第二季_13_1080P（取最右匹配，避免抓到标题里的数字）
+    const midMatches = [...stem.matchAll(/[_-](\d{1,3})[_-]/g)];
+    for (let i = midMatches.length - 1; i >= 0; i -= 1) {
+        const value = Number(midMatches[i][1]);
         if (value >= 1 && value <= 200) {
             return value;
         }
@@ -203,15 +203,20 @@ export function resolveFolderEpisodeContext(
     let season: number | null = null;
     let showDir: string | null = null;
     let showPrefixFromSeasonDir: string | null = null;
+    // 先定位最深的季目录；季目录之下的任何目录一律透明（版本/画质/合集容器），
+    // 剧名只从季目录及其上层目录推导（Jellyfin/Kodi 惯例，避免版本目录被当成剧）。
+    let seasonIndex = -1;
     for (let i = dirs.length - 1; i >= 0; i -= 1) {
         const info = parseSeasonDir(dirs[i]);
-        if (info !== null && season === null) {
+        if (info !== null) {
             season = info.season;
-            if (info.showPrefix) {
-                showPrefixFromSeasonDir = info.showPrefix;
-            }
-            continue;
+            showPrefixFromSeasonDir = info.showPrefix ?? null;
+            seasonIndex = i;
+            break;
         }
+    }
+    const showScanStart = seasonIndex >= 0 ? seasonIndex - 1 : dirs.length - 1;
+    for (let i = showScanStart; i >= 0; i -= 1) {
         if (VERSION_DIR_PATTERN.test(dirs[i])) {
             continue;
         }
@@ -256,8 +261,9 @@ export function resolveFolderEpisodeContext(
         return null;
     }
 
-    // 年份只信任剧名目录本身：季子目录的年份用于区分剧集组会导致同剧按季拆分成多个"剧"
-    const dirYear = extractDirectoryYear(showSource);
+    // 年份只信任剧目录本身：季目录（含带剧名前缀的季目录，如 "剑来(2024)第2季"）里的年份
+    // 属于该季而非剧集标识，进入分组键会把同剧按季拆散
+    const dirYear = showDir ? extractDirectoryYear(showDir) : null;
     return {
         showTitle,
         year: dirYear,
