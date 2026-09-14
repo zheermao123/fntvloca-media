@@ -244,6 +244,11 @@ export function parseVideoName(input: string): ParsedVideoName {
         episode = seasonEpisode.episode;
         titleEnd = Math.min(titleEnd, seasonEpisode.start);
         episodeStart = seasonEpisode.end;
+        // 多集文件（S01E01-E02）：仍记为第一集，吞掉区间标记避免混入集标题
+        const rangeTail = /^[\s._-]*[eE]\d{1,3}(?!\d)/.exec(base.slice(episodeStart));
+        if (rangeTail) {
+            episodeStart += rangeTail[0].length;
+        }
     } else {
         if (seasonOnly) {
             season = seasonOnly.season;

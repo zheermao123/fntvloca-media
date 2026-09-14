@@ -17,6 +17,8 @@ export type ScrapeSummary = {
     scraped: number;
     failed: number;
     skipped: number;
+    /** 第一个失败原因（网络/TMDB 错误），用于界面提示 */
+    firstError?: string;
 };
 
 export type ScraperOptions = {
@@ -79,6 +81,7 @@ export class LibraryScraper {
                 }
             } catch (error) {
                 summary.failed += 1;
+                summary.firstError ??= error instanceof Error ? error.message : String(error);
                 log.w('[scraper] movie scrape failed:', movie.title, error);
             }
             done += 1;
@@ -96,6 +99,7 @@ export class LibraryScraper {
                 }
             } catch (error) {
                 summary.failed += 1;
+                summary.firstError ??= error instanceof Error ? error.message : String(error);
                 log.w('[scraper] show scrape failed:', show.title, error);
             }
             done += 1;
@@ -121,7 +125,12 @@ export class LibraryScraper {
                 return ok ? { scraped: 1, failed: 0, skipped: 0 } : { scraped: 0, failed: 0, skipped: 1 };
             } catch (error) {
                 log.w('[scraper] manual movie scrape failed:', item.title, error);
-                return { scraped: 0, failed: 1, skipped: 0 };
+                return {
+                    scraped: 0,
+                    failed: 1,
+                    skipped: 0,
+                    firstError: error instanceof Error ? error.message : String(error),
+                };
             }
         }
         const show = item.showId ? this.store.getShow(item.showId) : null;
@@ -133,7 +142,12 @@ export class LibraryScraper {
             return ok ? { scraped: 1, failed: 0, skipped: 0 } : { scraped: 0, failed: 0, skipped: 1 };
         } catch (error) {
             log.w('[scraper] manual show scrape failed:', show.title, error);
-            return { scraped: 0, failed: 0, skipped: 1 };
+            return {
+                scraped: 0,
+                failed: 1,
+                skipped: 0,
+                firstError: error instanceof Error ? error.message : String(error),
+            };
         }
     }
 

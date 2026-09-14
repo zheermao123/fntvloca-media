@@ -105,7 +105,7 @@ export async function ingestScanResult(
     for (const file of scan.files) {
         const fileName = path.basename(file.path);
         const parsed = parseVideoName(fileName);
-        if (parsed.isSample || isExtraMaterial(fileName) || parsed.title.length === 0) {
+        if (parsed.isSample || isExtraMaterial(fileName)) {
             summary.skipped += 1;
             continue;
         }
@@ -115,6 +115,12 @@ export async function ingestScanResult(
         const folderCtx = resolveFolderEpisodeContext(relativeDirsOf(file.path, sourceRoot), fileName, {
             folderVideoCount: videosPerDir.get(path.dirname(file.path)) ?? 0,
         });
+        // 方括号发布命名（如 [DBD-Raws][Kaijuu 8 Gou][01][1080P]）清洗后文件名为空，
+        // 但只要目录能推导出剧名（folderCtx）就仍然有效；两者都没有才跳过。
+        if (parsed.title.length === 0 && (folderCtx === null || folderCtx.showTitle.length === 0)) {
+            summary.skipped += 1;
+            continue;
+        }
 
         let showId: string | null = null;
         let title = folderCtx ? folderCtx.showTitle : parsed.title;
@@ -126,7 +132,9 @@ export async function ingestScanResult(
         }
 
         if (episode !== null) {
-            const groupKey = buildShowKey(title, year);
+            // 分组键只使用目录派生年份：文件名里的年份（如 "一人之下 2026.S06E01"）不参与分组，避免同剧按季拆散
+            const keyYear = folderCtx ? folderCtx.year : null;
+            const groupKey = buildShowKey(title, keyYear);
             let cachedShowId = showIdsByGroupKey.get(groupKey);
             if (!cachedShowId) {
                 const result = store.upsertShow({

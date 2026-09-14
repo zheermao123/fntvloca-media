@@ -345,3 +345,19 @@ test('searchMovie and searchTv are exposed for manual matching', async () => {
         store.close();
     }
 });
+
+test('scrapeLibrary reports first failure reason in summary', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'library.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'Inception', year: 2010, filePath: 'p1' });
+        store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'Interstellar', year: 2014, filePath: 'p2' });
+        const scraper = makeScraper(store, tmpDir(), makeTransport({ throwFor: '/search/movie' }));
+
+        const summary = await scraper.scrapeLibrary();
+        assert.equal(summary.failed, 2);
+        assert.equal(summary.firstError, 'transport failure');
+    } finally {
+        store.close();
+    }
+});

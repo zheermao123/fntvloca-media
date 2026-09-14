@@ -400,6 +400,16 @@ function renderItems() {
     }
 }
 
+function watchedLabel(count, total) {
+    if (total > 0 && count >= total) {
+        return '已看完';
+    }
+    if (count > 0) {
+        return `已看 ${count}/${total}`;
+    }
+    return '未看';
+}
+
 function buildSeasonCard(entry) {
     const card = document.createElement('div');
     card.className = 'card';
@@ -424,7 +434,7 @@ function buildSeasonCard(entry) {
             <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
         </div>
         <div class="name">${escapeHtml(entry.show.title)}</div>
-        <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}已看 ${entry.watchedCount}/${entry.episodeCount}`)}</div>`;
+        <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}${watchedLabel(entry.watchedCount, entry.episodeCount)}`)}</div>`;
     const overlay = card.querySelector('.poster-wrap');
     overlay.addEventListener('click', (e) => {
         if (e.target.closest('.play-overlay-btn')) {
@@ -444,7 +454,7 @@ function buildSeasonListRow(entry) {
         <span class="ltitle">${escapeHtml(entry.show.title)}${showSeasonLabel ? ` 第 ${entry.season} 季` : ''}</span>
         <span class="lmeta">剧集</span>
         <span class="lmeta">${escapeHtml(entry.show.year ?? '')}</span>
-        <span class="lmeta">已看 ${entry.watchedCount}/${entry.episodeCount}</span>`;
+        <span class="lmeta">${watchedLabel(entry.watchedCount, entry.episodeCount)}</span>`;
     row.addEventListener('click', () => openSeasonDetail(entry.show.id, entry.season));
     return row;
 }
@@ -508,7 +518,7 @@ function renderShowDetail(data) {
             <div class="dmeta">
                 ${show.year ? `<span>${escapeHtml(show.year)}</span>` : ''}
                 <span>全 ${episodes.length} 集</span>
-                <span>已看 ${watchedCount}</span>
+                <span>${watchedLabel(watchedCount, episodes.length)}</span>
             </div>
             <div class="doverview">${escapeHtml(show.overview || '暂无简介，可通过刮削获取更多信息')}</div>
             <div class="dbtns">
@@ -968,7 +978,12 @@ ipc.on('library-scrape-done', (_event, res) => {
     }
     const summary = res && res.summary;
     if (summary) {
-        toast(`刮削完成：成功 ${summary.scraped}，跳过 ${summary.skipped}，失败 ${summary.failed}`);
+        if (summary.failed > 0) {
+            const reason = summary.firstError ? `（${summary.firstError}）` : '';
+            toast(`刮削失败 ${summary.failed} 项，成功 ${summary.scraped} 项${reason}`, true);
+        } else {
+            toast(`刮削完成：成功 ${summary.scraped}，跳过 ${summary.skipped}，失败 ${summary.failed}`);
+        }
     }
     refreshAll();
 });
