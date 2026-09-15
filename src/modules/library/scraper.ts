@@ -6,6 +6,7 @@ import type { ItemMetadataPatch, LibraryItem, Show } from './types';
 import { TmdbClient, createDefaultTransport, pickBestResult } from './tmdb';
 import type { ScraperConfig, SearchResult, TmdbTransport } from './tmdb';
 import { extractTmdbIdHint } from './episodeContext';
+import { isPrivateSource } from './sourceCategory';
 
 export type ScrapeProgress = {
     done: number;
@@ -66,8 +67,12 @@ export class LibraryScraper {
     async scrapeLibrary(options?: { onProgress?: (progress: ScrapeProgress) => void }): Promise<ScrapeSummary> {
         this.assertApiKey();
         const summary: ScrapeSummary = { scraped: 0, failed: 0, skipped: 0 };
-        const movies = this.store.listItems({ kind: 'movie' }).filter((i) => i.metadataSource !== 'tmdb');
-        const shows = this.store.listShows().filter((s) => s.tmdbId === null);
+        // 隐私源内容不参与在线刮削
+        const privateSourceIds = new Set(this.store.listSources().filter((s) => isPrivateSource(s)).map((s) => s.id));
+        const movies = this.store
+            .listItems({ kind: 'movie' })
+            .filter((i) => i.metadataSource !== 'tmdb' && !privateSourceIds.has(i.sourceId));
+        const shows = this.store.listShows().filter((s) => s.tmdbId === null && !privateSourceIds.has(s.sourceId));
         const total = movies.length + shows.length;
         let done = 0;
 
@@ -119,6 +124,9 @@ export class LibraryScraper {
         if (!item) {
             return { scraped: 0, failed: 0, skipped: 0 };
         }
+        if (this.isPrivateItem(item.sourceId)) {
+            return { scraped: 0, failed: 1, skipped: 0, firstError: '隐私内容不参与刮削' };
+        }
         if (item.kind === 'movie') {
             try {
                 const ok = await this.scrapeMovie(item);
@@ -157,6 +165,9 @@ export class LibraryScraper {
         if (!item) {
             throw new Error(`Item not found: ${itemId}`);
         }
+        if (this.isPrivateItem(item.sourceId)) {
+            throw new Error('隐私内容不参与刮削');
+        }
         const detail = await this.client.getMovie(tmdbId);
         if (!detail) {
             throw new Error(`TMDB movie not found: ${tmdbId}`);
@@ -170,12 +181,23 @@ export class LibraryScraper {
         if (!show) {
             throw new Error(`Show not found: ${showId}`);
         }
+        if (this.isPrivateItem(show.sourceId)) {
+            throw new Error('隐私内容不参与刮削');
+        }
         const tv = await this.client.getTv(tmdbId);
         if (!tv) {
             throw new Error(`TMDB show not found: ${tmdbId}`);
         }
         await this.writeShowMetadata(show, tv);
         await this.refreshEpisodes(show.id, tv);
+    }
+
+    private isPrivateItem(sourceId: string | null | undefined): boolean {
+        if (!sourceId) {
+            return false;
+        }
+        const source = this.store.getSource(sourceId);
+        return source !== null && isPrivateSource(source);
     }
 
     private async scrapeMovie(item: LibraryItem): Promise<boolean> {

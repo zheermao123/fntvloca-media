@@ -35,6 +35,8 @@ export interface Config {
     tmdbApiBase?: string;
     tmdbImageBase?: string;
     tmdbLanguage?: string;
+    /** 隐私模式密码哈希（scrypt 加盐，不可逆） */
+    privacyPasswordHash?: string;
 }
 
 /**
@@ -296,6 +298,23 @@ export function getNasProxyEnabled(): boolean {
     return config.nasProxyEnabled === true; // 默认关闭
 }
 
+// 获取隐私模式密码哈希
+export function getPrivacyPasswordHash(): string | undefined {
+    const config: Config = readConfig() || {};
+    return config.privacyPasswordHash;
+}
+
+// 设置隐私模式密码哈希（传 null/空 表示清除密码）
+export function setPrivacyPasswordHash(hash: string | null): void {
+    const config: Config = readConfig() || {};
+    if (!hash) {
+        delete config.privacyPasswordHash;
+    } else {
+        config.privacyPasswordHash = hash;
+    }
+    writeConfig(config);
+}
+
 // 设置NAS本地网盘代理配置
 export function setNasProxyEnabled(enabled: boolean): void {
     const config: Config = readConfig() || {};
@@ -436,6 +455,8 @@ module.exports = {
     setHideOriginalPlayButton,
     getNasProxyEnabled,
     setNasProxyEnabled,
+    getPrivacyPasswordHash,
+    setPrivacyPasswordHash,
     getMacCloseAction,
     setMacCloseAction,
     getTrayNotificationShown,
