@@ -100,8 +100,10 @@
             background: rgba(0,0,0,0.65); color: #fff; backdrop-filter: blur(4px);
         }
         .badge.watched { top: auto; bottom: 8px; right: 8px; background: var(--accent-soft); color: var(--accent); }
-        .privacy-menu { position: relative; display: flex; align-items: center; }
-        .privacy-menu-list { position: absolute; top: 32px; left: 0; z-index: 60; display: none; flex-direction: column; min-width: 132px; padding: 4px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+        .privacy-menu { position: relative; display: flex; align-items: center; margin-left: -14px; }
+        .privacy-caret { padding: 4px 9px; background: none; border: none; border-radius: 6px; color: var(--text-dim); font-size: 15px; line-height: 1; cursor: pointer; }
+        .privacy-caret:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+        .privacy-menu-list { position: absolute; top: 28px; left: -6px; z-index: 60; display: none; flex-direction: column; min-width: 132px; padding: 4px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
         .privacy-menu-list.open { display: flex; }
         .privacy-menu-list button { padding: 8px 10px; background: none; border: none; border-radius: 6px; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
         .privacy-menu-list button:hover { background: rgba(255,255,255,0.08); }
@@ -214,7 +216,7 @@
 <div id="topbar">
     <span class="logo">飞牛<span>媒体库</span></span>
     <div class="privacy-menu">
-        <button id="privacyMenuBtn" class="btn" title="切换媒体库（媒体库 / 隐私模式）">切换 ▾</button>
+        <button id="privacyMenuBtn" class="privacy-caret" title="媒体库 / 隐私模式">▾</button>
         <div class="privacy-menu-list" id="privacyMenuList">
             <button data-view="public" class="active">媒体库</button>
             <button data-view="private">隐私模式</button>
