@@ -1,8 +1,11 @@
 import type { LibraryStore } from './store';
 import type { LibraryItem, Show } from './types';
+import { categoryOfSource, type SourceCategory } from './sourceCategory';
 
 export type CatalogQuery = {
     kind?: 'all' | 'movie' | 'episode';
+    /** 源内容类型筛选（对齐飞牛影视"内容类型"：电影/剧集/动漫/其他视频） */
+    category?: SourceCategory;
     watched?: boolean;
     query?: string;
     sort?: 'added' | 'title' | 'year' | 'recentPlayed';
@@ -78,6 +81,16 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
     const entries: CatalogEntry[] = [];
     const needle = (query.query ?? '').trim().toLowerCase();
 
+    const categoryBySource = new Map<string, SourceCategory>();
+    if (query.category !== undefined) {
+        for (const source of store.listSources()) {
+            categoryBySource.set(source.id, categoryOfSource(source));
+        }
+    }
+    const matchesCategory = (sourceId: string | null | undefined): boolean =>
+        query.category === undefined ||
+        (typeof sourceId === 'string' && categoryBySource.get(sourceId) === query.category);
+
     if (query.kind !== 'episode') {
         let movies = store.listItems({ kind: 'movie' });
         if (needle.length > 0) {
@@ -90,6 +103,7 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
         if (query.watched !== undefined) {
             movies = movies.filter((m) => (store.getWatchState(m.id)?.watched ?? false) === query.watched);
         }
+        movies = movies.filter((m) => matchesCategory(m.sourceId));
         for (const item of movies) {
             const state = store.getWatchState(item.id);
             entries.push({
@@ -104,6 +118,9 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
     if (query.kind !== 'movie') {
         for (const show of store.listShows()) {
             if (needle.length > 0 && !show.title.toLowerCase().includes(needle)) {
+                continue;
+            }
+            if (!matchesCategory(show.sourceId)) {
                 continue;
             }
             const episodes = store.listItems({ showId: show.id }).sort(compareEpisodes);

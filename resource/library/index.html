@@ -206,9 +206,11 @@
     <span class="logo">飞牛<span>媒体库</span></span>
     <input id="search" type="text" placeholder="搜索标题或文件名…" autocomplete="off">
     <div class="tabs" id="kindTabs">
-        <button data-kind="all" class="active">全部</button>
-        <button data-kind="movie">电影</button>
-        <button data-kind="episode">剧集</button>
+        <button data-cat="all" class="active">全部</button>
+        <button data-cat="movie">电影</button>
+        <button data-cat="tv">剧集</button>
+        <button data-cat="anime">动漫</button>
+        <button data-cat="other">其他视频</button>
     </div>
     <select id="watchFilter" class="btn">
         <option value="all">观看状态</option>
@@ -265,7 +267,7 @@ const ipc = window.electronAPI;
 
 const state = {
     query: '',
-    kind: 'all',
+    category: 'all',
     watched: 'all',
     sort: 'added',
     view: 'grid',
@@ -365,7 +367,7 @@ async function loadItems() {
         sort: state.sort,
         limit: 600,
     };
-    if (state.kind !== 'all') payload.kind = state.kind;
+    if (state.category !== 'all') payload.category = state.category;
     send('library:catalog', payload);
     onceReply('library:catalog-info', (data) => {
         state.entries = (data && data.entries) || [];
@@ -741,6 +743,19 @@ function playItem(itemId) {
 }
 
 /* ---------- 源管理 ---------- */
+const SOURCE_CATEGORY_META = [
+    ['movie', '电影'],
+    ['tv', '剧集'],
+    ['anime', '动漫'],
+    ['other', '其他视频'],
+];
+
+function categoryOptionsHtml(selected) {
+    return SOURCE_CATEGORY_META.map(
+        ([value, label]) => `<option value="${value}"${value === selected ? ' selected' : ''}>${label}</option>`
+    ).join('');
+}
+
 function openSourcesModal() {
     send('library:list-sources');
     onceReply('library:sources-info', (data) => {
@@ -755,6 +770,9 @@ function openSourcesModal() {
                             <div class="sname">${escapeHtml(s.name)}</div>
                             <div class="smeta">${escapeHtml(s.config.rootPath || s.config.url || '')} · ${s.itemCount} 个条目 · ${s.type === 'local' ? '本地/SMB' : s.type === 'webdav' ? 'WebDAV' : escapeHtml(s.type)}</div>
                         </div>
+                        <select class="btn" data-act="set-cat" data-id="${s.id}" title="内容类型">
+                            ${categoryOptionsHtml(s.category)}
+                        </select>
                         <button class="btn" data-act="rescan" data-id="${s.id}">重新扫描</button>
                         <button class="btn danger" data-act="remove" data-id="${s.id}">移除</button>
                     </div>`).join('')}
@@ -766,6 +784,16 @@ function openSourcesModal() {
             <div class="form-row">
                 <label>名称（可选）</label>
                 <input id="srcName" type="text" placeholder="例如：电影硬盘 / 远端片库">
+            </div>
+            <div class="form-row">
+                <label>内容类型</label>
+                <select id="srcCategory" class="btn">
+                    <option value="">自动识别（按名称）</option>
+                    <option value="movie">电影</option>
+                    <option value="tv">剧集</option>
+                    <option value="anime">动漫</option>
+                    <option value="other">其他视频</option>
+                </select>
             </div>
             <div id="srcLocalFields">
                 <div class="mfooter" style="justify-content:flex-start;margin-top:0">
@@ -830,6 +858,7 @@ function openSourcesModal() {
             if (srcType === 'webdav' && !urlInput.value.trim()) {
                 return;
             }
+            const categoryValue = panel.querySelector('#srcCategory').value;
             const payload = srcType === 'webdav'
                 ? {
                     type: 'webdav',
@@ -837,8 +866,9 @@ function openSourcesModal() {
                     url: urlInput.value.trim(),
                     username: panel.querySelector('#srcUser').value.trim(),
                     password: panel.querySelector('#srcPass').value,
+                    category: categoryValue,
                 }
-                : { type: 'local', name: baseName, rootPath: pickedPath };
+                : { type: 'local', name: baseName, rootPath: pickedPath, category: categoryValue };
             send('library:add-source', payload);
             onceReply('library:source-added', (res) => {
                 if (res && res.source) {
@@ -865,6 +895,20 @@ function openSourcesModal() {
                     toast('开始扫描…');
                     onceReply('library:scan-done', () => { toast('扫描完成'); refreshAll(); });
                 }
+            });
+        });
+        panel.querySelectorAll('.source-item select[data-act="set-cat"]').forEach((select) => {
+            select.addEventListener('change', () => {
+                send('library:set-source-category', { id: select.dataset.id, category: select.value });
+                onceReply('library:source-updated', (res) => {
+                    if (res && res.success) {
+                        toast('已更新内容类型');
+                        refreshAll();
+                        openSourcesModal();
+                    } else {
+                        toast((res && res.error) || '更新失败', true);
+                    }
+                });
             });
         });
         openModal();
@@ -1008,7 +1052,7 @@ function initEvents() {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#kindTabs button').forEach((b) => b.classList.remove('active'));
             btn.classList.add('active');
-            state.kind = btn.dataset.kind;
+            state.category = btn.dataset.cat;
             loadItems();
         });
     });
