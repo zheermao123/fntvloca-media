@@ -39,6 +39,21 @@ function relativeDirsOf(filePath: string, rootPath: string): string[] {
     return segments;
 }
 
+const naturalCollator = new Intl.Collator(['zh-Hans-CN', 'en'], { numeric: true, sensitivity: 'base' });
+
+function relativePathOf(filePath: string, rootPath: string): string {
+    let relative = filePath;
+    if (rootPath.length > 0 && filePath.startsWith(rootPath)) {
+        relative = filePath.slice(rootPath.length);
+    }
+    return relative.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+/** 隐私源分组键：加命名空间隔离，避免与公开库同名剧混合 */
+export function privateFolderGroupKey(sourceId: string, folder: string): string {
+    return `private|${sourceId}|${folder}`;
+}
+
 async function enrichWithNfo(videoPath: string, parsed: NameParseResult): Promise<Partial<LibraryItem>> {
     const enrich: Partial<LibraryItem> = {};
     try {
@@ -94,6 +109,32 @@ export async function ingestScanResult(
     const keptIds = new Set<string>();
     const sourceInfo = store.getSource(sourceId);
     const sourceRoot = sourceInfo?.config.rootPath ?? sourceInfo?.config.url ?? '';
+    const isPrivateSource = sourceInfo?.config.private === '1';
+
+    // 隐私源：预先按"第一层文件夹"分组并按相对路径自然排序，确定稳定的集号
+    const privateEpisodeIndex = new Map<string, number>();
+    if (isPrivateSource) {
+        const groups = new Map<string, string[]>();
+        for (const scanned of scan.files) {
+            if (parseVideoName(path.basename(scanned.path)).isSample) {
+                continue;
+            }
+            const folder = relativeDirsOf(scanned.path, sourceRoot)[0];
+            if (!folder) {
+                continue;
+            }
+            const list = groups.get(folder);
+            if (list) {
+                list.push(scanned.path);
+            } else {
+                groups.set(folder, [scanned.path]);
+            }
+        }
+        for (const list of groups.values()) {
+            list.sort((a, b) => naturalCollator.compare(relativePathOf(a, sourceRoot), relativePathOf(b, sourceRoot)));
+            list.forEach((filePath, index) => privateEpisodeIndex.set(filePath, index + 1));
+        }
+    }
 
     // 每目录视频数量：用于区分"剧集文件夹"与"单片电影文件夹"
     const videosPerDir = new Map<string, number>();
@@ -105,8 +146,74 @@ export async function ingestScanResult(
     for (const file of scan.files) {
         const fileName = path.basename(file.path);
         const parsed = parseVideoName(fileName);
-        if (parsed.isSample || isExtraMaterial(fileName)) {
+        if (parsed.isSample || (!isPrivateSource && isExtraMaterial(fileName))) {
             summary.skipped += 1;
+            continue;
+        }
+
+        // 隐私源：严格按文件夹聚合（第一层文件夹 = 一部"剧集"，标题=文件夹名，集号按文件名自然序），
+        // 不做命名解析、不做花絮过滤、不读 NFO/不联网刮削；仅使用本地同名封面图。
+        if (isPrivateSource) {
+            const poster = await findPosterForVideo(file.path).catch(() => null);
+            const folder = relativeDirsOf(file.path, sourceRoot)[0] ?? null;
+            if (folder === null) {
+                const title = parsed.title.length > 0 ? parsed.title : originalTitleOf(file.path);
+                const { item, created } = store.upsertItem({
+                    sourceId,
+                    kind: 'movie',
+                    showId: null,
+                    title,
+                    originalTitle: originalTitleOf(file.path),
+                    year: null,
+                    season: null,
+                    episode: null,
+                    episodeTitle: null,
+                    filePath: file.path,
+                    fileSize: file.size,
+                    mtime: file.mtime,
+                    resolution: parsed.resolution,
+                });
+                if (poster) {
+                    store.updateItemMetadata(item.id, { posterPath: poster });
+                }
+                if (created) {
+                    summary.added += 1;
+                } else {
+                    summary.updated += 1;
+                }
+                keptIds.add(item.id);
+                continue;
+            }
+            const groupKey = privateFolderGroupKey(sourceId, folder);
+            let privateShowId = showIdsByGroupKey.get(groupKey) ?? null;
+            if (!privateShowId) {
+                privateShowId = store.upsertShow({ sourceId, groupKey, title: folder, year: null }).show.id;
+                showIdsByGroupKey.set(groupKey, privateShowId);
+            }
+            const { item, created } = store.upsertItem({
+                sourceId,
+                kind: 'episode',
+                showId: privateShowId,
+                title: folder,
+                originalTitle: originalTitleOf(file.path),
+                year: null,
+                season: 1,
+                episode: privateEpisodeIndex.get(file.path) ?? 1,
+                episodeTitle: originalTitleOf(file.path),
+                filePath: file.path,
+                fileSize: file.size,
+                mtime: file.mtime,
+                resolution: parsed.resolution,
+            });
+            if (poster) {
+                store.updateItemMetadata(item.id, { posterPath: poster });
+            }
+            if (created) {
+                summary.added += 1;
+            } else {
+                summary.updated += 1;
+            }
+            keptIds.add(item.id);
             continue;
         }
 

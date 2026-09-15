@@ -1,11 +1,15 @@
 import type { LibraryStore } from './store';
 import type { LibraryItem, Show } from './types';
-import { categoryOfSource, type SourceCategory } from './sourceCategory';
+import { categoryOfSource, isPrivateSource, type SourceCategory } from './sourceCategory';
 
 export type CatalogQuery = {
     kind?: 'all' | 'movie' | 'episode';
     /** 源内容类型筛选（对齐飞牛影视"内容类型"：电影/剧集/动漫/其他视频） */
     category?: SourceCategory;
+    /**
+     * 可见性：public（默认）永远排除隐私源；private 仅返回隐私源条目（需主进程解锁态把关）
+     */
+    visibility?: 'public' | 'private';
     watched?: boolean;
     query?: string;
     sort?: 'added' | 'title' | 'year' | 'recentPlayed';
@@ -82,11 +86,20 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
     const needle = (query.query ?? '').trim().toLowerCase();
 
     const categoryBySource = new Map<string, SourceCategory>();
-    if (query.category !== undefined) {
-        for (const source of store.listSources()) {
+    const privateSourceIds = new Set<string>();
+    for (const source of store.listSources()) {
+        if (isPrivateSource(source)) {
+            privateSourceIds.add(source.id);
+        }
+        if (query.category !== undefined) {
             categoryBySource.set(source.id, categoryOfSource(source));
         }
     }
+    const visibility = query.visibility ?? 'public';
+    const matchesVisibility = (sourceId: string | null | undefined): boolean => {
+        const isPrivate = typeof sourceId === 'string' && privateSourceIds.has(sourceId);
+        return visibility === 'private' ? isPrivate : !isPrivate;
+    };
     const matchesCategory = (sourceId: string | null | undefined): boolean =>
         query.category === undefined ||
         (typeof sourceId === 'string' && categoryBySource.get(sourceId) === query.category);
@@ -103,7 +116,7 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
         if (query.watched !== undefined) {
             movies = movies.filter((m) => (store.getWatchState(m.id)?.watched ?? false) === query.watched);
         }
-        movies = movies.filter((m) => matchesCategory(m.sourceId));
+        movies = movies.filter((m) => matchesVisibility(m.sourceId) && matchesCategory(m.sourceId));
         for (const item of movies) {
             const state = store.getWatchState(item.id);
             entries.push({
@@ -118,6 +131,9 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
     if (query.kind !== 'movie') {
         for (const show of store.listShows()) {
             if (needle.length > 0 && !show.title.toLowerCase().includes(needle)) {
+                continue;
+            }
+            if (!matchesVisibility(show.sourceId)) {
                 continue;
             }
             if (!matchesCategory(show.sourceId)) {

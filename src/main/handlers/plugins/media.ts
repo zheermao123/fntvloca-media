@@ -18,6 +18,8 @@ import { getProxySecret } from '../../common/proxy';
 import { createProxyPlaybackUrl, registerPlaybackSession } from '../../common/proxySession';
 import type { ProxyPlaybackTarget } from '../../common/proxySession';
 import { getAccessCookieHeader } from '../../../modules/fn_api/accessGrant';
+import { isPrivateSource } from '../../../modules/library/sourceCategory';
+import { isPrivacyUnlocked } from '../../../modules/library/privacy';
 import { getLibraryStore } from '../../../modules/library/libraryService';
 import { decryptSecret } from '../../../modules/library/credentials';
 import { buildLibraryPlaylist, findSidecarSubtitles } from '../../../modules/library/playback';
@@ -490,6 +492,16 @@ async function handlePlayLibraryItem(_event: IpcMainEvent, request: LibraryPlayR
 async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<void> {
     log.info('Library play event received itemId:', itemId);
     const store = getLibraryStore();
+
+    // 隐私内容：未解锁隐私模式时拒绝播放（正常界面拿不到该条目，仍做纵深防御）
+    const targetItem = store.getItem(itemId);
+    if (targetItem) {
+        const targetSource = store.getSource(targetItem.sourceId);
+        if (targetSource && isPrivateSource(targetSource) && !isPrivacyUnlocked()) {
+            log.warn('[library] 隐私内容未解锁，拒绝播放:', itemId);
+            return;
+        }
+    }
 
     const playlistResult = buildLibraryPlaylist(store, itemId);
     if (!playlistResult) {

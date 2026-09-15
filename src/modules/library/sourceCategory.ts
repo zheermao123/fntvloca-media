@@ -47,3 +47,8 @@ export function categoryOfSource(source: Pick<SourceConfig, 'name' | 'config'>):
     }
     return guessSourceCategory(source.name, source.config?.rootPath ?? '', source.config?.url ?? '');
 }
+
+/** 是否隐私源（仅隐私模式可见，正常界面完全不展示） */
+export function isPrivateSource(source: Pick<SourceConfig, 'config'>): boolean {
+    return source.config?.private === '1';
+}

@@ -12,6 +12,15 @@ import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
 import { buildCatalog } from '../../../modules/library/catalog';
 import { categoryOfSource, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
+import { isPrivateSource } from '../../../modules/library/sourceCategory';
+import {
+    hashPrivacyPassword,
+    isPrivacyUnlocked,
+    isValidPrivacyPassword,
+    PRIVACY_PASSWORD_MIN_LENGTH,
+    setPrivacyUnlocked,
+    verifyPrivacyPassword,
+} from '../../../modules/library/privacy';
 
 /**
  * 媒体库数据与刮削插件
@@ -24,6 +33,19 @@ let lastScrapeSummary: { scraped: number; failed: number; skipped: number } | nu
 
 function reply(event: IpcMainEvent, channel: string, payload: unknown): void {
     event.sender.send(channel, payload);
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function privateSourceIds(): Set<string> {
+    const store = getLibraryStore();
+    return new Set(store.listSources().filter((s) => isPrivateSource(s)).map((s) => s.id));
+}
+
+function itemIsPrivate(sourceId: string | null | undefined): boolean {
+    return typeof sourceId === 'string' && privateSourceIds().has(sourceId);
 }
 
 async function scanSource(sourceId: string): Promise<IngestSummary> {
@@ -61,12 +83,15 @@ async function scanSource(sourceId: string): Promise<IngestSummary> {
     return ingestScanResult(store, sourceId, scan);
 }
 
-function listSourcesPayload(): { sources: unknown[] } {
+function listSourcesPayload(privateOnly: boolean): { sources: unknown[] } {
     const store = getLibraryStore();
-    const sources = store.listSources().map((source) => {
-        const itemCount = store.countItems(source.id);
-        return { ...source, itemCount, category: categoryOfSource(source) };
-    });
+    const sources = store
+        .listSources()
+        .filter((source) => isPrivateSource(source) === privateOnly)
+        .map((source) => {
+            const itemCount = store.countItems(source.id);
+            return { ...source, itemCount, category: categoryOfSource(source) };
+        });
     return { sources };
 }
 
@@ -118,9 +143,10 @@ function init(): void {
 
     registerHandler('library:add-source', (
         event: IpcMainEvent,
-        payload: { type?: string; name?: string; rootPath?: string; url?: string; username?: string; password?: string; category?: string }
+        payload: { type?: string; name?: string; rootPath?: string; url?: string; username?: string; password?: string; category?: string; private?: boolean }
     ) => {
         try {
+            const isPrivate = payload?.private === true;
             if (payload?.type === 'webdav') {
                 const url = (payload.url ?? '').trim();
                 if (!url) {
@@ -135,6 +161,7 @@ function init(): void {
                         username,
                         passwordEnc: payload.password ? encryptSecret(payload.password) : '',
                         category: normalizeCategory(payload.category) ?? guessSourceCategory(payload.name?.trim() || url, url),
+                        ...(isPrivate ? { private: '1' } : {}),
                     },
                 });
                 reply(event, 'library:source-added', { source: created });
@@ -150,6 +177,7 @@ function init(): void {
                 config: {
                     rootPath,
                     category: normalizeCategory(payload.category) ?? guessSourceCategory(payload.name?.trim() || rootPath, rootPath),
+                    ...(isPrivate ? { private: '1' } : {}),
                 },
             });
             reply(event, 'library:source-added', { source: created });
@@ -159,8 +187,68 @@ function init(): void {
         }
     });
 
-    registerHandler('library:list-sources', (event: IpcMainEvent) => {
-        reply(event, 'library:sources-info', listSourcesPayload());
+    registerHandler('library:list-sources', (event: IpcMainEvent, payload?: { private?: boolean }) => {
+        const wantPrivate = payload?.private === true;
+        if (wantPrivate && !isPrivacyUnlocked()) {
+            reply(event, 'library:sources-info', { sources: [], locked: true });
+            return;
+        }
+        reply(event, 'library:sources-info', listSourcesPayload(wantPrivate));
+    });
+
+    registerHandler('library:privacy-begin', (event: IpcMainEvent) => {
+        const hash = fnConfig.getPrivacyPasswordHash();
+        reply(event, 'library:privacy-state', {
+            hasPassword: typeof hash === 'string' && hash.length > 0,
+            unlocked: isPrivacyUnlocked(),
+        });
+    });
+
+    registerHandler('library:privacy-set-password', (event: IpcMainEvent, payload: { password?: string }) => {
+        try {
+            if (!isValidPrivacyPassword(payload?.password)) {
+                throw new Error(`密码至少 ${PRIVACY_PASSWORD_MIN_LENGTH} 位`);
+            }
+            fnConfig.setPrivacyPasswordHash(hashPrivacyPassword(payload.password));
+            setPrivacyUnlocked(true);
+            reply(event, 'library:privacy-result', { success: true, unlocked: true });
+        } catch (error) {
+            reply(event, 'library:privacy-result', { success: false, error: error instanceof Error ? error.message : String(error) });
+        }
+    });
+
+    registerHandler('library:privacy-unlock', (event: IpcMainEvent, payload: { password?: string }) => {
+        void (async () => {
+            try {
+                const hash = fnConfig.getPrivacyPasswordHash();
+                if (!hash) {
+                    throw new Error('尚未设置隐私密码');
+                }
+                if (!verifyPrivacyPassword(String(payload?.password ?? ''), hash)) {
+                    await sleep(1000);
+                    throw new Error('密码错误');
+                }
+                setPrivacyUnlocked(true);
+                reply(event, 'library:privacy-result', { success: true, unlocked: true });
+            } catch (error) {
+                reply(event, 'library:privacy-result', { success: false, error: error instanceof Error ? error.message : String(error) });
+            }
+        })();
+    });
+
+    registerHandler('library:privacy-lock', (event: IpcMainEvent) => {
+        setPrivacyUnlocked(false);
+        reply(event, 'library:privacy-result', { success: true, unlocked: false });
+    });
+
+    registerHandler('library:privacy-reset', (event: IpcMainEvent) => {
+        try {
+            fnConfig.setPrivacyPasswordHash(null);
+            setPrivacyUnlocked(false);
+            reply(event, 'library:privacy-result', { success: true, unlocked: false, reset: true });
+        } catch (error) {
+            reply(event, 'library:privacy-result', { success: false, error: error instanceof Error ? error.message : String(error) });
+        }
     });
 
     registerHandler('library:set-source-category', (event: IpcMainEvent, payload: { id?: string; category?: string }) => {
@@ -225,6 +313,10 @@ function init(): void {
                 reply(event, 'library:item-info', { error: '条目不存在' });
                 return;
             }
+            if (itemIsPrivate(item.sourceId) && !isPrivacyUnlocked()) {
+                reply(event, 'library:item-info', { error: '需要解锁隐私模式' });
+                return;
+            }
             const show = item.showId ? store.getShow(item.showId) : null;
             const siblings = item.showId
                 ? store.listItems({ showId: item.showId, sort: 'title' })
@@ -245,9 +337,15 @@ function init(): void {
         try {
             const kind = payload.kind === 'movie' || payload.kind === 'episode' ? payload.kind : 'all';
             const sort = payload.sort;
+            const wantsPrivate = payload.private === true;
+            if (wantsPrivate && !isPrivacyUnlocked()) {
+                reply(event, 'library:catalog-info', { entries: [], locked: true });
+                return;
+            }
             const entries = buildCatalog(store, {
                 kind,
-                category: normalizeCategory(payload.category) ?? undefined,
+                category: wantsPrivate ? undefined : (normalizeCategory(payload.category) ?? undefined),
+                visibility: wantsPrivate ? 'private' : 'public',
                 watched: payload.watched === true || payload.watched === false ? payload.watched : undefined,
                 query: typeof payload.query === 'string' ? payload.query : undefined,
                 sort: sort === 'title' || sort === 'year' || sort === 'recentPlayed' || sort === 'added' ? sort : 'added',
@@ -264,7 +362,11 @@ function init(): void {
         try {
             const show = payload?.id ? store.getShow(payload.id) : null;
             if (!show) {
-                reply(event, 'library:show-info', { error: '剧集组不存在' });
+                reply(event, 'library:show-info', { error: '剧集不存在' });
+                return;
+            }
+            if (itemIsPrivate(show.sourceId) && !isPrivacyUnlocked()) {
+                reply(event, 'library:show-info', { error: '需要解锁隐私模式' });
                 return;
             }
             let episodes = store.listItems({ showId: show.id }).sort(
@@ -297,8 +399,17 @@ function init(): void {
         }
     });
 
-    registerHandler('library:continue', (event: IpcMainEvent) => {
-        reply(event, 'library:continue-info', { entries: store.listContinueWatching(20) });
+    registerHandler('library:continue', (event: IpcMainEvent, payload?: { private?: boolean }) => {
+        const wantPrivate = payload?.private === true;
+        if (wantPrivate && !isPrivacyUnlocked()) {
+            reply(event, 'library:continue-info', { entries: [] });
+            return;
+        }
+        const privateIds = privateSourceIds();
+        const entries = store
+            .listContinueWatching(20)
+            .filter(({ item }) => privateIds.has(item.sourceId) === wantPrivate);
+        reply(event, 'library:continue-info', { entries });
     });
 
     registerHandler('library:set-watched', (event: IpcMainEvent, payload: { id?: string; watched?: boolean }) => {
@@ -384,6 +495,10 @@ function init(): void {
                 const query = (payload?.query ?? '').trim();
                 if (!item || query.length === 0) {
                     reply(event, 'library:search-results', { error: '缺少查询条件' });
+                    return;
+                }
+                if (itemIsPrivate(item.sourceId)) {
+                    reply(event, 'library:search-results', { error: '隐私内容不参与刮削' });
                     return;
                 }
                 const scraper = new LibraryScraper({
