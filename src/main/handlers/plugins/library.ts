@@ -11,6 +11,7 @@ import { ingestScanResult } from '../../../modules/library/ingest';
 import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
 import { buildCatalog } from '../../../modules/library/catalog';
+import { categoryOfSource, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
 
 /**
  * 媒体库数据与刮削插件
@@ -64,7 +65,7 @@ function listSourcesPayload(): { sources: unknown[] } {
     const store = getLibraryStore();
     const sources = store.listSources().map((source) => {
         const itemCount = store.countItems(source.id);
-        return { ...source, itemCount };
+        return { ...source, itemCount, category: categoryOfSource(source) };
     });
     return { sources };
 }
@@ -117,7 +118,7 @@ function init(): void {
 
     registerHandler('library:add-source', (
         event: IpcMainEvent,
-        payload: { type?: string; name?: string; rootPath?: string; url?: string; username?: string; password?: string }
+        payload: { type?: string; name?: string; rootPath?: string; url?: string; username?: string; password?: string; category?: string }
     ) => {
         try {
             if (payload?.type === 'webdav') {
@@ -133,6 +134,7 @@ function init(): void {
                         url: url.replace(/\/+$/, ''),
                         username,
                         passwordEnc: payload.password ? encryptSecret(payload.password) : '',
+                        category: normalizeCategory(payload.category) ?? guessSourceCategory(payload.name?.trim() || url, url),
                     },
                 });
                 reply(event, 'library:source-added', { source: created });
@@ -145,7 +147,10 @@ function init(): void {
             const created = store.addSource({
                 type: 'local',
                 name: payload?.name?.trim() || rootPath,
-                config: { rootPath },
+                config: {
+                    rootPath,
+                    category: normalizeCategory(payload.category) ?? guessSourceCategory(payload.name?.trim() || rootPath, rootPath),
+                },
             });
             reply(event, 'library:source-added', { source: created });
         } catch (error) {
@@ -156,6 +161,25 @@ function init(): void {
 
     registerHandler('library:list-sources', (event: IpcMainEvent) => {
         reply(event, 'library:sources-info', listSourcesPayload());
+    });
+
+    registerHandler('library:set-source-category', (event: IpcMainEvent, payload: { id?: string; category?: string }) => {
+        try {
+            const id = payload?.id ?? '';
+            const source = id ? store.getSource(id) : null;
+            if (!source) {
+                throw new Error('媒体源不存在');
+            }
+            const category = normalizeCategory(payload?.category);
+            if (!category) {
+                throw new Error('无效的内容类型');
+            }
+            store.updateSource({ ...source, config: { ...source.config, category } });
+            reply(event, 'library:source-updated', { success: true });
+        } catch (error) {
+            log.error('[library] 更新源类型失败:', error);
+            reply(event, 'library:source-updated', { success: false, error: error instanceof Error ? error.message : String(error) });
+        }
     });
 
     registerHandler('library:remove-source', (event: IpcMainEvent, payload: { id?: string }) => {
@@ -223,6 +247,7 @@ function init(): void {
             const sort = payload.sort;
             const entries = buildCatalog(store, {
                 kind,
+                category: normalizeCategory(payload.category) ?? undefined,
                 watched: payload.watched === true || payload.watched === false ? payload.watched : undefined,
                 query: typeof payload.query === 'string' ? payload.query : undefined,
                 sort: sort === 'title' || sort === 'year' || sort === 'recentPlayed' || sort === 'added' ? sort : 'added',
