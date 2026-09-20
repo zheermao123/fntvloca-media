@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import type { LibraryStore } from './store';
 import type { LibraryItem } from './types';
 
@@ -90,8 +91,22 @@ function toEntry(store: LibraryStore, item: LibraryItem, showTitle: string, read
     };
 }
 
-export function buildLibraryPlaylist(
-    store: LibraryStore,
+/**
+ * 光盘镜像（BD/DVD ISO）无法通过 HTTP 流式播放：
+ * mpv 的 libbluray/dvdread 需要本地随机访问（盘符路径/设备），因此这类文件必须直连播放。
+ * 且 UHD 原盘 ISO 多为 UDF 格式，mpv 无法自动识别，需要 bd:// + --bluray-device 强制按蓝光打开。
+ * 代价：经代理的"跳过片头片尾"对 ISO 不可用（可用 mpv 章节跳过替代）。
+ */
+export function isDirectPlaybackFile(filePath: string): boolean {
+    return /\.iso$/i.test(filePath);
+}
+
+/** 直连播放链接：ISO 走 bd://（配合 --bluray-device），其余本地文件转 file:// URL */
+export function directPlayLinkForFile(filePath: string): string {
+    return isDirectPlaybackFile(filePath) ? 'bd://' : pathToFileURL(filePath).href;
+}
+
+export function buildLibraryPlaylist(store: LibraryStore,
     itemId: string,
     options?: { readStrm?: ReadStrmFn }
 ): LibraryPlaylist | null {

@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { createJsonLibraryStore } = require('../dest/modules/library/store');
-const { buildLibraryPlaylist, findSidecarSubtitles } = require('../dest/modules/library/playback');
+const { buildLibraryPlaylist, findSidecarSubtitles, isDirectPlaybackFile } = require('../dest/modules/library/playback');
 
 const { makeTmpDir } = require('./helpers/tmpRoot.cjs');
 
@@ -154,4 +154,18 @@ test('findSidecarSubtitles returns empty list when nothing matches', async () =>
     const video = path.join(dir, 'Lonely.mkv');
     fs.writeFileSync(video, 'v');
     assert.deepEqual(await findSidecarSubtitles(video), []);
+});
+
+test('disc images (iso) must play directly instead of via HTTP proxy', () => {
+    assert.equal(isDirectPlaybackFile('D:/Movies/[\u9ad8\u5c71\u4e0b\u7684\u82b1\u73af 1984][44.70GB].iso'), true);
+    assert.equal(isDirectPlaybackFile('D:\\Movies\\Movie.ISO'), true);
+    assert.equal(isDirectPlaybackFile('D:/Movies/Inception.2010.1080p.mkv'), false);
+    assert.equal(isDirectPlaybackFile('D:/Movies/\u8776\u4e2d\u8c0d5.xls'), false);
+});
+
+test('iso entries use bd:// direct link; regular files use file:// URL', () => {
+    const { directPlayLinkForFile } = require('../dest/modules/library/playback');
+    assert.equal(directPlayLinkForFile('D:/Movies/[\u9ad8\u5c71\u4e0b\u7684\u82b1\u73af 1984].iso'), 'bd://');
+    assert.equal(directPlayLinkForFile('D:/Movies/Movie.ISO'), 'bd://');
+    assert.ok(directPlayLinkForFile('D:/Movies/Inception.2010.1080p.mkv').startsWith('file:///'));
 });

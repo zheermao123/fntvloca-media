@@ -22,7 +22,7 @@ import { isPrivateSource } from '../../../modules/library/sourceCategory';
 import { isPrivacyUnlocked } from '../../../modules/library/privacy';
 import { getLibraryStore } from '../../../modules/library/libraryService';
 import { decryptSecret } from '../../../modules/library/credentials';
-import { buildLibraryPlaylist, findSidecarSubtitles } from '../../../modules/library/playback';
+import { buildLibraryPlaylist, directPlayLinkForFile, findSidecarSubtitles, isDirectPlaybackFile } from '../../../modules/library/playback';
 import type { LibraryPlayEntry } from '../../../modules/library/playback';
 import type { LibraryStore } from '../../../modules/library/store';
 
@@ -427,7 +427,7 @@ function libraryEntryToPlayItem(entry: LibraryPlayEntry, playLink: string): ply.
 // 直连播放地址（代理不可用时的回退：本地文件转 file:// URL，strm 直出）
 function directPlayLink(entry: LibraryPlayEntry): string {
     return entry.source.kind === 'file'
-        ? pathToFileURL(entry.source.path).href
+        ? directPlayLinkForFile(entry.source.path)
         : entry.source.url;
 }
 
@@ -530,9 +530,15 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     let playList: ply.PlayItem[] = [];
     try {
         const targets: Record<string, ProxyPlaybackTarget> = {};
+        const directGuids = new Set<string>();
         const headerCache = new Map<string, Record<string, string> | null>();
         for (const entry of validEntries) {
             if (entry.source.kind === 'file') {
+                // 光盘镜像（ISO）必须本地直连：HTTP 无法解析原盘结构
+                if (isDirectPlaybackFile(entry.source.path)) {
+                    directGuids.add(entry.itemGuid);
+                    continue;
+                }
                 targets[entry.itemGuid] = { kind: 'file', path: entry.source.path, skipKey: entry.skipKey };
                 continue;
             }
@@ -560,12 +566,16 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
             }
             targets[entry.itemGuid] = { kind: 'url', url: entry.source.url, headers, skipKey: entry.skipKey };
         }
-        const session = await registerPlaybackSession(getProxySecret(), {
-            targets,
-            itemGuids: validEntries.map((entry) => entry.itemGuid),
-        });
+        const proxiedGuids = validEntries
+            .filter((entry) => !directGuids.has(entry.itemGuid))
+            .map((entry) => entry.itemGuid);
+        const session = proxiedGuids.length > 0
+            ? await registerPlaybackSession(getProxySecret(), { targets, itemGuids: proxiedGuids })
+            : null;
         playList = validEntries.map((entry) =>
-            libraryEntryToPlayItem(entry, createProxyPlaybackUrl(session, entry.itemGuid))
+            session && !directGuids.has(entry.itemGuid)
+                ? libraryEntryToPlayItem(entry, createProxyPlaybackUrl(session, entry.itemGuid))
+                : libraryEntryToPlayItem(entry, directPlayLink(entry))
         );
     } catch (error) {
         log.warn('[library] 代理会话创建失败，回退为直连播放（跳过片头片尾不可用）:', error);
@@ -579,6 +589,13 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     }
 
     const mpvArgs = buildMpvArgs();
+    // 蓝光原盘 ISO：mpv 无法自动识别 UDF 格式的 ISO，需 bd:// + --bluray-device 强制按蓝光打开
+    const blurayEntry = validEntries.find(
+        (entry) => entry.source.kind === 'file' && isDirectPlaybackFile(entry.source.path)
+    );
+    if (blurayEntry && blurayEntry.source.kind === 'file') {
+        mpvArgs.push(`--bluray-device=${blurayEntry.source.path}`);
+    }
     if (currentEntry.source.kind === 'file') {
         // 本地视频自动挂载同目录 sidecar 字幕
         const subtitles = await findSidecarSubtitles(currentEntry.source.path);

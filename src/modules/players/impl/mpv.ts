@@ -96,6 +96,18 @@ export class MpvPlayer extends BasePlayer {
             // 保存播放列表信息
             this.playlistItems = infos;
 
+            const current = infos[pos];
+            // 蓝光原盘（bd://）：mpv 的播放列表解析器不识别该协议（经 loadlist/m3u8 会报
+            // "No protocol handler found"），必须直接 loadfile 打开；--bluray-device 已随启动参数提供。
+            if (current && current.playLink === 'bd://') {
+                this.playlistItems = [current];
+                if (this.config.debug) {
+                    log.debug(`直接加载蓝光原盘: ${current.title}`);
+                }
+                await this.mpvInstance.load(current.playLink);
+                return;
+            }
+
             // 生成 M3U8 播放列表文件
             const playlistContent = this.generateM3U8Playlist(infos);
             this.playlistFilePath = path.join(os.tmpdir(), `mpv_playlist_${Date.now()}.m3u8`);
