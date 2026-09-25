@@ -33,6 +33,8 @@ export type SeasonCatalogEntry = {
 export type MovieCatalogEntry = {
     type: 'movie';
     item: LibraryItem;
+    /** 是否已看完（与"已看/未看"筛选同一数据源） */
+    watched: boolean;
     addedAt: number;
     lastPlayedAt: number;
 };
@@ -122,6 +124,7 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
             entries.push({
                 type: 'movie',
                 item,
+                watched: state?.watched ?? false,
                 addedAt: item.addedAt,
                 lastPlayedAt: state?.lastPlayedAt ?? 0,
             });
