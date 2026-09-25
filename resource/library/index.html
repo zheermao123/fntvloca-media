@@ -414,11 +414,11 @@ function renderItems() {
 
     if (state.view === 'grid') {
         grid.replaceChildren(...state.entries.map((entry) =>
-            entry.type === 'season' ? buildSeasonCard(entry) : buildCard(entry.item)
+            entry.type === 'season' ? buildSeasonCard(entry) : buildCard(entry.item, entry.watched)
         ));
     } else {
         list.replaceChildren(...state.entries.map((entry) =>
-            entry.type === 'season' ? buildSeasonListRow(entry) : buildListRow(entry.item)
+            entry.type === 'season' ? buildSeasonListRow(entry) : buildListRow(entry.item, entry.watched)
         ));
     }
 }
@@ -567,7 +567,7 @@ function renderShowDetail(data) {
     });
 }
 
-function buildCard(item) {
+function buildCard(item, watched) {
     const card = document.createElement('div');
     card.className = 'card';
     const badges = [];
@@ -581,6 +581,7 @@ function buildCard(item) {
     const progressHtml = progressPct
         ? `<div class="poster-prog"><i style="width:${progressPct}%"></i></div>`
         : '';
+    const statusLabel = watched ? '已看' : (progressPct ? `已看 ${progressPct}%` : '未看');
     card.innerHTML = `
         <div class="poster-wrap">
             ${posterImgHtml(item.posterPath, item.title)}
@@ -589,7 +590,7 @@ function buildCard(item) {
             <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
         </div>
         <div class="name">${escapeHtml(displayTitle(item))}</div>
-        <div class="sub">${escapeHtml([item.year, item.resolution].filter(Boolean).join(' · '))}</div>`;
+        <div class="sub">${escapeHtml([item.year, item.resolution, statusLabel].filter(Boolean).join(' · '))}</div>`;
     const overlay = card.querySelector('.poster-wrap');
     overlay.addEventListener('click', (e) => {
         if (e.target.closest('.play-overlay-btn')) {
@@ -601,14 +602,17 @@ function buildCard(item) {
     return card;
 }
 
-function buildListRow(item) {
+function buildListRow(item, watched) {
     const row = document.createElement('div');
     row.className = 'lrow';
+    const progressPct = state.continueMap.get(item.id);
+    const statusLabel = watched ? '已看' : (progressPct ? `已看 ${progressPct}%` : '未看');
     row.innerHTML = `
         <span class="ltitle">${escapeHtml(displayTitle(item))}</span>
         <span class="lmeta">${escapeHtml(item.kind === 'movie' ? '电影' : `S${item.season ?? 0}E${item.episode ?? 0}`)}</span>
         <span class="lmeta">${escapeHtml(item.year ?? '')}</span>
-        <span class="lmeta">${escapeHtml(item.resolution ? item.resolution.toUpperCase() : '')}</span>`;
+        <span class="lmeta">${escapeHtml(item.resolution ? item.resolution.toUpperCase() : '')}</span>
+        <span class="lmeta">${escapeHtml(statusLabel)}</span>`;
     row.addEventListener('click', () => playItem(item.id));
     return row;
 }

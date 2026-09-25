@@ -78,3 +78,30 @@ test('buildCatalog filters by kind/query and sorts by title', () => {
         store.close();
     }
 });
+
+test('movie catalog entries expose watched flag (same source as watched filter)', () => {
+    const store = newStore('fntv-catalog-moviewatch-');
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        const a = store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'Movie A', filePath: 'm1' }).item;
+        store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'Movie B', filePath: 'm2' });
+        store.setWatched(a.id, true);
+
+        const entries = buildCatalog(store, {});
+        const movies = entries.filter((e) => e.type === 'movie');
+        assert.equal(movies.length, 2);
+        assert.equal(movies.find((e) => e.item.id === a.id).watched, true);
+        assert.equal(movies.find((e) => e.item.title === 'Movie B').watched, false);
+
+        const watchedOnly = buildCatalog(store, { watched: true });
+        assert.equal(watchedOnly.length, 1);
+        assert.equal(watchedOnly[0].type, 'movie');
+        assert.equal(watchedOnly[0].watched, true);
+
+        const unwatchedOnly = buildCatalog(store, { watched: false });
+        assert.equal(unwatchedOnly.length, 1);
+        assert.equal(unwatchedOnly[0].watched, false);
+    } finally {
+        store.close();
+    }
+});
