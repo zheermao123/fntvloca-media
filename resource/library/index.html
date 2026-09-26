@@ -109,7 +109,11 @@
         .privacy-menu-list button:hover { background: rgba(255,255,255,0.08); }
         .privacy-menu-list button.active { color: var(--accent); }
         #privacyExitBtn { display: none; }
-        body.privacy-mode #privacyExitBtn { display: inline-flex; }
+        body.privacy-mode #privacyExitBtn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         body.privacy-mode #kindTabs, body.privacy-mode #scrapeBtn, body.privacy-mode #settingsBtn { display: none; }
         .no-poster { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center;
             padding: 10px; text-align: center; color: var(--text-dim); font-size: 13px; }
