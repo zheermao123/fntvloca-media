@@ -422,9 +422,9 @@ function init(): void {
         }
     });
 
-    registerHandler('library:scrape', (event: IpcMainEvent) => {
+    registerHandler('library:scrape', (event: IpcMainEvent, payload?: { force?: boolean }) => {
         if (scraping) {
-            reply(event, 'library:scrape-started', { started: false, error: '刮削任务进行中' });
+            reply(event, 'library:scrape-started', { started: false, error: '刮削任务正在进行中' });
             return;
         }
         const settings = fnConfig.getScraperSettings();
@@ -440,6 +440,7 @@ function init(): void {
             config: settings,
         });
         scraper.scrapeLibrary({
+            force: payload?.force === true,
             onProgress: (progress) => {
                 reply(event, 'library-scrape-progress', progress);
             },

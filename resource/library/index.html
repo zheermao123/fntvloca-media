@@ -978,10 +978,17 @@ function openSettingsModal() {
                 <input id="setLang" type="text" value="${escapeHtml(settings.language || '')}" placeholder="zh-CN">
             </div>
             <div class="mfooter">
+                <button class="btn" id="setForceScrape" style="margin-right:auto"
+                        title="忽略已刮状态，全部重新从 TMDB 拉取（用于修复英文标题、刷新元数据）">强制重刮全部</button>
                 <button class="btn" id="setCancel">取消</button>
                 <button class="btn primary" id="setSave">保存</button>
             </div>`;
         panel.querySelector('#setCancel').addEventListener('click', closeModal);
+        panel.querySelector('#setForceScrape').addEventListener('click', () => {
+            send('library:scrape', { force: true });
+            toast('开始强制重刮全部（刷新中文元数据）…');
+            closeModal();
+        });
         panel.querySelector('#setSave').addEventListener('click', () => {
             send('library:settings-set', {
                 apiKey: panel.querySelector('#setKey').value,

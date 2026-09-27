@@ -4,9 +4,10 @@ import * as log from '../logger';
 import type { LibraryStore } from './store';
 import type { ItemMetadataPatch, LibraryItem, Show } from './types';
 import { TmdbClient, createDefaultTransport, pickBestResult } from './tmdb';
-import type { ScraperConfig, SearchResult, TmdbTransport } from './tmdb';
+import type { MovieDetail, ScraperConfig, SearchResult, SeasonDetail, TmdbTransport, TvDetail } from './tmdb';
 import { extractTmdbIdHint } from './episodeContext';
 import { isPrivateSource } from './sourceCategory';
+import { extractChineseTitle, hasCJK, preferChinese } from './chineseTitle';
 
 export type ScrapeProgress = {
     done: number;
@@ -32,6 +33,9 @@ export type ScraperOptions = {
 };
 
 const MAX_SEASONS = 20;
+
+/** 主语言无中文时依次回退的中文地区：zh-SG（简体）优先，其次 zh-TW / zh-HK */
+const ZH_FALLBACK_LANGUAGES = ['zh-SG', 'zh-TW', 'zh-HK'];
 
 export class LibraryScraper {
     private readonly store: LibraryStore;
@@ -64,15 +68,18 @@ export class LibraryScraper {
         return this.client.searchTv(query, year);
     }
 
-    async scrapeLibrary(options?: { onProgress?: (progress: ScrapeProgress) => void }): Promise<ScrapeSummary> {
+    async scrapeLibrary(options?: { onProgress?: (progress: ScrapeProgress) => void; force?: boolean }): Promise<ScrapeSummary> {
         this.assertApiKey();
         const summary: ScrapeSummary = { scraped: 0, failed: 0, skipped: 0 };
+        const force = options?.force === true;
         // 隐私源内容不参与在线刮削
         const privateSourceIds = new Set(this.store.listSources().filter((s) => isPrivateSource(s)).map((s) => s.id));
         const movies = this.store
             .listItems({ kind: 'movie' })
-            .filter((i) => i.metadataSource !== 'tmdb' && !privateSourceIds.has(i.sourceId));
-        const shows = this.store.listShows().filter((s) => s.tmdbId === null && !privateSourceIds.has(s.sourceId));
+            .filter((i) => (force || i.metadataSource !== 'tmdb') && !privateSourceIds.has(i.sourceId));
+        const shows = this.store
+            .listShows()
+            .filter((s) => (force || s.tmdbId === null) && !privateSourceIds.has(s.sourceId));
         const total = movies.length + shows.length;
         let done = 0;
 
@@ -232,20 +239,50 @@ export class LibraryScraper {
 
     private async writeMovieMetadata(
         item: LibraryItem,
-        detail: Awaited<ReturnType<TmdbClient['getMovie']>> & object
+        detail: MovieDetail
     ): Promise<void> {
-        const posterPath = await this.cacheImage('movie', detail.id, 'poster', detail.posterPath, 'w342');
-        const backdropPath = await this.cacheImage('movie', detail.id, 'backdrop', detail.backdropPath, 'w780');
+        const zhDetail = await this.resolveMovieZh(detail);
+        const posterPath = await this.cacheImage('movie', zhDetail.id, 'poster', zhDetail.posterPath, 'w342');
+        const backdropPath = await this.cacheImage('movie', zhDetail.id, 'backdrop', zhDetail.backdropPath, 'w780');
         this.store.updateItemMetadata(item.id, {
-            title: detail.title.length > 0 ? detail.title : item.title,
-            overview: detail.overview,
-            rating: detail.voteAverage,
-            runtime: detail.runtime,
-            tmdbId: `${detail.id}`,
+            title: preferChinese(zhDetail.title, extractChineseTitle(item.originalTitle), item.title),
+            overview: zhDetail.overview ?? detail.overview,
+            rating: zhDetail.voteAverage,
+            runtime: zhDetail.runtime,
+            tmdbId: `${zhDetail.id}`,
             posterPath,
             backdropPath,
             metadataSource: 'tmdb',
         });
+    }
+
+    /** 标题无中文时按 zh-TW / zh-HK 回退（取到中文即返回） */
+    private async resolveMovieZh(detail: MovieDetail): Promise<MovieDetail> {
+        if (hasCJK(detail.title)) {
+            return detail;
+        }
+        for (const language of ZH_FALLBACK_LANGUAGES) {
+            await this.delayFn(this.delayMs);
+            const alt = await this.client.getMovie(detail.id, language);
+            if (alt && hasCJK(alt.title)) {
+                return alt;
+            }
+        }
+        return detail;
+    }
+
+    private async resolveTvZh(tv: TvDetail): Promise<TvDetail> {
+        if (hasCJK(tv.name)) {
+            return tv;
+        }
+        for (const language of ZH_FALLBACK_LANGUAGES) {
+            await this.delayFn(this.delayMs);
+            const alt = await this.client.getTv(tv.id, language);
+            if (alt && hasCJK(alt.name)) {
+                return alt;
+            }
+        }
+        return tv;
     }
 
     private async scrapeShow(show: Show): Promise<boolean> {
@@ -277,21 +314,52 @@ export class LibraryScraper {
         return true;
     }
 
-    private async writeShowMetadata(show: Show, tv: Awaited<ReturnType<TmdbClient['getTv']>> & object): Promise<void> {
-        const posterPath = await this.cacheImage('tv', tv.id, 'poster', tv.posterPath, 'w342');
-        const backdropPath = await this.cacheImage('tv', tv.id, 'backdrop', tv.backdropPath, 'w780');
-        const year = tv.firstAirDate && tv.firstAirDate.length >= 4 ? Number(tv.firstAirDate.slice(0, 4)) : null;
+    private async writeShowMetadata(show: Show, tv: TvDetail): Promise<void> {
+        const zhTv = await this.resolveTvZh(tv);
+        const posterPath = await this.cacheImage('tv', zhTv.id, 'poster', zhTv.posterPath, 'w342');
+        const backdropPath = await this.cacheImage('tv', zhTv.id, 'backdrop', zhTv.backdropPath, 'w780');
+        const year = zhTv.firstAirDate && zhTv.firstAirDate.length >= 4 ? Number(zhTv.firstAirDate.slice(0, 4)) : null;
+        const folderZh = extractChineseTitle(show.title);
+        const itemZh = extractChineseTitle(this.store.listItems({ showId: show.id })[0]?.originalTitle ?? null);
         this.store.updateShowMetadata(show.id, {
-            title: tv.name.length > 0 ? tv.name : show.title,
+            title: preferChinese(zhTv.name, folderZh, itemZh, show.title),
             year: year !== null && Number.isFinite(year) ? year : show.year,
-            overview: tv.overview,
+            overview: zhTv.overview ?? tv.overview,
             posterPath,
             backdropPath,
-            tmdbId: `${tv.id}`,
+            tmdbId: `${zhTv.id}`,
         });
     }
 
-    private async refreshEpisodes(showId: string, tv: Awaited<ReturnType<TmdbClient['getTv']>> & object): Promise<void> {
+    /** 集名缺少中文时，用 zh-TW / zh-HK 的季数据补齐中文集名（每季最多 2 次额外请求） */
+    private async mergeChineseEpisodeNames(tvId: number, season: number, detail: SeasonDetail): Promise<void> {
+        const missing = (): boolean => detail.episodes.some((e) => !e.name || !hasCJK(e.name));
+        if (!missing()) {
+            return;
+        }
+        for (const language of ZH_FALLBACK_LANGUAGES) {
+            await this.delayFn(this.delayMs);
+            const alt = await this.client.getSeason(tvId, season, language);
+            if (!alt) {
+                continue;
+            }
+            const altNames = new Map(alt.episodes.map((e) => [e.episodeNumber, e.name]));
+            for (const episode of detail.episodes) {
+                if (episode.name && hasCJK(episode.name)) {
+                    continue;
+                }
+                const altName = altNames.get(episode.episodeNumber);
+                if (altName && hasCJK(altName)) {
+                    episode.name = altName;
+                }
+            }
+            if (!missing()) {
+                return;
+            }
+        }
+    }
+
+    private async refreshEpisodes(showId: string, tv: TvDetail): Promise<void> {
         const episodes = this.store.listItems({ showId });
         if (episodes.length === 0) {
             return;
@@ -308,6 +376,7 @@ export class LibraryScraper {
             if (!detail) {
                 continue;
             }
+            await this.mergeChineseEpisodeNames(tv.id, season, detail);
             const seasonPoster = await this.cacheImage(
                 'tv',
                 tv.id,
