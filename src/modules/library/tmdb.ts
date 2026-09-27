@@ -204,8 +204,10 @@ export class TmdbClient {
         return mapResults(data.results, 'name', 'first_air_date');
     }
 
-    async getMovie(id: number): Promise<MovieDetail | null> {
-        const data = asRecord(await this.transport.getJson(this.url(`/movie/${id}`, {})));
+    async getMovie(id: number, language?: string): Promise<MovieDetail | null> {
+        const data = asRecord(
+            await this.transport.getJson(this.url(`/movie/${id}`, language ? { language } : {}))
+        );
         if (!data || typeof data.id !== 'number') {
             return null;
         }
@@ -220,8 +222,8 @@ export class TmdbClient {
         };
     }
 
-    async getTv(id: number): Promise<TvDetail | null> {
-        const data = asRecord(await this.transport.getJson(this.url(`/tv/${id}`, {})));
+    async getTv(id: number, language?: string): Promise<TvDetail | null> {
+        const data = asRecord(await this.transport.getJson(this.url(`/tv/${id}`, language ? { language } : {})));
         if (!data || typeof data.id !== 'number') {
             return null;
         }
@@ -246,8 +248,10 @@ export class TmdbClient {
         };
     }
 
-    async getSeason(tvId: number, season: number): Promise<SeasonDetail | null> {
-        const data = asRecord(await this.transport.getJson(this.url(`/tv/${tvId}/season/${season}`, {})));
+    async getSeason(tvId: number, season: number, language?: string): Promise<SeasonDetail | null> {
+        const data = asRecord(
+            await this.transport.getJson(this.url(`/tv/${tvId}/season/${season}`, language ? { language } : {}))
+        );
         if (!data || !Array.isArray(data.episodes)) {
             return null;
         }

@@ -361,3 +361,173 @@ test('scrapeLibrary reports first failure reason in summary', async () => {
         store.close();
     }
 });
+
+test('scraper resolves Chinese title via zh-TW/zh-HK fallback', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'library.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        const { item } = store.upsertItem({
+            sourceId: source.id,
+            kind: 'movie',
+            title: 'Inception',
+            year: 2010,
+            filePath: 'p1',
+            originalTitle: '[盗梦空间][DIY 简繁中字].mkv',
+        });
+        const calls = [];
+        const transport = {
+            getJson: async (url) => {
+                calls.push(url);
+                if (url.includes('/search/movie')) {
+                    return {
+                        results: [
+                            { id: 27205, title: 'Inception', release_date: '2010-07-16', vote_average: 8.8, overview: '' },
+                        ],
+                    };
+                }
+                if (url.includes('/movie/27205')) {
+                    if (url.includes('language=zh-TW')) {
+                        return { id: 27205, title: '全面啟動', overview: '夢境', runtime: 148, vote_average: 8.8, poster_path: null, backdrop_path: null };
+                    }
+                    return { id: 27205, title: 'Inception', overview: 'dream', runtime: 148, vote_average: 8.8, poster_path: null, backdrop_path: null };
+                }
+                return { results: [] };
+            },
+            getBinary: async () => Buffer.from('x'),
+        };
+        const scraper = makeScraper(store, tmpDir(), transport);
+
+        const summary = await scraper.scrapeLibrary();
+        assert.equal(summary.scraped, 1);
+        const updated = store.getItem(item.id);
+        assert.equal(updated.title, '全面啟動');
+        assert.equal(updated.overview, '夢境');
+    } finally {
+        store.close();
+    }
+});
+
+test('scraper uses Chinese name from release filename when TMDB has none', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'library.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        const { item } = store.upsertItem({
+            sourceId: source.id,
+            kind: 'movie',
+            title: "A Fan's Guide to Spider-Man Homecoming",
+            year: 2017,
+            filePath: 'p1',
+            originalTitle: '[蜘蛛侠：英雄归来][DIY 双版本国语THD].mkv',
+        });
+        const transport = {
+            getJson: async (url) => {
+                if (url.includes('/search/movie')) {
+                    return {
+                        results: [
+                            { id: 626329, title: "A Fan's Guide to Spider-Man Homecoming", release_date: '2017-06-27', vote_average: 5, overview: '' },
+                        ],
+                    };
+                }
+                if (url.includes('/movie/626329')) {
+                    return { id: 626329, title: "A Fan's Guide to Spider-Man Homecoming", overview: 'bonus', runtime: 20, vote_average: 5, poster_path: null, backdrop_path: null };
+                }
+                return { results: [] };
+            },
+            getBinary: async () => Buffer.from('x'),
+        };
+        const scraper = makeScraper(store, tmpDir(), transport);
+
+        const summary = await scraper.scrapeLibrary();
+        assert.equal(summary.scraped, 1);
+        const updated = store.getItem(item.id);
+        assert.equal(updated.title, '蜘蛛侠：英雄归来');
+    } finally {
+        store.close();
+    }
+});
+
+test('scrapeLibrary force re-scrapes already-scraped entries', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'library.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'Inception', year: 2010, filePath: 'p1' });
+        let detailCalls = 0;
+        const transport = {
+            getJson: async (url) => {
+                if (url.includes('/search/movie')) {
+                    return {
+                        results: [
+                            { id: 27205, title: 'Inception', release_date: '2010-07-16', vote_average: 8.8, overview: '' },
+                        ],
+                    };
+                }
+                if (url.includes('/movie/27205')) {
+                    detailCalls += 1;
+                    return { id: 27205, title: '盗梦空间', overview: 'x', runtime: 148, vote_average: 8.8, poster_path: null, backdrop_path: null };
+                }
+                return { results: [] };
+            },
+            getBinary: async () => Buffer.from('x'),
+        };
+        const scraper = makeScraper(store, tmpDir(), transport);
+
+        const first = await scraper.scrapeLibrary();
+        assert.equal(first.scraped, 1);
+        const callsAfterFirst = detailCalls;
+
+        const again = await scraper.scrapeLibrary();
+        assert.equal(again.scraped, 0, '默认跳过已刮条目');
+        assert.equal(detailCalls, callsAfterFirst);
+
+        const forced = await scraper.scrapeLibrary({ force: true });
+        assert.equal(forced.scraped, 1, '强制模式重新刮削');
+        assert.ok(detailCalls > callsAfterFirst);
+    } finally {
+        store.close();
+    }
+});
+
+test('scraper prefers zh-SG (simplified) over zh-TW when primary lacks Chinese', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'library.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        const { item } = store.upsertItem({
+            sourceId: source.id,
+            kind: 'movie',
+            title: 'Spider-Man: No Way Home',
+            year: 2021,
+            filePath: 'p1',
+        });
+        const transport = {
+            getJson: async (url) => {
+                if (url.includes('/search/movie')) {
+                    return {
+                        results: [
+                            { id: 634649, title: 'Spider-Man: No Way Home', release_date: '2021-12-15', vote_average: 8, overview: '' },
+                        ],
+                    };
+                }
+                if (url.includes('/movie/634649')) {
+                    if (url.includes('language=zh-SG')) {
+                        return { id: 634649, title: '蜘蛛侠：英雄无归', overview: '简体简介', runtime: 148, vote_average: 8, poster_path: null, backdrop_path: null };
+                    }
+                    if (url.includes('language=zh-TW')) {
+                        return { id: 634649, title: '蜘蛛人：無家日', overview: '繁體簡介', runtime: 148, vote_average: 8, poster_path: null, backdrop_path: null };
+                    }
+                    return { id: 634649, title: 'Spider-Man: No Way Home', overview: 'en', runtime: 148, vote_average: 8, poster_path: null, backdrop_path: null };
+                }
+                return { results: [] };
+            },
+            getBinary: async () => Buffer.from('x'),
+        };
+        const scraper = makeScraper(store, tmpDir(), transport);
+
+        const summary = await scraper.scrapeLibrary();
+        assert.equal(summary.scraped, 1);
+        const updated = store.getItem(item.id);
+        assert.equal(updated.title, '蜘蛛侠：英雄无归');
+        assert.equal(updated.overview, '简体简介');
+    } finally {
+        store.close();
+    }
+});
