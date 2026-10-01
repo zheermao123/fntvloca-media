@@ -835,6 +835,7 @@ function openSourcesModal() {
                 <div class="mfooter" style="justify-content:flex-start;margin-top:0">
                     <button class="btn" id="srcPick">选择文件夹…</button>
                 </div>
+                <div id="srcPickedList" style="display:none;margin-top:8px;max-height:120px;overflow-y:auto"></div>
             </div>
             <div id="srcWebdavFields" style="display:none">
                 <div class="form-row">
@@ -854,7 +855,7 @@ function openSourcesModal() {
                 <button class="btn primary" id="srcAdd" disabled>添加并扫描</button>
             </div>`;
 
-        let pickedPath = null;
+        let pickedPaths = [];
         let srcType = 'local';
         const pickBtn = panel.querySelector('#srcPick');
         const addBtn = panel.querySelector('#srcAdd');
@@ -862,7 +863,10 @@ function openSourcesModal() {
         const webdavFields = panel.querySelector('#srcWebdavFields');
         const urlInput = panel.querySelector('#srcUrl');
         const refreshAddState = () => {
-            addBtn.disabled = srcType === 'local' ? !pickedPath : urlInput.value.trim().length === 0;
+            addBtn.disabled = srcType === 'local' ? pickedPaths.length === 0 : urlInput.value.trim().length === 0;
+            addBtn.textContent = srcType === 'local' && pickedPaths.length > 1
+                ? `添加并扫描（${pickedPaths.length} 个）`
+                : '添加并扫描';
         };
         panel.querySelectorAll('#srcTypeTabs button').forEach((btn) => {
             btn.addEventListener('click', () => {
@@ -876,19 +880,30 @@ function openSourcesModal() {
         });
         urlInput.addEventListener('input', refreshAddState);
         pickBtn.addEventListener('click', () => {
-            send('library:pick-folder');
+            send('library:pick-folder', { multiple: true });
             onceReply('library:pick-folder-result', (res) => {
-                if (res && res.path) {
-                    pickedPath = res.path;
-                    pickBtn.textContent = pickedPath;
-                    refreshAddState();
+                const paths = res && res.paths && res.paths.length > 0
+                    ? res.paths
+                    : (res && res.path ? [res.path] : []);
+                if (paths.length === 0) {
+                    return;
                 }
+                pickedPaths = paths;
+                pickBtn.textContent = paths.length === 1 ? paths[0] : `已选择 ${paths.length} 个文件夹`;
+                const list = panel.querySelector('#srcPickedList');
+                if (list) {
+                    list.style.display = '';
+                    list.innerHTML = paths
+                        .map((p) => `<div class="smeta" style="padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p)}</div>`)
+                        .join('');
+                }
+                refreshAddState();
             });
         });
         addBtn.addEventListener('click', () => {
             const nameInput = panel.querySelector('#srcName');
             const baseName = nameInput ? nameInput.value : '';
-            if (srcType === 'local' && !pickedPath) {
+            if (srcType === 'local' && pickedPaths.length === 0) {
                 return;
             }
             if (srcType === 'webdav' && !urlInput.value.trim()) {
@@ -896,28 +911,72 @@ function openSourcesModal() {
             }
             const categorySelect = panel.querySelector('#srcCategory');
             const categoryValue = categorySelect ? categorySelect.value : '';
-            const payload = srcType === 'webdav'
-                ? {
-                    type: 'webdav',
-                    name: baseName,
-                    url: urlInput.value.trim(),
-                    username: panel.querySelector('#srcUser').value.trim(),
-                    password: panel.querySelector('#srcPass').value,
-                    category: categoryValue,
-                    private: state.privacy,
+
+            if (srcType === 'webdav' || pickedPaths.length <= 1) {
+                const payload = srcType === 'webdav'
+                    ? {
+                        type: 'webdav',
+                        name: baseName,
+                        url: urlInput.value.trim(),
+                        username: panel.querySelector('#srcUser').value.trim(),
+                        password: panel.querySelector('#srcPass').value,
+                        category: categoryValue,
+                        private: state.privacy,
+                    }
+                    : { type: 'local', name: baseName, rootPath: pickedPaths[0], category: categoryValue, private: state.privacy };
+                send('library:add-source', payload);
+                onceReply('library:source-added', (res) => {
+                    if (res && res.source) {
+                        send('library:scan', { sourceId: res.source.id });
+                        toast('已添加源，开始扫描…');
+                        closeModal();
+                        onceReply('library:scan-done', () => { toast('扫描完成'); refreshAll(); });
+                    } else {
+                        toast((res && res.error) || '添加失败', true);
+                    }
+                });
+                return;
+            }
+
+            // 批量添加：逐个"创建源 → 扫描"（名称由主进程按文件夹名生成）
+            void (async () => {
+                addBtn.disabled = true;
+                const failures = [];
+                let added = 0;
+                for (let i = 0; i < pickedPaths.length; i += 1) {
+                    addBtn.textContent = `添加中 ${i + 1}/${pickedPaths.length}…`;
+                    const created = await new Promise((resolve) => {
+                        onceReply('library:source-added', (res) => resolve(res));
+                        send('library:add-source', {
+                            type: 'local',
+                            name: '',
+                            rootPath: pickedPaths[i],
+                            category: categoryValue,
+                            private: state.privacy,
+                        });
+                    });
+                    if (!created || !created.source) {
+                        failures.push((created && created.error) || pickedPaths[i]);
+                        continue;
+                    }
+                    const scanResult = await new Promise((resolve) => {
+                        onceReply('library:scan-done', (res) => resolve(res));
+                        send('library:scan', { sourceId: created.source.id });
+                    });
+                    if (scanResult && scanResult.error) {
+                        failures.push(scanResult.error);
+                    }
+                    added += 1;
                 }
-                : { type: 'local', name: baseName, rootPath: pickedPath, category: categoryValue, private: state.privacy };
-            send('library:add-source', payload);
-            onceReply('library:source-added', (res) => {
-                if (res && res.source) {
-                    send('library:scan', { sourceId: res.source.id });
-                    toast('已添加源，开始扫描…');
-                    closeModal();
-                    onceReply('library:scan-done', () => { toast('扫描完成'); refreshAll(); });
-                } else {
-                    toast((res && res.error) || '添加失败', true);
-                }
-            });
+                closeModal();
+                toast(
+                    failures.length > 0
+                        ? `已添加 ${added} 个源，${failures.length} 个失败：${failures[0]}`
+                        : `已添加并扫描 ${added} 个源`,
+                    failures.length > 0
+                );
+                refreshAll();
+            })();
         });
         panel.querySelectorAll('.source-item .btn[data-act]').forEach((btn) => {
             btn.addEventListener('click', () => {

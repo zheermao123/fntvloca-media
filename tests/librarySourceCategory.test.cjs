@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-const { guessSourceCategory, categoryOfSource, normalizeCategory } = require('../dest/modules/library/sourceCategory');
+const { guessSourceCategory, categoryOfSource, normalizeCategory, folderNameFromPath } = require('../dest/modules/library/sourceCategory');
 const { createJsonLibraryStore } = require('../dest/modules/library/store');
 const { buildCatalog } = require('../dest/modules/library/catalog');
 const { makeTmpDir } = require('./helpers/tmpRoot.cjs');
@@ -50,4 +50,13 @@ test('buildCatalog filters entries by source content category', () => {
     } finally {
         store.close();
     }
+});
+
+test('folderNameFromPath derives source name from folder path', () => {
+    assert.equal(folderNameFromPath('D:\\Media\\\u673a\u5bc6'), '\u673a\u5bc6');
+    assert.equal(folderNameFromPath('D:/Media/anime/'), 'anime');
+    assert.equal(folderNameFromPath('D:\\'), 'D:');
+    assert.equal(folderNameFromPath('relative-folder'), 'relative-folder');
+    assert.equal(folderNameFromPath(''), '');
+    assert.equal(folderNameFromPath('   '), '');
 });

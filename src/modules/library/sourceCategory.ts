@@ -52,3 +52,14 @@ export function categoryOfSource(source: Pick<SourceConfig, 'name' | 'config'>):
 export function isPrivateSource(source: Pick<SourceConfig, 'config'>): boolean {
     return source.config?.private === '1';
 }
+
+/** 从路径取文件夹名（用于本地源默认命名），兼容 Windows/Unix 与尾斜杠 */
+export function folderNameFromPath(folderPath: string): string {
+    const trimmed = (folderPath ?? '').trim().replace(/[\\/]+$/, '');
+    if (trimmed.length === 0) {
+        return '';
+    }
+    const segments = trimmed.split(/[\\/]/).filter((segment) => segment.length > 0);
+    const name = segments.length > 0 ? segments[segments.length - 1] : '';
+    return name.length > 0 ? name : trimmed;
+}
