@@ -11,7 +11,7 @@ import { ingestScanResult } from '../../../modules/library/ingest';
 import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
 import { buildCatalog } from '../../../modules/library/catalog';
-import { categoryOfSource, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
+import { categoryOfSource, folderNameFromPath, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
 import { isPrivateSource } from '../../../modules/library/sourceCategory';
 import {
     hashPrivacyPassword,
@@ -130,14 +130,18 @@ async function runScan(event: IpcMainEvent, sourceId?: string): Promise<void> {
 function init(): void {
     const store = getLibraryStore();
 
-    registerHandler('library:pick-folder', (event: IpcMainEvent) => {
-        dialog.showOpenDialog(getMainWindow(), { properties: ['openDirectory'] })
+    registerHandler('library:pick-folder', (event: IpcMainEvent, payload?: { multiple?: boolean }) => {
+        const properties: Array<'openDirectory' | 'multiSelections'> = payload?.multiple
+            ? ['openDirectory', 'multiSelections']
+            : ['openDirectory'];
+        dialog.showOpenDialog(getMainWindow(), { properties })
             .then((result) => {
-                reply(event, 'library:pick-folder-result', { path: result.canceled ? null : result.filePaths[0] ?? null });
+                const paths = result.canceled ? [] : result.filePaths;
+                reply(event, 'library:pick-folder-result', { path: paths[0] ?? null, paths });
             })
             .catch((error) => {
                 log.error('[library] 选择目录失败:', error);
-                reply(event, 'library:pick-folder-result', { path: null, error: String(error) });
+                reply(event, 'library:pick-folder-result', { path: null, paths: [], error: String(error) });
             });
     });
 
@@ -173,7 +177,7 @@ function init(): void {
             }
             const created = store.addSource({
                 type: 'local',
-                name: payload?.name?.trim() || rootPath,
+                name: payload?.name?.trim() || folderNameFromPath(rootPath) || rootPath,
                 config: {
                     rootPath,
                     category: normalizeCategory(payload.category) ?? guessSourceCategory(payload.name?.trim() || rootPath, rootPath),
