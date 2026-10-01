@@ -4,6 +4,7 @@ import type { LibraryStore } from './store';
 import type { ScanResult } from './scanner';
 import { buildShowKey, parseVideoName } from './parser';
 import { resolveFolderEpisodeContext, isExtraMaterial, isNoisyNonEpisodeName } from './episodeContext';
+import { folderNameFromPath } from './sourceCategory';
 import { findPosterForVideo, loadNfoMetadata } from './nfo';
 import type { LibraryItem } from './types';
 
@@ -40,6 +41,9 @@ function relativeDirsOf(filePath: string, rootPath: string): string[] {
 }
 
 const naturalCollator = new Intl.Collator(['zh-Hans-CN', 'en'], { numeric: true, sensitivity: 'base' });
+
+/** 隐私源"根剧集"分组键占位（源根散文件合并为以源名命名的剧集） */
+const PRIVATE_ROOT_GROUP = '__root__';
 
 function relativePathOf(filePath: string, rootPath: string): string {
     let relative = filePath;
@@ -110,6 +114,7 @@ export async function ingestScanResult(
     const sourceInfo = store.getSource(sourceId);
     const sourceRoot = sourceInfo?.config.rootPath ?? sourceInfo?.config.url ?? '';
     const isPrivateSource = sourceInfo?.config.private === '1';
+    const privateSourceName = sourceInfo?.name?.trim() || folderNameFromPath(sourceRoot) || '隐私源';
 
     // 隐私源：预先按"第一层文件夹"分组并按相对路径自然排序，确定稳定的集号
     const privateEpisodeIndex = new Map<string, number>();
@@ -119,10 +124,8 @@ export async function ingestScanResult(
             if (parseVideoName(path.basename(scanned.path)).isSample) {
                 continue;
             }
-            const folder = relativeDirsOf(scanned.path, sourceRoot)[0];
-            if (!folder) {
-                continue;
-            }
+            // 源根散文件归入"根剧集"（以源名命名），子文件夹各自成剧
+            const folder = relativeDirsOf(scanned.path, sourceRoot)[0] ?? PRIVATE_ROOT_GROUP;
             const list = groups.get(folder);
             if (list) {
                 list.push(scanned.path);
@@ -151,50 +154,24 @@ export async function ingestScanResult(
             continue;
         }
 
-        // 隐私源：严格按文件夹聚合（第一层文件夹 = 一部"剧集"，标题=文件夹名，集号按文件名自然序），
+        // 隐私源：严格按文件夹聚合（第一层文件夹 = 一部"剧集"，标题=文件夹名，集号按文件名自然序）；
+        // 源根散文件归入"以源名命名"的剧集（一个隐私源 = 一部剧）。
         // 不做命名解析、不做花絮过滤、不读 NFO/不联网刮削；仅使用本地同名封面图。
         if (isPrivateSource) {
             const poster = await findPosterForVideo(file.path).catch(() => null);
             const folder = relativeDirsOf(file.path, sourceRoot)[0] ?? null;
-            if (folder === null) {
-                const title = parsed.title.length > 0 ? parsed.title : originalTitleOf(file.path);
-                const { item, created } = store.upsertItem({
-                    sourceId,
-                    kind: 'movie',
-                    showId: null,
-                    title,
-                    originalTitle: originalTitleOf(file.path),
-                    year: null,
-                    season: null,
-                    episode: null,
-                    episodeTitle: null,
-                    filePath: file.path,
-                    fileSize: file.size,
-                    mtime: file.mtime,
-                    resolution: parsed.resolution,
-                });
-                if (poster) {
-                    store.updateItemMetadata(item.id, { posterPath: poster });
-                }
-                if (created) {
-                    summary.added += 1;
-                } else {
-                    summary.updated += 1;
-                }
-                keptIds.add(item.id);
-                continue;
-            }
-            const groupKey = privateFolderGroupKey(sourceId, folder);
+            const groupName = folder ?? privateSourceName;
+            const groupKey = privateFolderGroupKey(sourceId, folder ?? PRIVATE_ROOT_GROUP);
             let privateShowId = showIdsByGroupKey.get(groupKey) ?? null;
             if (!privateShowId) {
-                privateShowId = store.upsertShow({ sourceId, groupKey, title: folder, year: null }).show.id;
+                privateShowId = store.upsertShow({ sourceId, groupKey, title: groupName, year: null }).show.id;
                 showIdsByGroupKey.set(groupKey, privateShowId);
             }
             const { item, created } = store.upsertItem({
                 sourceId,
                 kind: 'episode',
                 showId: privateShowId,
-                title: folder,
+                title: groupName,
                 originalTitle: originalTitleOf(file.path),
                 year: null,
                 season: 1,
