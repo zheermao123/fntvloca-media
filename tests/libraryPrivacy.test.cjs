@@ -67,10 +67,13 @@ test('private source ingests strictly by folder (natural order, no extras filter
         assert.equal(summary.added, 6, '5 个文件夹内视频 + 1 个根散文件');
 
         const shows = store.listShows(source.id);
-        assert.equal(shows.length, 1);
-        assert.equal(shows[0].title, '剧集一');
+        assert.equal(shows.length, 2, '第一层文件夹 + 源根散文件的"根剧集"');
+        const folderShow = shows.find((s) => s.title === '剧集一');
+        const rootShow = shows.find((s) => s.title === '私密');
+        assert.ok(folderShow, '子文件夹 = 一部剧（标题=文件夹名）');
+        assert.ok(rootShow, '源根散文件 = 以源名命名的剧集');
 
-        const episodes = store.listItems({ showId: shows[0].id }).sort((a, b) => a.episode - b.episode);
+        const episodes = store.listItems({ showId: folderShow.id }).sort((a, b) => a.episode - b.episode);
         assert.equal(episodes.length, 5, '花絮/子目录视频同样入库（严格按文件夹）');
         const episodeOf = (title) => episodes.find((e) => e.episodeTitle === title)?.episode;
         assert.equal(episodes[0].episode, 1);
@@ -82,9 +85,12 @@ test('private source ingests strictly by folder (natural order, no extras filter
         const ep1 = episodes.find((e) => e.episodeTitle === 'ep1');
         assert.ok(ep1 && typeof ep1.posterPath === 'string' && ep1.posterPath.endsWith('folder.jpg'), '本地 folder.jpg 作为封面');
 
-        const loose = store.listItems({ sourceId: source.id, kind: 'movie' });
-        assert.equal(loose.length, 1);
-        assert.equal(loose[0].showId, null);
+        const rootEpisodes = store.listItems({ showId: rootShow.id });
+        assert.equal(rootEpisodes.length, 1);
+        assert.equal(rootEpisodes[0].kind, 'episode');
+        assert.equal(rootEpisodes[0].episode, 1);
+        assert.equal(rootEpisodes[0].episodeTitle, '散装视频');
+        assert.equal(store.listItems({ sourceId: source.id, kind: 'movie' }).length, 0, '隐私源不再产生独立电影卡片');
     } finally {
         store.close();
     }
@@ -162,6 +168,37 @@ test('scraper never touches private sources', async () => {
 
         await assert.rejects(() => scraper.applyShowMatch(show.id, 123), /隐私内容不参与刮削/);
         assert.equal(calls, 0);
+    } finally {
+        store.close();
+    }
+});
+
+test('flat privacy source becomes a single show named after the source', async () => {
+    const root = makeTmpDir('fntv-privacy-flat-');
+    writeTree(root, {
+        '001 \u7247\u6bb5.mp4': 'v',
+        '002 \u7247\u6bb5.mp4': 'v',
+        '010 \u7247\u6bb5.mp4': 'v',
+        'random.mp4': 'v',
+    });
+    const store = createJsonLibraryStore(path.join(root, 'db.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: '\u6bcd\u72d7\u6b22\u6b22', config: { rootPath: root, private: '1' } });
+        const scan = await scanLocalFolder({ rootPath: root });
+        const summary = await ingestScanResult(store, source.id, scan);
+        assert.equal(summary.added, 4);
+
+        const shows = store.listShows(source.id);
+        assert.equal(shows.length, 1, '\u6241\u5e73\u76ee\u5f55 = \u4e00\u90e8\u5267');
+        assert.equal(shows[0].title, '\u6bcd\u72d7\u6b22\u6b22');
+
+        const episodes = store.listItems({ showId: shows[0].id }).sort((a, b) => a.episode - b.episode);
+        assert.equal(episodes.length, 4);
+        assert.deepEqual(episodes.map((e) => e.episode), [1, 2, 3, 4]);
+        const pos = (title) => episodes.find((e) => e.episodeTitle === title)?.episode;
+        assert.ok(pos('001 \u7247\u6bb5') < pos('002 \u7247\u6bb5'));
+        assert.ok(pos('002 \u7247\u6bb5') < pos('010 \u7247\u6bb5'), '\u81ea\u7136\u6392\u5e8f\uff1a010 \u5728 002 \u4e4b\u540e');
+        assert.equal(store.listItems({ sourceId: source.id, kind: 'movie' }).length, 0);
     } finally {
         store.close();
     }
