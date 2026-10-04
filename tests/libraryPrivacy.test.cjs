@@ -203,3 +203,26 @@ test('flat privacy source becomes a single show named after the source', async (
         store.close();
     }
 });
+
+test('continue list is independent per visibility (privacy items must not crowd out public ones)', () => {
+    const { takeContinueByVisibility } = require('../dest/modules/library/privacy');
+    const entries = [];
+    for (let i = 0; i < 20; i += 1) {
+        entries.push({ item: { sourceId: 'priv-src', id: 'priv-' + i } });
+    }
+    for (let i = 0; i < 12; i += 1) {
+        entries.push({ item: { sourceId: 'pub-src', id: 'pub-' + i } });
+    }
+    const privateIds = new Set(['priv-src']);
+
+    const publicView = takeContinueByVisibility(entries, privateIds, false, 20);
+    assert.equal(publicView.length, 12, '\u516c\u5f00\u6a21\u5f0f\u5e94\u62ff\u5230 12 \u6761\u516c\u5f00\u5019\u9009\uff08\u4e0d\u88ab\u9690\u79c1\u5019\u9009\u6324\u6389\uff09');
+    assert.ok(publicView.every((e) => e.item.sourceId === 'pub-src'));
+
+    const privateView = takeContinueByVisibility(entries, privateIds, true, 20);
+    assert.equal(privateView.length, 20, '\u9690\u79c1\u6a21\u5f0f\u53d6\u6700\u8fd1 20 \u6761\u9690\u79c1\u5019\u9009');
+    assert.ok(privateView.every((e) => e.item.sourceId === 'priv-src'));
+
+    const limited = takeContinueByVisibility(entries, privateIds, false, 5);
+    assert.equal(limited.length, 5, '\u9650\u91cf\u751f\u6548');
+});

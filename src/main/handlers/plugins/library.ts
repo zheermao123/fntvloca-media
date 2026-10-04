@@ -14,11 +14,14 @@ import { buildCatalog } from '../../../modules/library/catalog';
 import { categoryOfSource, folderNameFromPath, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
 import { isPrivateSource } from '../../../modules/library/sourceCategory';
 import {
+    CONTINUE_LIST_LIMIT,
+    CONTINUE_SCAN_LIMIT,
     hashPrivacyPassword,
     isPrivacyUnlocked,
     isValidPrivacyPassword,
     PRIVACY_PASSWORD_MIN_LENGTH,
     setPrivacyUnlocked,
+    takeContinueByVisibility,
     verifyPrivacyPassword,
 } from '../../../modules/library/privacy';
 
@@ -410,9 +413,12 @@ function init(): void {
             return;
         }
         const privateIds = privateSourceIds();
-        const entries = store
-            .listContinueWatching(20)
-            .filter(({ item }) => privateIds.has(item.sourceId) === wantPrivate);
+        const entries = takeContinueByVisibility(
+            store.listContinueWatching(CONTINUE_SCAN_LIMIT),
+            privateIds,
+            wantPrivate,
+            CONTINUE_LIST_LIMIT
+        );
         reply(event, 'library:continue-info', { entries });
     });
 
