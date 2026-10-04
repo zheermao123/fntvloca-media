@@ -21,6 +21,24 @@ export function setPrivacyUnlocked(value: boolean): void {
     privacyUnlocked = value;
 }
 
+/** "继续观看"返回条数上限 */
+export const CONTINUE_LIST_LIMIT = 20;
+/** 取数扫描窗口：先多取再按可见性过滤，保证两种模式互不影响（隐私内容不得挤掉公开候选） */
+export const CONTINUE_SCAN_LIMIT = 500;
+
+/**
+ * 按可见性裁剪"继续观看"列表：
+ * 先按可见性过滤，再截取上限 —— 保证隐私模式与正常模式的列表互不影响。
+ */
+export function takeContinueByVisibility<T extends { item: { sourceId: string } }>(
+    entries: readonly T[],
+    privateSourceIds: ReadonlySet<string>,
+    wantPrivate: boolean,
+    limit: number
+): T[] {
+    return entries.filter((entry) => privateSourceIds.has(entry.item.sourceId) === wantPrivate).slice(0, limit);
+}
+
 export function isValidPrivacyPassword(password: unknown): password is string {
     return typeof password === 'string' && password.trim().length >= PRIVACY_PASSWORD_MIN_LENGTH;
 }
