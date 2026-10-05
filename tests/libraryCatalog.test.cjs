@@ -105,3 +105,37 @@ test('movie catalog entries expose watched flag (same source as watched filter)'
         store.close();
     }
 });
+
+test('season catalog entry exposes in-progress percent (consistent with resume/continue)', async () => {
+    const store = newStore('fntv-catalog-progress-');
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        const { show } = store.upsertShow({ sourceId: source.id, groupKey: 'g', title: 'Show P' });
+        const e1 = store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Show P', season: 1, episode: 1, filePath: 'e1' }).item;
+        const e2 = store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Show P', season: 1, episode: 2, filePath: 'e2' }).item;
+
+        let entry = buildCatalog(store, {}).find((e) => e.type === 'season');
+        assert.equal(entry.progressPct, 0, '\u672a\u64ad\u653e\uff1a\u65e0\u8fdb\u5ea6');
+        assert.equal(entry.resumeItemId, e1.id);
+
+        store.recordProgress(e1.id, 600, 9000);
+        await new Promise((r) => setTimeout(r, 5));
+        entry = buildCatalog(store, {}).find((e) => e.type === 'season');
+        assert.equal(entry.progressPct, 7, 'E1 \u8fdb\u884c\u4e2d 600/9000 = 7%');
+        assert.equal(entry.resumeItemId, e1.id);
+        assert.equal(entry.watchedCount, 0);
+
+        store.recordProgress(e2.id, 4500, 9000);
+        entry = buildCatalog(store, {}).find((e) => e.type === 'season');
+        assert.equal(entry.progressPct, 50, '\u6700\u8fd1\u8fdb\u884c\u4e2d\u7684 E2 = 50%');
+        assert.equal(entry.resumeItemId, e2.id, '\u7eed\u64ad\u96c6\u4e0e\u8fdb\u5ea6\u540c\u4e00\u96c6');
+
+        store.setWatched(e1.id, true);
+        store.setWatched(e2.id, true);
+        entry = buildCatalog(store, {}).find((e) => e.type === 'season');
+        assert.equal(entry.progressPct, 0, '\u5168\u770b\u5b8c\uff1a\u8fdb\u5ea6\u5f52 0\uff08\u5df2\u770b\u5b8c\uff09');
+        assert.equal(entry.watchedCount, 2);
+    } finally {
+        store.close();
+    }
+});
