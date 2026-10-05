@@ -437,6 +437,20 @@ function watchedLabel(count, total) {
     return '未看';
 }
 
+/** 季卡片进度条：优先显示"进行中那集"的百分比（与继续观看一致），否则显示已看集比例 */
+function seasonProgressPct(entry) {
+    const ratio = entry.episodeCount > 0 ? Math.round((entry.watchedCount / entry.episodeCount) * 100) : 0;
+    return entry.progressPct > 0 ? entry.progressPct : ratio;
+}
+
+/** 季卡片/列表状态文案：有进行中 → 已看 x/y · 观看中 N%；否则 未看/已看 x/y/已看完 */
+function seasonStatusText(entry) {
+    if (entry.progressPct > 0) {
+        return `已看 ${entry.watchedCount}/${entry.episodeCount} · 观看中 ${entry.progressPct}%`;
+    }
+    return watchedLabel(entry.watchedCount, entry.episodeCount);
+}
+
 function buildSeasonCard(entry) {
     const card = document.createElement('div');
     card.className = 'card';
@@ -447,9 +461,7 @@ function buildSeasonCard(entry) {
         badges.push(`<span class="badge">第 ${entry.season} 季</span>`);
     }
     badges.push(`<span class="badge" style="top:${showSeasonLabel ? 32 : 8}px">全 ${entry.episodeCount} 集</span>`);
-    const progressPct = entry.episodeCount > 0
-        ? Math.round((entry.watchedCount / entry.episodeCount) * 100)
-        : 0;
+    const progressPct = seasonProgressPct(entry);
     const progressHtml = progressPct > 0
         ? `<div class="poster-prog"><i style="width:${progressPct}%"></i></div>`
         : '';
@@ -461,7 +473,7 @@ function buildSeasonCard(entry) {
             <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
         </div>
         <div class="name">${escapeHtml(entry.show.title)}</div>
-        <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}${watchedLabel(entry.watchedCount, entry.episodeCount)}`)}</div>`;
+        <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}${seasonStatusText(entry)}`)}</div>`;
     const overlay = card.querySelector('.poster-wrap');
     overlay.addEventListener('click', (e) => {
         if (e.target.closest('.play-overlay-btn')) {
@@ -481,7 +493,7 @@ function buildSeasonListRow(entry) {
         <span class="ltitle">${escapeHtml(entry.show.title)}${showSeasonLabel ? ` 第 ${entry.season} 季` : ''}</span>
         <span class="lmeta">剧集</span>
         <span class="lmeta">${escapeHtml(entry.show.year ?? '')}</span>
-        <span class="lmeta">${watchedLabel(entry.watchedCount, entry.episodeCount)}</span>`;
+        <span class="lmeta">${seasonStatusText(entry)}</span>`;
     row.addEventListener('click', () => openSeasonDetail(entry.show.id, entry.season));
     return row;
 }
@@ -519,6 +531,15 @@ function renderShowDetail(data) {
         const firstUnwatched = episodes.find((ep) => !(states[ep.id] && states[ep.id].watched));
         resumeId = ((firstUnwatched || episodes[0] || {}).id) || null;
     }
+    const resumeState = resumeId ? states[resumeId] : null;
+    const resumePct =
+        resumeState && !resumeState.watched && resumeState.durationTs > 0 && resumeState.positionTs > 0
+            ? Math.min(100, Math.round((resumeState.positionTs / resumeState.durationTs) * 100))
+            : 0;
+    const seasonStatus =
+        resumePct > 0
+            ? `已看 ${watchedCount}/${episodes.length} · 观看中 ${resumePct}%`
+            : watchedLabel(watchedCount, episodes.length);
 
     const seasons = [...new Set(episodes.map((ep) => ep.season ?? 0))].sort((a, b) => a - b);
     let episodesHtml = '';
@@ -528,11 +549,16 @@ function renderShowDetail(data) {
             .filter((ep) => (ep.season ?? 0) === season)
             .map((ep) => {
                 const st = states[ep.id] || {};
+                const rowPct =
+                    !st.watched && st.durationTs > 0 && st.positionTs > 0
+                        ? Math.min(100, Math.round((st.positionTs / st.durationTs) * 100))
+                        : 0;
+                const stateText = st.watched ? '✓ 已看' : (rowPct > 0 ? `已看 ${rowPct}%` : '');
                 return `
                 <div class="ep-row" data-ep="${ep.id}">
                     <span class="epnum">E${ep.episode ?? 0}</span>
                     <span class="eptitle">${escapeHtml(ep.episodeTitle || `第 ${ep.episode ?? 0} 集`)}</span>
-                    <span class="epstate">${st.watched ? '✓ 已看' : ''}</span>
+                    <span class="epstate">${stateText}</span>
                 </div>`;
             })
             .join('');
@@ -545,7 +571,7 @@ function renderShowDetail(data) {
             <div class="dmeta">
                 ${show.year ? `<span>${escapeHtml(show.year)}</span>` : ''}
                 <span>全 ${episodes.length} 集</span>
-                <span>${watchedLabel(watchedCount, episodes.length)}</span>
+                <span>${seasonStatus}</span>
             </div>
             <div class="doverview">${escapeHtml(show.overview || '暂无简介，可通过刮削获取更多信息')}</div>
             <div class="dbtns">

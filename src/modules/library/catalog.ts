@@ -24,6 +24,8 @@ export type SeasonCatalogEntry = {
     seasonCount: number;
     episodeCount: number;
     watchedCount: number;
+    /** 续播集的播放进度（0-100；与"继续观看"同口径，用于卡片/详情展示"观看中 N%"） */
+    progressPct: number;
     posterPath: string | null;
     resumeItemId: string;
     addedAt: number;
@@ -188,6 +190,12 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
                     (max, e) => Math.max(max, states.get(e.id)?.lastPlayedAt ?? 0),
                     0
                 );
+                const resumeEpisode = pickResume(seasonEpisodes, states);
+                const resumeState = states.get(resumeEpisode.id);
+                const progressPct =
+                    resumeState && !resumeState.watched && resumeState.positionTs > 0 && resumeState.durationTs > 0
+                        ? Math.min(100, Math.round((resumeState.positionTs / resumeState.durationTs) * 100))
+                        : 0;
                 entries.push({
                     type: 'season',
                     show,
@@ -195,8 +203,9 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
                     seasonCount,
                     episodeCount: seasonEpisodes.length,
                     watchedCount,
+                    progressPct,
                     posterPath,
-                    resumeItemId: pickResume(seasonEpisodes, states).id,
+                    resumeItemId: resumeEpisode.id,
                     addedAt,
                     lastPlayedAt,
                 });
