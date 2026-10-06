@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { SqliteDatabase, SqliteStatement } from './sqliteModule';
 import type {
+    FavoriteType,
     LibraryItem,
     ListItemQuery,
     MetadataSource,
@@ -79,6 +80,12 @@ CREATE TABLE IF NOT EXISTS skip_info (
   key TEXT PRIMARY KEY,
   skip_start REAL NOT NULL DEFAULT 0,
   skip_end REAL NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS favorites (
+  target_key TEXT PRIMARY KEY,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS seasons (
   show_id TEXT NOT NULL,
@@ -282,6 +289,11 @@ export class SqliteLibraryStore implements LibraryStore {
     removeSource(id: string): void {
         this.assertOpen();
         this.stmt(`DELETE FROM watch_state WHERE item_id IN (SELECT id FROM items WHERE source_id = ?)`).run(id);
+        this.stmt(
+            `DELETE FROM favorites WHERE
+               (target_type = 'movie' AND target_id IN (SELECT id FROM items WHERE source_id = ?))
+               OR (target_type = 'show' AND target_id IN (SELECT id FROM shows WHERE source_id = ?))`
+        ).run(id, id);
         this.stmt(`DELETE FROM skip_info WHERE key IN (SELECT id FROM items WHERE source_id = ?)
             OR key IN (SELECT id FROM shows WHERE source_id = ?)`).run(id, id);
         this.stmt(`DELETE FROM seasons WHERE show_id IN (SELECT id FROM shows WHERE source_id = ?)`).run(id);
@@ -575,10 +587,18 @@ export class SqliteLibraryStore implements LibraryStore {
         for (const id of toRemove) {
             this.stmt('DELETE FROM watch_state WHERE item_id = ?').run(id);
             this.stmt('DELETE FROM skip_info WHERE key = ?').run(id);
+            this.stmt(`DELETE FROM favorites WHERE target_type = 'movie' AND target_id = ?`).run(id);
             this.stmt('DELETE FROM items WHERE id = ?').run(id);
         }
         this.stmt(
             `DELETE FROM skip_info WHERE key IN (
+               SELECT s.id FROM shows s
+               LEFT JOIN items i ON i.show_id = s.id
+               WHERE s.source_id = ? AND i.id IS NULL
+             )`
+        ).run(sourceId);
+        this.stmt(
+            `DELETE FROM favorites WHERE target_type = 'show' AND target_id IN (
                SELECT s.id FROM shows s
                LEFT JOIN items i ON i.show_id = s.id
                WHERE s.source_id = ? AND i.id IS NULL
@@ -595,6 +615,30 @@ export class SqliteLibraryStore implements LibraryStore {
             `DELETE FROM shows WHERE source_id = ? AND id NOT IN (SELECT DISTINCT show_id FROM items WHERE show_id IS NOT NULL)`
         ).run(sourceId);
         return toRemove;
+    }
+
+    setFavorite(type: FavoriteType, id: string, favorite: boolean): void {
+        this.assertOpen();
+        const key = `${type}:${id}`;
+        if (favorite) {
+            this.stmt(
+                'INSERT INTO favorites (target_key, target_type, target_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(target_key) DO NOTHING'
+            ).run(key, type, id, Date.now());
+        } else {
+            this.stmt('DELETE FROM favorites WHERE target_key = ?').run(key);
+        }
+    }
+
+    getFavorite(type: FavoriteType, id: string): boolean {
+        this.assertOpen();
+        return this.stmt('SELECT 1 FROM favorites WHERE target_key = ?').get(`${type}:${id}`) !== undefined;
+    }
+
+    listFavoriteKeys(): string[] {
+        this.assertOpen();
+        return (this.stmt('SELECT target_key FROM favorites').all() as Array<{ target_key: string }>).map(
+            (row) => row.target_key
+        );
     }
 
     getWatchState(itemId: string): WatchState | null {

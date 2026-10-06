@@ -100,6 +100,11 @@
             background: rgba(0,0,0,0.65); color: #fff; backdrop-filter: blur(4px);
         }
         .badge.watched { top: auto; bottom: 8px; right: 8px; background: var(--accent-soft); color: var(--accent); }
+        .badge.star { left: 8px; right: auto; font-size: 13px; padding: 1px 6px; cursor: pointer; color: rgba(255,255,255,0.5); }
+        .badge.star.on { color: #ffd54f; }
+        .badge.star:hover { color: #ffd54f; background: rgba(0,0,0,0.8); }
+        .lstar { cursor: pointer; color: rgba(255,255,255,0.3); flex: 0 0 auto; }
+        .lstar.on { color: #ffd54f; }
         .privacy-menu { position: relative; display: flex; align-items: center; margin-left: -14px; }
         .privacy-caret { padding: 4px 9px; background: none; border: none; border-radius: 6px; color: var(--text-dim); font-size: 15px; line-height: 1; cursor: pointer; }
         .privacy-caret:hover { color: var(--text); background: rgba(255,255,255,0.08); }
@@ -240,6 +245,11 @@
         <option value="unwatched">未看</option>
         <option value="watched">已看</option>
     </select>
+    <select id="favFilter" class="btn">
+        <option value="all">收藏状态</option>
+        <option value="fav">已收藏</option>
+        <option value="unfav">未收藏</option>
+    </select>
     <select id="sortSelect" class="btn">
         <option value="added">最近添加</option>
         <option value="title">标题</option>
@@ -292,6 +302,7 @@ const state = {
     query: '',
     category: 'all',
     privacy: false,
+    favorite: 'all',
     watched: 'all',
     sort: 'added',
     view: 'grid',
@@ -388,6 +399,7 @@ async function loadItems() {
     const payload = {
         query: state.query,
         watched: state.watched === 'all' ? undefined : state.watched === 'watched',
+        favorite: state.favorite === 'all' ? undefined : state.favorite === 'fav',
         sort: state.sort,
         limit: 600,
         private: state.privacy,
@@ -418,11 +430,11 @@ function renderItems() {
 
     if (state.view === 'grid') {
         grid.replaceChildren(...state.entries.map((entry) =>
-            entry.type === 'season' ? buildSeasonCard(entry) : buildCard(entry.item, entry.watched)
+            entry.type === 'season' ? buildSeasonCard(entry) : buildCard(entry.item, entry.watched, entry.favorite)
         ));
     } else {
         list.replaceChildren(...state.entries.map((entry) =>
-            entry.type === 'season' ? buildSeasonListRow(entry) : buildListRow(entry.item, entry.watched)
+            entry.type === 'season' ? buildSeasonListRow(entry) : buildListRow(entry.item, entry.watched, entry.favorite)
         ));
     }
 }
@@ -451,6 +463,22 @@ function seasonStatusText(entry) {
     return watchedLabel(entry.watchedCount, entry.episodeCount);
 }
 
+/* ---------- 收藏 ---------- */
+function toggleFavorite(type, id, favorite, onDone) {
+    send('library:set-favorite', { type, id, favorite });
+    onceReply('library:favorite-set', (res) => {
+        if (res && res.success) {
+            toast(favorite ? '已收藏' : '已取消收藏');
+            if (onDone) {
+                onDone();
+            }
+            loadItems();
+        } else {
+            toast((res && res.error) || '操作失败', true);
+        }
+    });
+}
+
 function buildSeasonCard(entry) {
     const card = document.createElement('div');
     card.className = 'card';
@@ -465,10 +493,12 @@ function buildSeasonCard(entry) {
     const progressHtml = progressPct > 0
         ? `<div class="poster-prog"><i style="width:${progressPct}%"></i></div>`
         : '';
+    const starHtml = `<button class="badge star${entry.favorite ? ' on' : ''}" title="收藏">★</button>`;
     card.innerHTML = `
         <div class="poster-wrap">
             ${posterImgHtml(entry.posterPath, entry.show.title)}
             ${badges.join('')}
+            ${starHtml}
             ${progressHtml}
             <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
         </div>
@@ -476,6 +506,11 @@ function buildSeasonCard(entry) {
         <div class="sub">${escapeHtml(`${showSeasonLabel ? '第 ' + entry.season + ' 季 · ' : ''}${seasonStatusText(entry)}`)}</div>`;
     const overlay = card.querySelector('.poster-wrap');
     overlay.addEventListener('click', (e) => {
+        if (e.target.closest('.badge.star')) {
+            e.stopPropagation();
+            toggleFavorite('show', entry.show.id, !entry.favorite);
+            return;
+        }
         if (e.target.closest('.play-overlay-btn')) {
             playItem(entry.resumeItemId);
         } else {
@@ -490,10 +525,15 @@ function buildSeasonListRow(entry) {
     row.className = 'lrow';
     const showSeasonLabel = entry.seasonCount > 1 || entry.season !== 1;
     row.innerHTML = `
+        <span class="lstar${entry.favorite ? ' on' : ''}" title="收藏">★</span>
         <span class="ltitle">${escapeHtml(entry.show.title)}${showSeasonLabel ? ` 第 ${entry.season} 季` : ''}</span>
         <span class="lmeta">剧集</span>
         <span class="lmeta">${escapeHtml(entry.show.year ?? '')}</span>
         <span class="lmeta">${seasonStatusText(entry)}</span>`;
+    row.querySelector('.lstar').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFavorite('show', entry.show.id, !entry.favorite);
+    });
     row.addEventListener('click', () => openSeasonDetail(entry.show.id, entry.season));
     return row;
 }
@@ -576,6 +616,7 @@ function renderShowDetail(data) {
             <div class="doverview">${escapeHtml(show.overview || '暂无简介，可通过刮削获取更多信息')}</div>
             <div class="dbtns">
                 <button class="btn primary" id="showPlay">▶ 播放${resumeId ? '（续播）' : ''}</button>
+                <button class="btn" id="showFavorite">${data.favorite ? '取消收藏' : '收藏'}</button>
                 <button class="btn danger" id="showClose">关闭</button>
             </div>
             <div class="episodes">${episodesHtml}</div>
@@ -585,6 +626,16 @@ function renderShowDetail(data) {
         if (resumeId) {
             playItem(resumeId);
         }
+    });
+    panel.querySelector('#showFavorite').addEventListener('click', () => {
+        const next = !data.favorite;
+        toggleFavorite('show', show.id, next, () => {
+            data.favorite = next;
+            const btn = panel.querySelector('#showFavorite');
+            if (btn) {
+                btn.textContent = next ? '取消收藏' : '收藏';
+            }
+        });
     });
     panel.querySelector('#showClose').addEventListener('click', closeDetail);
     panel.querySelectorAll('.ep-row').forEach((row) => {
@@ -597,7 +648,7 @@ function renderShowDetail(data) {
     });
 }
 
-function buildCard(item, watched) {
+function buildCard(item, watched, favorite) {
     const card = document.createElement('div');
     card.className = 'card';
     const badges = [];
@@ -616,6 +667,7 @@ function buildCard(item, watched) {
         <div class="poster-wrap">
             ${posterImgHtml(item.posterPath, item.title)}
             ${badges.join('')}
+            <button class="badge star${favorite ? ' on' : ''}" title="收藏">★</button>
             ${progressHtml}
             <div class="play-overlay"><button class="play-overlay-btn" title="播放">▶</button></div>
         </div>
@@ -623,6 +675,11 @@ function buildCard(item, watched) {
         <div class="sub">${escapeHtml([item.year, item.resolution, statusLabel].filter(Boolean).join(' · '))}</div>`;
     const overlay = card.querySelector('.poster-wrap');
     overlay.addEventListener('click', (e) => {
+        if (e.target.closest('.badge.star')) {
+            e.stopPropagation();
+            toggleFavorite('movie', item.id, !favorite);
+            return;
+        }
         if (e.target.closest('.play-overlay-btn')) {
             playItem(item.id);
         } else {
@@ -632,17 +689,22 @@ function buildCard(item, watched) {
     return card;
 }
 
-function buildListRow(item, watched) {
+function buildListRow(item, watched, favorite) {
     const row = document.createElement('div');
     row.className = 'lrow';
     const progressPct = state.continueMap.get(item.id);
     const statusLabel = watched ? '已看' : (progressPct ? `已看 ${progressPct}%` : '未看');
     row.innerHTML = `
+        <span class="lstar${favorite ? ' on' : ''}" title="收藏">★</span>
         <span class="ltitle">${escapeHtml(displayTitle(item))}</span>
         <span class="lmeta">${escapeHtml(item.kind === 'movie' ? '电影' : `S${item.season ?? 0}E${item.episode ?? 0}`)}</span>
         <span class="lmeta">${escapeHtml(item.year ?? '')}</span>
         <span class="lmeta">${escapeHtml(item.resolution ? item.resolution.toUpperCase() : '')}</span>
         <span class="lmeta">${escapeHtml(statusLabel)}</span>`;
+    row.querySelector('.lstar').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFavorite('movie', item.id, !favorite);
+    });
     row.addEventListener('click', () => playItem(item.id));
     return row;
 }
@@ -695,6 +757,7 @@ function renderDetail(data) {
             <div class="dbtns">
                 <button class="btn primary" id="detailPlay">▶ 播放${progressPct > 0 && !watch.watched ? '（续播）' : ''}</button>
                 <button class="btn" id="detailWatched">${watch && watch.watched ? '标记未看' : '标记已看'}</button>
+                <button class="btn" id="detailFavorite">${data.favorite ? '取消收藏' : '收藏'}</button>
                 ${state.privacy ? '' : '<button class="btn" id="detailRescrape">重新刮削</button><button class="btn" id="detailManualMatch">手动匹配</button>'}
                 <button class="btn danger" id="detailClose">关闭</button>
             </div>
@@ -718,6 +781,16 @@ function renderDetail(data) {
             closeDetail();
             loadItems();
             loadContinue();
+        });
+    });
+    panel.querySelector('#detailFavorite').addEventListener('click', () => {
+        const next = !data.favorite;
+        toggleFavorite('movie', item.id, next, () => {
+            data.favorite = next;
+            const btn = panel.querySelector('#detailFavorite');
+            if (btn) {
+                btn.textContent = next ? '取消收藏' : '收藏';
+            }
         });
     });
     const rescrapeBtn = panel.querySelector('#detailRescrape');
@@ -1314,6 +1387,10 @@ function initEvents() {
 
     document.getElementById('watchFilter').addEventListener('change', (e) => {
         state.watched = e.target.value;
+        loadItems();
+    });
+    document.getElementById('favFilter').addEventListener('change', (e) => {
+        state.favorite = e.target.value;
         loadItems();
     });
     document.getElementById('sortSelect').addEventListener('change', (e) => {

@@ -2,6 +2,7 @@ import { mkdirSync } from 'fs';
 import path from 'path';
 import * as log from '../logger';
 import type {
+    FavoriteType,
     ItemMetadataPatch,
     LibraryItem,
     ListItemQuery,
@@ -60,6 +61,10 @@ export type LibraryStore = {
     setWatched(itemId: string, watched: boolean): void;
     listContinueWatching(limit?: number): WatchedEntry[];
     listHistory(limit?: number): WatchedEntry[];
+
+    setFavorite(type: FavoriteType, id: string, favorite: boolean): void;
+    getFavorite(type: FavoriteType, id: string): boolean;
+    listFavoriteKeys(): string[];
 
     getSkipInfo(key: string): SkipInfo | null;
     setSkipInfo(key: string, skipStart: number, skipEnd: number): void;

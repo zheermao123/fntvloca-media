@@ -11,6 +11,8 @@ export type CatalogQuery = {
      */
     visibility?: 'public' | 'private';
     watched?: boolean;
+    /** 收藏筛选：true=仅已收藏（电影=条目收藏，剧集=整剧收藏），false=仅未收藏 */
+    favorite?: boolean;
     query?: string;
     sort?: 'added' | 'title' | 'year' | 'recentPlayed';
     limit?: number;
@@ -24,6 +26,8 @@ export type SeasonCatalogEntry = {
     seasonCount: number;
     episodeCount: number;
     watchedCount: number;
+    /** 是否已收藏（整部剧收藏，挂 showId；该剧所有季卡同步） */
+    favorite: boolean;
     /** 续播集的播放进度（0-100；与"继续观看"同口径，用于卡片/详情展示"观看中 N%"） */
     progressPct: number;
     posterPath: string | null;
@@ -37,6 +41,8 @@ export type MovieCatalogEntry = {
     item: LibraryItem;
     /** 是否已看完（与"已看/未看"筛选同一数据源） */
     watched: boolean;
+    /** 是否已收藏（电影挂 itemId） */
+    favorite: boolean;
     addedAt: number;
     lastPlayedAt: number;
 };
@@ -100,6 +106,7 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
         }
     }
     const visibility = query.visibility ?? 'public';
+    const favoriteKeys = new Set(store.listFavoriteKeys());
     const matchesVisibility = (sourceId: string | null | undefined): boolean => {
         const isPrivate = typeof sourceId === 'string' && privateSourceIds.has(sourceId);
         return visibility === 'private' ? isPrivate : !isPrivate;
@@ -127,6 +134,7 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
                 type: 'movie',
                 item,
                 watched: state?.watched ?? false,
+                favorite: favoriteKeys.has(`movie:${item.id}`),
                 addedAt: item.addedAt,
                 lastPlayedAt: state?.lastPlayedAt ?? 0,
             });
@@ -203,6 +211,7 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
                     seasonCount,
                     episodeCount: seasonEpisodes.length,
                     watchedCount,
+                    favorite: favoriteKeys.has(`show:${show.id}`),
                     progressPct,
                     posterPath,
                     resumeItemId: resumeEpisode.id,
@@ -213,8 +222,11 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
         }
     }
 
+    const visibleEntries =
+        query.favorite === undefined ? entries : entries.filter((entry) => entry.favorite === query.favorite);
+
     const sort = query.sort ?? 'added';
-    entries.sort((a, b) => {
+    visibleEntries.sort((a, b) => {
         switch (sort) {
             case 'title':
                 return entryTitle(a).localeCompare(entryTitle(b), 'zh', { sensitivity: 'base' });
@@ -228,5 +240,5 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
         }
     });
 
-    return query.limit !== undefined ? entries.slice(0, query.limit) : entries;
+    return query.limit !== undefined ? visibleEntries.slice(0, query.limit) : visibleEntries;
 }

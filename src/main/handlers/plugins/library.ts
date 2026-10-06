@@ -332,6 +332,12 @@ function init(): void {
                 item,
                 show,
                 watchState: store.getWatchState(item.id),
+                favorite:
+                    item.kind === 'movie'
+                        ? store.getFavorite('movie', item.id)
+                        : item.showId
+                          ? store.getFavorite('show', item.showId)
+                          : false,
                 episodes: item.kind === 'episode' ? siblings : [],
                 versions: item.kind === 'movie' ? siblings : [],
             });
@@ -354,6 +360,7 @@ function init(): void {
                 category: wantsPrivate ? undefined : (normalizeCategory(payload.category) ?? undefined),
                 visibility: wantsPrivate ? 'private' : 'public',
                 watched: payload.watched === true || payload.watched === false ? payload.watched : undefined,
+                favorite: payload.favorite === true || payload.favorite === false ? payload.favorite : undefined,
                 query: typeof payload.query === 'string' ? payload.query : undefined,
                 sort: sort === 'title' || sort === 'year' || sort === 'recentPlayed' || sort === 'added' ? sort : 'added',
                 limit: typeof payload.limit === 'number' ? payload.limit : undefined,
@@ -397,6 +404,7 @@ function init(): void {
                 show,
                 season: seasonFilter,
                 seasonInfo: seasonFilter !== null ? store.getSeason(show.id, seasonFilter) : null,
+                favorite: store.getFavorite('show', show.id),
                 episodes,
                 states,
             });
@@ -431,6 +439,45 @@ function init(): void {
             reply(event, 'library:watched-set', { success: false, error: String(error) });
         }
     });
+
+    registerHandler(
+        'library:set-favorite',
+        (event: IpcMainEvent, payload: { type?: string; id?: string; favorite?: boolean }) => {
+            try {
+                const type = payload?.type === 'movie' || payload?.type === 'show' ? payload.type : null;
+                const id = payload?.id ?? '';
+                if (!type || !id) {
+                    throw new Error('参数无效');
+                }
+                // 隐私门禁：保持与详情/播放一致的可见性校验，防 id 探测
+                if (type === 'movie') {
+                    const item = store.getItem(id);
+                    if (!item) {
+                        throw new Error('条目不存在');
+                    }
+                    if (itemIsPrivate(item.sourceId) && !isPrivacyUnlocked()) {
+                        throw new Error('需要解锁隐私模式');
+                    }
+                } else {
+                    const show = store.getShow(id);
+                    if (!show) {
+                        throw new Error('剧集不存在');
+                    }
+                    if (itemIsPrivate(show.sourceId) && !isPrivacyUnlocked()) {
+                        throw new Error('需要解锁隐私模式');
+                    }
+                }
+                const favorite = payload?.favorite !== false;
+                store.setFavorite(type, id, favorite);
+                reply(event, 'library:favorite-set', { success: true, favorite });
+            } catch (error) {
+                reply(event, 'library:favorite-set', {
+                    success: false,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+    );
 
     registerHandler('library:scrape', (event: IpcMainEvent, payload?: { force?: boolean }) => {
         if (scraping) {

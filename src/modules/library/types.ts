@@ -136,3 +136,14 @@ export type WatchedEntry = {
 };
 
 export const AUTO_WATCH_THRESHOLD = 0.95;
+
+/** 收藏目标类型：电影挂条目 id，剧集挂剧集组 id（整部剧） */
+export type FavoriteType = 'movie' | 'show';
+
+export type FavoriteEntry = {
+    /** 'movie:{itemId}' 或 'show:{showId}' */
+    targetKey: string;
+    targetType: FavoriteType;
+    targetId: string;
+    createdAt: number;
+};
