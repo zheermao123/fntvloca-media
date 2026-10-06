@@ -139,3 +139,39 @@ test('season catalog entry exposes in-progress percent (consistent with resume/c
         store.close();
     }
 });
+
+test('catalog exposes favorite and filters by it (season inherits show favorite)', () => {
+    const store = newStore('fntv-catalog-fav-');
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        const m1 = store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'Fav Movie', filePath: 'm1' }).item;
+        const m2 = store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'Plain Movie', filePath: 'm2' }).item;
+        const { show } = store.upsertShow({ sourceId: source.id, groupKey: 'g', title: 'Fav Show' });
+        store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Fav Show', season: 1, episode: 1, filePath: 'e1' });
+        store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Fav Show', season: 2, episode: 1, filePath: 'e2' });
+
+        let entries = buildCatalog(store, {});
+        assert.equal(entries.find((e) => e.type === 'movie' && e.item.id === m1.id).favorite, false);
+        assert.ok(entries.filter((e) => e.type === 'season').every((e) => e.favorite === false));
+
+        store.setFavorite('movie', m1.id, true);
+        store.setFavorite('show', show.id, true);
+
+        entries = buildCatalog(store, {});
+        assert.equal(entries.find((e) => e.type === 'movie' && e.item.id === m1.id).favorite, true);
+        assert.equal(entries.find((e) => e.type === 'movie' && e.item.id === m2.id).favorite, false);
+        const seasons = entries.filter((e) => e.type === 'season');
+        assert.equal(seasons.length, 2);
+        assert.ok(seasons.every((e) => e.favorite === true), '\u6574\u5267\u6536\u85cf\uff1a\u6240\u6709\u5b63\u5361\u540c\u6b65');
+
+        const favOnly = buildCatalog(store, { favorite: true });
+        assert.equal(favOnly.length, 3, '1 \u90e8\u7535\u5f71 + 2 \u5f20\u5b63\u5361');
+        assert.ok(favOnly.every((e) => e.favorite));
+
+        const unfavOnly = buildCatalog(store, { favorite: false });
+        assert.equal(unfavOnly.length, 1);
+        assert.equal(unfavOnly[0].item.id, m2.id);
+    } finally {
+        store.close();
+    }
+});

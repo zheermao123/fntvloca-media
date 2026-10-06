@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import type {
+    FavoriteEntry,
+    FavoriteType,
     ItemMetadataPatch,
     LibraryItem,
     ListItemQuery,
@@ -28,10 +30,11 @@ type JsonDbShape = {
     items: LibraryItem[];
     watchStates: Record<string, WatchState>;
     skipInfos: Record<string, SkipInfo>;
+    favorites: Record<string, FavoriteEntry>;
 };
 
 function emptyDb(): JsonDbShape {
-    return { version: 1, sources: [], shows: [], seasons: [], items: [], watchStates: {}, skipInfos: {} };
+    return { version: 1, sources: [], shows: [], seasons: [], items: [], watchStates: {}, skipInfos: {}, favorites: {} };
 }
 
 function sanitizeDb(raw: unknown): JsonDbShape {
@@ -47,6 +50,7 @@ function sanitizeDb(raw: unknown): JsonDbShape {
         items: Array.isArray(data.items) ? data.items : [],
         watchStates: data.watchStates !== null && typeof data.watchStates === 'object' ? data.watchStates : {},
         skipInfos: data.skipInfos !== null && typeof data.skipInfos === 'object' ? data.skipInfos : {},
+        favorites: data.favorites !== null && typeof data.favorites === 'object' ? data.favorites : {},
     };
 }
 
@@ -155,9 +159,11 @@ export class JsonLibraryStore implements LibraryStore {
         for (const item of removedItems) {
             delete this.data.watchStates[item.id];
             delete this.data.skipInfos[item.id];
+            delete this.data.favorites[`movie:${item.id}`];
         }
         for (const showId of removedShowIds) {
             delete this.data.skipInfos[showId];
+            delete this.data.favorites[`show:${showId}`];
         }
         this.markDirty();
     }
@@ -405,12 +411,14 @@ export class JsonLibraryStore implements LibraryStore {
         for (const id of removedIds) {
             delete this.data.watchStates[id];
             delete this.data.skipInfos[id];
+            delete this.data.favorites[`movie:${id}`];
         }
         const referencedShowIds = new Set(this.data.items.map((i) => i.showId).filter((v): v is string => v !== null));
         const orphanShows = this.data.shows.filter((s) => s.sourceId === sourceId && !referencedShowIds.has(s.id));
         const orphanShowIds = new Set(orphanShows.map((s) => s.id));
         for (const show of orphanShows) {
             delete this.data.skipInfos[show.id];
+            delete this.data.favorites[`show:${show.id}`];
         }
         this.data.seasons = this.data.seasons.filter((s) => !orphanShowIds.has(s.showId));
         this.data.shows = this.data.shows.filter(
@@ -418,6 +426,30 @@ export class JsonLibraryStore implements LibraryStore {
         );
         this.markDirty();
         return toRemove.map((i) => i.id);
+    }
+
+    setFavorite(type: FavoriteType, id: string, favorite: boolean): void {
+        this.assertOpen();
+        const key = `${type}:${id}`;
+        if (favorite) {
+            if (!this.data.favorites[key]) {
+                this.data.favorites[key] = { targetKey: key, targetType: type, targetId: id, createdAt: Date.now() };
+                this.markDirty();
+            }
+        } else if (this.data.favorites[key]) {
+            delete this.data.favorites[key];
+            this.markDirty();
+        }
+    }
+
+    getFavorite(type: FavoriteType, id: string): boolean {
+        this.assertOpen();
+        return Boolean(this.data.favorites[`${type}:${id}`]);
+    }
+
+    listFavoriteKeys(): string[] {
+        this.assertOpen();
+        return Object.keys(this.data.favorites);
     }
 
     getWatchState(itemId: string): WatchState | null {

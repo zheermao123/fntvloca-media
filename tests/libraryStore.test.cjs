@@ -169,6 +169,83 @@ function runStoreSuite(label, openStore) {
         }
     });
 
+    test(`[${label}] favorites: set/get/list, idempotent, cascade on file removal & source removal`, () => {
+        const dir = tmpDir();
+        const store = openStore(dir);
+        try {
+            const source = store.addSource({ type: 'local', name: 'S' });
+            const movie = store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'M', filePath: 'm' }).item;
+            const show = store.upsertShow({ sourceId: source.id, groupKey: 'g', title: 'Show' }).show;
+            const ep = store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Show', season: 1, episode: 1, filePath: 'e1' }).item;
+
+            assert.equal(store.getFavorite('movie', movie.id), false);
+            assert.equal(store.getFavorite('show', show.id), false);
+            assert.deepEqual(store.listFavoriteKeys(), []);
+
+            store.setFavorite('movie', movie.id, true);
+            store.setFavorite('movie', movie.id, true);
+            store.setFavorite('show', show.id, true);
+            assert.equal(store.getFavorite('movie', movie.id), true);
+            assert.equal(store.getFavorite('show', show.id), true);
+            assert.deepEqual(store.listFavoriteKeys().sort(), [`movie:${movie.id}`, `show:${show.id}`].sort());
+
+            // 文件仍在（keepIds 含两者）→ 重扫不丢收藏
+            assert.deepEqual(store.removeItemsExcept(source.id, [movie.id, ep.id]), []);
+            assert.equal(store.getFavorite('movie', movie.id), true);
+            assert.equal(store.getFavorite('show', show.id), true);
+
+            // 电影文件消失 → 电影收藏清除；剧集仍在 → 剧集收藏保留
+            assert.deepEqual(store.removeItemsExcept(source.id, [ep.id]), [movie.id]);
+            assert.equal(store.getFavorite('movie', movie.id), false);
+            assert.equal(store.getFavorite('show', show.id), true);
+
+            // 剧集所有文件消失 → 剧集组成孤儿 → 剧集收藏清除
+            assert.deepEqual(store.removeItemsExcept(source.id, []), [ep.id]);
+            assert.equal(store.getFavorite('show', show.id), false);
+            assert.deepEqual(store.listFavoriteKeys(), []);
+
+            // 取消收藏幂等
+            store.setFavorite('movie', movie.id, false);
+            assert.equal(store.getFavorite('movie', movie.id), false);
+        } finally {
+            store.close();
+        }
+    });
+
+    test(`[${label}] favorites persist across reopen`, () => {
+        const dir = tmpDir();
+        const store = openStore(dir);
+        const source = store.addSource({ type: 'local', name: 'S' });
+        const movie = store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'M', filePath: 'm' }).item;
+        store.setFavorite('movie', movie.id, true);
+        store.close();
+
+        const reopened = openStore(dir);
+        try {
+            assert.equal(reopened.getFavorite('movie', movie.id), true);
+            assert.deepEqual(reopened.listFavoriteKeys(), [`movie:${movie.id}`]);
+        } finally {
+            reopened.close();
+        }
+    });
+
+    test(`[${label}] favorites cascade on source removal`, () => {
+        const dir = tmpDir();
+        const store = openStore(dir);
+        try {
+            const source = store.addSource({ type: 'local', name: 'S' });
+            const movie = store.upsertItem({ sourceId: source.id, kind: 'movie', title: 'M', filePath: 'm' }).item;
+            const show = store.upsertShow({ sourceId: source.id, groupKey: 'g', title: 'Show' }).show;
+            store.setFavorite('movie', movie.id, true);
+            store.setFavorite('show', show.id, true);
+            assert.equal(store.listFavoriteKeys().length, 2);
+            store.removeSource(source.id);
+            assert.deepEqual(store.listFavoriteKeys(), [], '\u6e90\u5220\u9664\u540e\u6536\u85cf\u968f\u4e4b\u6e05\u9664');
+        } finally {
+            store.close();
+        }
+    });
+
     test(`[${label}] updateItemMetadata persists scraped fields`, () => {
         const dir = tmpDir();
         const store = openStore(dir);
