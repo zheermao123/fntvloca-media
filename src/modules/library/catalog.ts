@@ -26,7 +26,7 @@ export type SeasonCatalogEntry = {
     seasonCount: number;
     episodeCount: number;
     watchedCount: number;
-    /** 是否已收藏（整部剧收藏，挂 showId；该剧所有季卡同步） */
+    /** 是否已收藏（按季收藏，挂 '{showId}:{season}'，各季独立） */
     favorite: boolean;
     /** 续播集的播放进度（0-100；与"继续观看"同口径，用于卡片/详情展示"观看中 N%"） */
     progressPct: number;
@@ -211,7 +211,7 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
                     seasonCount,
                     episodeCount: seasonEpisodes.length,
                     watchedCount,
-                    favorite: favoriteKeys.has(`show:${show.id}`),
+                    favorite: favoriteKeys.has(`season:${show.id}:${season}`),
                     progressPct,
                     posterPath,
                     resumeItemId: resumeEpisode.id,

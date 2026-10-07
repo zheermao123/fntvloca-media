@@ -246,6 +246,58 @@ function runStoreSuite(label, openStore) {
         }
     });
 
+    test(`[${label}] season favorites: key format, independence, cascade on file removal`, () => {
+        const dir = tmpDir();
+        const store = openStore(dir);
+        try {
+            const source = store.addSource({ type: 'local', name: 'S' });
+            const show = store.upsertShow({ sourceId: source.id, groupKey: 'g', title: 'Show' }).show;
+            const e1 = store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Show', season: 1, episode: 1, filePath: 'e1' }).item;
+            const e2 = store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Show', season: 2, episode: 1, filePath: 'e2' }).item;
+
+            store.setFavorite('season', `${show.id}:1`, true);
+            store.setFavorite('season', `${show.id}:1`, true);
+            assert.equal(store.getFavorite('season', `${show.id}:1`), true);
+            assert.equal(store.getFavorite('season', `${show.id}:2`), false);
+            assert.deepEqual(store.listFavoriteKeys(), [`season:${show.id}:1`]);
+
+            // 两季文件都在 → 季收藏保留
+            store.removeItemsExcept(source.id, [e1.id, e2.id]);
+            assert.equal(store.getFavorite('season', `${show.id}:1`), true);
+            assert.equal(store.getFavorite('season', `${show.id}:2`), false);
+
+            // 第 2 季文件消失 → 第 2 季收藏清除，第 1 季保留
+            store.setFavorite('season', `${show.id}:2`, true);
+            assert.deepEqual(store.removeItemsExcept(source.id, [e1.id]), [e2.id]);
+            assert.equal(store.getFavorite('season', `${show.id}:1`), true);
+            assert.equal(store.getFavorite('season', `${show.id}:2`), false);
+
+            // 所有文件消失 → 剧集组成孤儿 → 全部季收藏清除
+            assert.deepEqual(store.removeItemsExcept(source.id, []), [e1.id]);
+            assert.deepEqual(store.listFavoriteKeys(), []);
+        } finally {
+            store.close();
+        }
+    });
+
+    test(`[${label}] season favorites cascade on source removal`, () => {
+        const dir = tmpDir();
+        const store = openStore(dir);
+        try {
+            const source = store.addSource({ type: 'local', name: 'S' });
+            const show = store.upsertShow({ sourceId: source.id, groupKey: 'g', title: 'Show' }).show;
+            store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Show', season: 1, episode: 1, filePath: 'e1' });
+            store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Show', season: 2, episode: 1, filePath: 'e2' });
+            store.setFavorite('season', `${show.id}:1`, true);
+            store.setFavorite('season', `${show.id}:2`, true);
+            assert.equal(store.listFavoriteKeys().length, 2);
+            store.removeSource(source.id);
+            assert.deepEqual(store.listFavoriteKeys(), [], '源删除后季收藏随之清除');
+        } finally {
+            store.close();
+        }
+    });
+
     test(`[${label}] updateItemMetadata persists scraped fields`, () => {
         const dir = tmpDir();
         const store = openStore(dir);

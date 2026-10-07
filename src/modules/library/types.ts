@@ -137,11 +137,12 @@ export type WatchedEntry = {
 
 export const AUTO_WATCH_THRESHOLD = 0.95;
 
-/** 收藏目标类型：电影挂条目 id，剧集挂剧集组 id（整部剧） */
-export type FavoriteType = 'movie' | 'show';
+/** 收藏目标类型：电影挂条目 id；季挂 '{showId}:{season}'（按季收藏）。
+ * 'show' 为历史遗留（整剧收藏），仅用于旧数据迁移与级联清理，UI 不再写入 */
+export type FavoriteType = 'movie' | 'show' | 'season';
 
 export type FavoriteEntry = {
-    /** 'movie:{itemId}' 或 'show:{showId}' */
+    /** 'movie:{itemId}'、'show:{showId}'（遗留）或 'season:{showId}:{season}' */
     targetKey: string;
     targetType: FavoriteType;
     targetId: string;

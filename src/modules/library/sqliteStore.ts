@@ -292,8 +292,10 @@ export class SqliteLibraryStore implements LibraryStore {
         this.stmt(
             `DELETE FROM favorites WHERE
                (target_type = 'movie' AND target_id IN (SELECT id FROM items WHERE source_id = ?))
-               OR (target_type = 'show' AND target_id IN (SELECT id FROM shows WHERE source_id = ?))`
-        ).run(id, id);
+               OR (target_type = 'show' AND target_id IN (SELECT id FROM shows WHERE source_id = ?))
+               OR (target_type = 'season' AND EXISTS (
+                   SELECT 1 FROM shows s WHERE s.source_id = ? AND favorites.target_id LIKE s.id || ':%'))`
+        ).run(id, id, id);
         this.stmt(`DELETE FROM skip_info WHERE key IN (SELECT id FROM items WHERE source_id = ?)
             OR key IN (SELECT id FROM shows WHERE source_id = ?)`).run(id, id);
         this.stmt(`DELETE FROM seasons WHERE show_id IN (SELECT id FROM shows WHERE source_id = ?)`).run(id);
@@ -604,6 +606,16 @@ export class SqliteLibraryStore implements LibraryStore {
                WHERE s.source_id = ? AND i.id IS NULL
              )`
         ).run(sourceId);
+        this.stmt(
+            `DELETE FROM favorites WHERE target_type = 'season' AND EXISTS (
+               SELECT s.id FROM shows s
+               WHERE s.source_id = ? AND favorites.target_id LIKE s.id || ':%'
+             ) AND NOT EXISTS (
+               SELECT 1 FROM shows s
+               JOIN items i ON i.show_id = s.id
+               WHERE s.source_id = ? AND favorites.target_id = s.id || ':' || COALESCE(CAST(i.season AS INTEGER), 1)
+             )`
+        ).run(sourceId, sourceId);
         this.stmt(
             `DELETE FROM seasons WHERE show_id IN (
                SELECT s.id FROM shows s
