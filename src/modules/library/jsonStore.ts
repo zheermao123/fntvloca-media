@@ -164,6 +164,12 @@ export class JsonLibraryStore implements LibraryStore {
         for (const showId of removedShowIds) {
             delete this.data.skipInfos[showId];
             delete this.data.favorites[`show:${showId}`];
+            const seasonPrefix = `season:${showId}:`;
+            for (const key of Object.keys(this.data.favorites)) {
+                if (key.startsWith(seasonPrefix)) {
+                    delete this.data.favorites[key];
+                }
+            }
         }
         this.markDirty();
     }
@@ -419,6 +425,17 @@ export class JsonLibraryStore implements LibraryStore {
         for (const show of orphanShows) {
             delete this.data.skipInfos[show.id];
             delete this.data.favorites[`show:${show.id}`];
+        }
+        // 季收藏清理：不再存在对应 (show, season) 集的季收藏全部清除（含整剧孤儿）
+        const existingSeasonKeys = new Set(
+            this.data.items
+                .filter((i) => i.showId !== null)
+                .map((i) => `season:${i.showId}:${i.season ?? 1}`)
+        );
+        for (const key of Object.keys(this.data.favorites)) {
+            if (key.startsWith('season:') && !existingSeasonKeys.has(key)) {
+                delete this.data.favorites[key];
+            }
         }
         this.data.seasons = this.data.seasons.filter((s) => !orphanShowIds.has(s.showId));
         this.data.shows = this.data.shows.filter(

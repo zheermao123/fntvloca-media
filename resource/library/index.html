@@ -464,8 +464,12 @@ function seasonStatusText(entry) {
 }
 
 /* ---------- 收藏 ---------- */
-function toggleFavorite(type, id, favorite, onDone) {
-    send('library:set-favorite', { type, id, favorite });
+function toggleFavorite(type, id, favorite, season, onDone) {
+    const payload = { type, id, favorite };
+    if (season != null) {
+        payload.season = season;
+    }
+    send('library:set-favorite', payload);
     onceReply('library:favorite-set', (res) => {
         if (res && res.success) {
             toast(favorite ? '已收藏' : '已取消收藏');
@@ -508,7 +512,7 @@ function buildSeasonCard(entry) {
     overlay.addEventListener('click', (e) => {
         if (e.target.closest('.badge.star')) {
             e.stopPropagation();
-            toggleFavorite('show', entry.show.id, !entry.favorite);
+            toggleFavorite('season', entry.show.id, !entry.favorite, entry.season);
             return;
         }
         if (e.target.closest('.play-overlay-btn')) {
@@ -532,7 +536,7 @@ function buildSeasonListRow(entry) {
         <span class="lmeta">${seasonStatusText(entry)}</span>`;
     row.querySelector('.lstar').addEventListener('click', (e) => {
         e.stopPropagation();
-        toggleFavorite('show', entry.show.id, !entry.favorite);
+        toggleFavorite('season', entry.show.id, !entry.favorite, entry.season);
     });
     row.addEventListener('click', () => openSeasonDetail(entry.show.id, entry.season));
     return row;
@@ -629,7 +633,8 @@ function renderShowDetail(data) {
     });
     panel.querySelector('#showFavorite').addEventListener('click', () => {
         const next = !data.favorite;
-        toggleFavorite('show', show.id, next, () => {
+        const seasonNum = data.season != null ? data.season : (episodes[0] && episodes[0].season != null ? episodes[0].season : 1);
+        toggleFavorite('season', show.id, next, seasonNum, () => {
             data.favorite = next;
             const btn = panel.querySelector('#showFavorite');
             if (btn) {
@@ -677,7 +682,7 @@ function buildCard(item, watched, favorite) {
     overlay.addEventListener('click', (e) => {
         if (e.target.closest('.badge.star')) {
             e.stopPropagation();
-            toggleFavorite('movie', item.id, !favorite);
+            toggleFavorite('movie', item.id, !favorite, null);
             return;
         }
         if (e.target.closest('.play-overlay-btn')) {
@@ -703,7 +708,7 @@ function buildListRow(item, watched, favorite) {
         <span class="lmeta">${escapeHtml(statusLabel)}</span>`;
     row.querySelector('.lstar').addEventListener('click', (e) => {
         e.stopPropagation();
-        toggleFavorite('movie', item.id, !favorite);
+        toggleFavorite('movie', item.id, !favorite, null);
     });
     row.addEventListener('click', () => playItem(item.id));
     return row;
@@ -785,7 +790,11 @@ function renderDetail(data) {
     });
     panel.querySelector('#detailFavorite').addEventListener('click', () => {
         const next = !data.favorite;
-        toggleFavorite('movie', item.id, next, () => {
+        const isMovie = item.kind === 'movie';
+        const favType = isMovie ? 'movie' : 'season';
+        const favId = isMovie ? item.id : item.showId;
+        const favSeason = isMovie ? null : (item.season ?? 1);
+        toggleFavorite(favType, favId, next, favSeason, () => {
             data.favorite = next;
             const btn = panel.querySelector('#detailFavorite');
             if (btn) {
@@ -1089,7 +1098,12 @@ function openSourcesModal() {
                 } else if (act === 'rescan') {
                     send('library:scan', { sourceId: btn.dataset.id });
                     toast('开始扫描…');
-                    onceReply('library:scan-done', () => { toast('扫描完成'); refreshAll(); });
+                    onceReply('library:scan-done', (res) => {
+                        const removedNames = Array.isArray(res && res.removedSources) ? res.removedSources : [];
+                        toast(removedNames.length > 0 ? `该源文件夹已不存在，已自动移除` : '扫描完成');
+                        refreshAll();
+                        openSourcesModal();
+                    });
                 }
             });
         });
@@ -1190,7 +1204,11 @@ function startScan() {
             toast(`扫描失败: ${res.error}`, true);
             return;
         }
-        toast(`扫描完成：新增 ${res.added ?? 0}，更新 ${res.updated ?? 0}，移除 ${res.removed ?? 0}`);
+        const removedNames = Array.isArray(res.removedSources) ? res.removedSources : [];
+        const removedNote = removedNames.length > 0
+            ? `，清理失效源 ${removedNames.length} 个（${removedNames.join('、')}）`
+            : '';
+        toast(`扫描完成：新增 ${res.added ?? 0}，更新 ${res.updated ?? 0}，移除 ${res.removed ?? 0}${removedNote}`);
         refreshAll();
     });
 }

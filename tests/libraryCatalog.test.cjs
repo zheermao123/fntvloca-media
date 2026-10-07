@@ -140,7 +140,7 @@ test('season catalog entry exposes in-progress percent (consistent with resume/c
     }
 });
 
-test('catalog exposes favorite and filters by it (season inherits show favorite)', () => {
+test('catalog exposes favorite and filters by it (per-season favorites)', () => {
     const store = newStore('fntv-catalog-fav-');
     try {
         const source = store.addSource({ type: 'local', name: 'S' });
@@ -155,22 +155,45 @@ test('catalog exposes favorite and filters by it (season inherits show favorite)
         assert.ok(entries.filter((e) => e.type === 'season').every((e) => e.favorite === false));
 
         store.setFavorite('movie', m1.id, true);
-        store.setFavorite('show', show.id, true);
+        // 只收藏第 1 季：第 1 季亮星，第 2 季不受影响
+        store.setFavorite('season', `${show.id}:1`, true);
 
         entries = buildCatalog(store, {});
         assert.equal(entries.find((e) => e.type === 'movie' && e.item.id === m1.id).favorite, true);
         assert.equal(entries.find((e) => e.type === 'movie' && e.item.id === m2.id).favorite, false);
         const seasons = entries.filter((e) => e.type === 'season');
         assert.equal(seasons.length, 2);
-        assert.ok(seasons.every((e) => e.favorite === true), '\u6574\u5267\u6536\u85cf\uff1a\u6240\u6709\u5b63\u5361\u540c\u6b65');
+        assert.equal(seasons.find((e) => e.season === 1).favorite, true, '第 1 季已收藏');
+        assert.equal(seasons.find((e) => e.season === 2).favorite, false, '第 2 季未收藏');
 
         const favOnly = buildCatalog(store, { favorite: true });
-        assert.equal(favOnly.length, 3, '1 \u90e8\u7535\u5f71 + 2 \u5f20\u5b63\u5361');
+        assert.equal(favOnly.length, 2, '1 部电影 + 1 张季卡');
         assert.ok(favOnly.every((e) => e.favorite));
+        assert.ok(favOnly.every((e) => e.type !== 'season' || e.season === 1), '季筛选只含被收藏的季');
 
         const unfavOnly = buildCatalog(store, { favorite: false });
-        assert.equal(unfavOnly.length, 1);
-        assert.equal(unfavOnly[0].item.id, m2.id);
+        assert.equal(unfavOnly.length, 2, '未收藏电影 + 未收藏的第 2 季');
+        assert.ok(unfavOnly.some((e) => e.type === 'season' && e.season === 2));
+    } finally {
+        store.close();
+    }
+});
+
+test('legacy show favorite no longer lights season entries (migrated to season keys)', () => {
+    const store = newStore('fntv-catalog-fav-legacy-');
+    try {
+        const source = store.addSource({ type: 'local', name: 'S' });
+        const { show } = store.upsertShow({ sourceId: source.id, groupKey: 'g', title: 'Legacy Show' });
+        store.upsertItem({ sourceId: source.id, kind: 'episode', showId: show.id, title: 'Legacy Show', season: 1, episode: 1, filePath: 'e1' });
+
+        store.setFavorite('show', show.id, true);
+        const entries = buildCatalog(store, {});
+        assert.ok(entries.filter((e) => e.type === 'season').every((e) => e.favorite === false), '遗留整剧收藏不再点亮季卡');
+
+        store.setFavorite('show', show.id, false);
+        store.setFavorite('season', `${show.id}:1`, true);
+        const after = buildCatalog(store, {});
+        assert.equal(after.find((e) => e.type === 'season').favorite, true);
     } finally {
         store.close();
     }

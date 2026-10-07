@@ -1,4 +1,5 @@
 import { dialog, IpcMainEvent } from 'electron';
+import * as fs from 'fs';
 import { registerHandler } from '../core/ipcHandler';
 import { getMainWindow } from '../../common/mainwin';
 import * as log from '../../../modules/logger';
@@ -51,11 +52,46 @@ function itemIsPrivate(sourceId: string | null | undefined): boolean {
     return typeof sourceId === 'string' && privateSourceIds().has(sourceId);
 }
 
-async function scanSource(sourceId: string): Promise<IngestSummary> {
+/** 本地路径规范化（分隔符统一、去尾斜杠、大小写不敏感），用于同文件夹检测 */
+function normalizeLocalRoot(p: string): string {
+    return p.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+}
+
+/** 同一本地文件夹是否已被某个源使用 */
+function localRootExists(store: ReturnType<typeof getLibraryStore>, rootPath: string): boolean {
+    const needle = normalizeLocalRoot(rootPath);
+    if (needle.length === 0) {
+        return false;
+    }
+    return store
+        .listSources()
+        .some((s) => s.type === 'local' && normalizeLocalRoot(s.config.rootPath ?? '') === needle);
+}
+
+/** 本地根目录是否存在且为文件夹 */
+function isExistingDirectory(rootPath: string): boolean {
+    try {
+        return fs.statSync(rootPath).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+type ScanOutcome = IngestSummary & { removedSource?: { name: string; rootPath: string } };
+
+async function scanSource(sourceId: string): Promise<ScanOutcome> {
     const store = getLibraryStore();
     const source = store.getSource(sourceId);
     if (!source) {
         throw new Error(`媒体源不存在: ${sourceId}`);
+    }
+    if (source.type === 'local') {
+        const rootPath = source.config.rootPath ?? '';
+        if (rootPath.length === 0 || !isExistingDirectory(rootPath)) {
+            store.removeSource(sourceId);
+            log.i(`[library] 已自动移除失效源（文件夹不存在）: ${source.name} (${rootPath})`);
+            return { added: 0, updated: 0, removed: 0, skipped: 0, removedSource: { name: source.name, rootPath } };
+        }
     }
     if (source.type === 'webdav') {
         const url = source.config.url ?? '';
@@ -110,6 +146,7 @@ async function runScan(event: IpcMainEvent, sourceId?: string): Promise<void> {
             ? [sourceId]
             : store.listSources().filter((s) => s.type === 'local').map((s) => s.id);
         const totals = { added: 0, updated: 0, removed: 0, skipped: 0 };
+        const removedSourceNames: string[] = [];
         for (const id of targets) {
             try {
                 const summary = await scanSource(id);
@@ -117,11 +154,14 @@ async function runScan(event: IpcMainEvent, sourceId?: string): Promise<void> {
                 totals.updated += summary.updated;
                 totals.removed += summary.removed;
                 totals.skipped += summary.skipped;
+                if (summary.removedSource && removedSourceNames.length < 5) {
+                    removedSourceNames.push(summary.removedSource.name);
+                }
             } catch (error) {
                 log.error('[library] 扫描源失败:', id, error);
             }
         }
-        reply(event, 'library:scan-done', totals);
+        reply(event, 'library:scan-done', { ...totals, removedSources: removedSourceNames.length ? removedSourceNames : undefined });
     } catch (error) {
         log.error('[library] 扫描失败:', error);
         reply(event, 'library:scan-done', { error: error instanceof Error ? error.message : String(error) });
@@ -177,6 +217,9 @@ function init(): void {
             const rootPath = payload?.rootPath ?? '';
             if (!rootPath) {
                 throw new Error('缺少扫描目录');
+            }
+            if (localRootExists(store, rootPath)) {
+                throw new Error('该文件夹已添加过');
             }
             const created = store.addSource({
                 type: 'local',
@@ -336,7 +379,7 @@ function init(): void {
                     item.kind === 'movie'
                         ? store.getFavorite('movie', item.id)
                         : item.showId
-                          ? store.getFavorite('show', item.showId)
+                          ? store.getFavorite('season', `${item.showId}:${item.season ?? 1}`)
                           : false,
                 episodes: item.kind === 'episode' ? siblings : [],
                 versions: item.kind === 'movie' ? siblings : [],
@@ -404,7 +447,7 @@ function init(): void {
                 show,
                 season: seasonFilter,
                 seasonInfo: seasonFilter !== null ? store.getSeason(show.id, seasonFilter) : null,
-                favorite: store.getFavorite('show', show.id),
+                favorite: seasonFilter !== null ? store.getFavorite('season', `${show.id}:${seasonFilter}`) : false,
                 episodes,
                 states,
             });
@@ -442,9 +485,9 @@ function init(): void {
 
     registerHandler(
         'library:set-favorite',
-        (event: IpcMainEvent, payload: { type?: string; id?: string; favorite?: boolean }) => {
+        (event: IpcMainEvent, payload: { type?: string; id?: string; favorite?: boolean; season?: number }) => {
             try {
-                const type = payload?.type === 'movie' || payload?.type === 'show' ? payload.type : null;
+                const type = payload?.type === 'movie' || payload?.type === 'show' || payload?.type === 'season' ? payload.type : null;
                 const id = payload?.id ?? '';
                 if (!type || !id) {
                     throw new Error('参数无效');
@@ -465,6 +508,15 @@ function init(): void {
                     }
                     if (itemIsPrivate(show.sourceId) && !isPrivacyUnlocked()) {
                         throw new Error('需要解锁隐私模式');
+                    }
+                    if (type === 'season') {
+                        const season = payload?.season;
+                        if (typeof season !== 'number' || !Number.isInteger(season) || season < 0) {
+                            throw new Error('无效季号');
+                        }
+                        store.setFavorite('season', `${id}:${season}`, payload?.favorite !== false);
+                        reply(event, 'library:favorite-set', { success: true, favorite: payload?.favorite !== false });
+                        return;
                     }
                 }
                 const favorite = payload?.favorite !== false;
