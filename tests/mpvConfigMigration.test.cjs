@@ -7,6 +7,7 @@ const {
     resolveBundledMpvPath,
     resolvePortableConfigDir,
     synchronizeMpvConfig,
+    applyMpvConfigOverlay,
 } = require('../dest/main/common/mpvConfigHelpers.js');
 const { makeTmpDir } = require('./helpers/tmpRoot.cjs');
 
@@ -94,4 +95,29 @@ test('first initialization does not overwrite pre-existing user state', (t) => {
     assert.equal(synchronizeMpvConfig(portable, user), 'initialized');
     assert.equal(fs.readFileSync(path.join(user, 'script-opts', 'uosc.conf'), 'utf8'), 'user-controls');
     assert.equal(fs.readFileSync(path.join(user, 'scripts', 'uosc_danmaku', 'main.lua'), 'utf8'), 'bundled');
+});
+
+test('applyMpvConfigOverlay patches extracted zip files and reports count', (t) => {
+    const root = makeTmpDir('fntv-mpv-overlay-');
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+    const portable = path.join(root, 'portable_config');
+    const plugin = path.join(portable, 'scripts', 'uosc_danmaku');
+    fs.mkdirSync(path.join(plugin, 'modules'), { recursive: true });
+    fs.writeFileSync(path.join(plugin, 'main.lua'), 'zip-version');
+    fs.writeFileSync(path.join(plugin, 'modules', 'options.lua'), 'zip-options');
+
+    // 覆盖层根目录镜像 portable_config 结构（resource/mpv-overlay/scripts/...）
+    const overlay = path.join(root, 'overlay');
+    fs.mkdirSync(path.join(overlay, 'scripts', 'uosc_danmaku', 'modules'), { recursive: true });
+    fs.writeFileSync(path.join(overlay, 'scripts', 'uosc_danmaku', 'main.lua'), 'patched-main');
+    fs.writeFileSync(path.join(overlay, 'scripts', 'uosc_danmaku', 'modules', 'options.lua'), 'patched-options');
+
+    assert.equal(applyMpvConfigOverlay(portable, overlay), 2);
+    assert.equal(fs.readFileSync(path.join(plugin, 'main.lua'), 'utf8'), 'patched-main');
+    assert.equal(fs.readFileSync(path.join(plugin, 'modules', 'options.lua'), 'utf8'), 'patched-options');
+
+    // 覆盖层缺失时为无操作
+    assert.equal(applyMpvConfigOverlay(portable, path.join(root, 'missing')), 0);
+    assert.equal(fs.readFileSync(path.join(plugin, 'main.lua'), 'utf8'), 'patched-main');
 });
