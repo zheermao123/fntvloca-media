@@ -5,6 +5,7 @@ import * as logger from '../../../modules/logger';
 import {
     resolvePortableConfigDir,
     synchronizeMpvConfig,
+    applyMpvConfigOverlay,
 } from '../../common/mpvConfigHelpers';
 
 /**
@@ -36,6 +37,11 @@ function initializeMpvConfig(): void {
     try {
         const mpvConfigDir = getMpvConfigDir();
         const portableConfigDir = getPortableConfigDir();
+        const overlayDir = path.join(__dirname, '../../../resource/mpv-overlay');
+        const overlayFiles = applyMpvConfigOverlay(portableConfigDir, overlayDir);
+        if (overlayFiles > 0) {
+            logger.info(`MPV 插件补丁已覆盖: uosc_danmaku (${overlayFiles} 个文件)`);
+        }
         const result = synchronizeMpvConfig(portableConfigDir, mpvConfigDir);
         if (result === 'initialized') {
             logger.info(`MPV配置初始化完成: ${mpvConfigDir}`);

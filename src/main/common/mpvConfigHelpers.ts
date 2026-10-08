@@ -29,6 +29,37 @@ export function resolveBundledMpvPath(paths: BundledMpvPaths): string {
 
 export type MpvConfigSyncResult = 'initialized' | 'updated';
 
+/**
+ * 将应用内置的插件补丁覆盖层（resource/mpv-overlay）覆盖到 portable_config。
+ * CI 构建时 third_party 由外部 mpv-config.zip 解压而来（仓库不含），此步骤保证
+ * 我们对 uosc_danmaku 的修复随应用发布，且在上游 zip 更新后依然生效。
+ * 返回覆盖的文件数。
+ */
+export function applyMpvConfigOverlay(
+    portableConfigDir: string,
+    overlayDir: string,
+): number {
+    if (!fs.existsSync(overlayDir)) {
+        return 0;
+    }
+    let applied = 0;
+    const walk = (source: string, destination: string): void => {
+        fs.mkdirSync(destination, { recursive: true });
+        for (const item of fs.readdirSync(source, { withFileTypes: true })) {
+            const sourcePath = path.join(source, item.name);
+            const destinationPath = path.join(destination, item.name);
+            if (item.isDirectory()) {
+                walk(sourcePath, destinationPath);
+            } else {
+                fs.copyFileSync(sourcePath, destinationPath);
+                applied += 1;
+            }
+        }
+    };
+    walk(overlayDir, portableConfigDir);
+    return applied;
+}
+
 function copyDirectoryRecursive(
     source: string,
     destination: string,

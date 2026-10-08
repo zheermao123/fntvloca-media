@@ -493,14 +493,14 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     log.info('Library play event received itemId:', itemId);
     const store = getLibraryStore();
 
-    // 隐私内容：未解锁隐私模式时拒绝播放（正常界面拿不到该条目，仍做纵深防御）
+    // 隐私内容：未解锁隐私模式时拒绝播放（正常界面拿不到该条目，仍做纵深防御）；
+    // 隐私播放全程禁用弹幕插件（uosc_danmaku），避免文件名/文件哈希外发弹幕库
     const targetItem = store.getItem(itemId);
-    if (targetItem) {
-        const targetSource = store.getSource(targetItem.sourceId);
-        if (targetSource && isPrivateSource(targetSource) && !isPrivacyUnlocked()) {
-            log.warn('[library] 隐私内容未解锁，拒绝播放:', itemId);
-            return;
-        }
+    const targetSource = targetItem ? store.getSource(targetItem.sourceId) : null;
+    const isPrivatePlayback = !!(targetSource && isPrivateSource(targetSource));
+    if (isPrivatePlayback && !isPrivacyUnlocked()) {
+        log.warn('[library] 隐私内容未解锁，拒绝播放:', itemId);
+        return;
     }
 
     const playlistResult = buildLibraryPlaylist(store, itemId);
@@ -589,6 +589,11 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     }
 
     const mpvArgs = buildMpvArgs();
+    if (isPrivatePlayback) {
+        // 隐私内容禁用弹幕插件：不发起任何弹幕库请求，也不会弹"HTTP 请求失败"提示
+        mpvArgs.push('--script-opts-add=uosc_danmaku-enabled=no');
+        log.info('[library] 隐私内容播放：已禁用弹幕 (uosc_danmaku-enabled=no)');
+    }
     // 蓝光原盘 ISO：mpv 无法自动识别 UDF 格式的 ISO，需 bd:// + --bluray-device 强制按蓝光打开
     const blurayEntry = validEntries.find(
         (entry) => entry.source.kind === 'file' && isDirectPlaybackFile(entry.source.path)
