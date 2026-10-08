@@ -37,7 +37,8 @@ function initializeMpvConfig(): void {
     try {
         const mpvConfigDir = getMpvConfigDir();
         const portableConfigDir = getPortableConfigDir();
-        const overlayDir = path.join(__dirname, '../../../resource/mpv-overlay');
+        // __dirname = dest/main/handlers/plugins，需上跳 4 级到应用根
+        const overlayDir = path.join(__dirname, '../../../../resource/mpv-overlay');
         const overlayFiles = applyMpvConfigOverlay(portableConfigDir, overlayDir);
         if (overlayFiles > 0) {
             logger.info(`MPV 插件补丁已覆盖: uosc_danmaku (${overlayFiles} 个文件)`);
