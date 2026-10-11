@@ -102,5 +102,15 @@ export function synchronizeMpvConfig(
     const destinationPluginDir = path.join(scriptsDir, managedPlugin);
     fs.rmSync(destinationPluginDir, { recursive: true, force: true });
     copyDirectoryRecursive(sourcePluginDir, destinationPluginDir);
+
+    // mpv.conf 为应用托管配置（字幕策略等随版本演进），每次同步覆盖；
+    // 用户状态（script-opts/watch_later/danmaku-history.json）不受影响
+    const managedRootFiles = ['mpv.conf'];
+    for (const name of managedRootFiles) {
+        const sourceFile = path.join(portableConfigDir, name);
+        if (fs.existsSync(sourceFile)) {
+            fs.copyFileSync(sourceFile, path.join(mpvConfigDir, name));
+        }
+    }
     return 'updated';
 }
