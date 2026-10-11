@@ -97,8 +97,7 @@ test('first initialization does not overwrite pre-existing user state', (t) => {
     assert.equal(fs.readFileSync(path.join(user, 'scripts', 'uosc_danmaku', 'main.lua'), 'utf8'), 'bundled');
 });
 
-test('applyMpvConfigOverlay patches extracted zip files and reports count', (t) => {
-    const root = makeTmpDir('fntv-mpv-overlay-');
+test('applyMpvConfigOverlay patches extracted zip files and reports count', (t) => {    const root = makeTmpDir('fntv-mpv-overlay-');
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
     const portable = path.join(root, 'portable_config');
@@ -120,4 +119,25 @@ test('applyMpvConfigOverlay patches extracted zip files and reports count', (t) 
     // 覆盖层缺失时为无操作
     assert.equal(applyMpvConfigOverlay(portable, path.join(root, 'missing')), 0);
     assert.equal(fs.readFileSync(path.join(plugin, 'main.lua'), 'utf8'), 'patched-main');
+});
+
+test('sync overwrites managed mpv.conf while preserving user script-opts', (t) => {
+    const root = makeTmpDir('fntv-mpv-managed-');
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+    const portable = path.join(root, 'portable_config');
+    const user = path.join(root, 'user_config');
+    fs.mkdirSync(path.join(portable, 'scripts', 'uosc_danmaku'), { recursive: true });
+    fs.mkdirSync(path.join(user, 'scripts', 'uosc_danmaku'), { recursive: true });
+    fs.mkdirSync(path.join(user, 'script-opts'), { recursive: true });
+    fs.writeFileSync(path.join(portable, 'scripts', 'uosc_danmaku', 'main.lua'), 'bundled');
+    fs.writeFileSync(path.join(user, 'scripts', 'uosc_danmaku', 'main.lua'), 'old');
+    fs.writeFileSync(path.join(portable, 'mpv.conf'), 'slang=chi\nsub-auto=fuzzy\n');
+    fs.writeFileSync(path.join(user, 'mpv.conf'), 'stale-seed');
+    fs.writeFileSync(path.join(user, 'script-opts', 'uosc_danmaku.conf'), 'fontsize=25');
+
+    assert.equal(synchronizeMpvConfig(portable, user), 'updated');
+    assert.equal(fs.readFileSync(path.join(user, 'mpv.conf'), 'utf8'), 'slang=chi\nsub-auto=fuzzy\n', 'mpv.conf 随同步覆盖');
+    assert.equal(fs.readFileSync(path.join(user, 'script-opts', 'uosc_danmaku.conf'), 'utf8'), 'fontsize=25', '用户弹幕设置保留');
+    assert.equal(fs.readFileSync(path.join(user, 'scripts', 'uosc_danmaku', 'main.lua'), 'utf8'), 'bundled');
 });
