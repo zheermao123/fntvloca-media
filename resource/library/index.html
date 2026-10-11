@@ -1226,8 +1226,13 @@ function startScrape() {
     });
 }
 
-ipc.on('library-scrape-progress', (_event, progress) => {
-    const btn = document.getElementById('scrapeBtn');
+// 播放器退出后由主进程通知：刷新继续观看与卡片状态
+ipc.on('library-playback-ended', () => {
+    loadContinue();
+    loadItems();
+});
+
+ipc.on('library-scrape-progress', (_event, progress) => {    const btn = document.getElementById('scrapeBtn');
     if (progress && progress.total > 0) {
         btn.textContent = `刮削 ${progress.done}/${progress.total}`;
     }
