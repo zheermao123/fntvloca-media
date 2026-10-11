@@ -453,6 +453,15 @@ function libraryEventHandler(store: LibraryStore) {
                 break;
             case ply.EventType.EXIT: {
                 const event = data as ply.PlayExitData;
+                // 播放器退出后通知库页面刷新（继续观看/卡片状态），仅在库页面时发送
+                try {
+                    const win = getMainWindow();
+                    if (win && !win.isDestroyed() && checkLibraryPageUrl(win.webContents.getURL() || '')) {
+                        win.webContents.send('library-playback-ended');
+                    }
+                } catch (error) {
+                    log.warn('[library] 通知库页面刷新失败:', error);
+                }
                 if (event.code !== 0) {
                     log.error(`播放器异常退出 (code ${event.code})`);
                     return;
