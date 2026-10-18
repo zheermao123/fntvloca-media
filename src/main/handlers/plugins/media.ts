@@ -639,6 +639,20 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     if (!started && currentPlayer === player) {
         currentPlayer = null;
     }
+
+    // mpv 启动瞬间（4K HDR 初始化等）系统负载高，主窗口可能被 Windows 标记"(未响应)"；
+    // 负载回落后强制重绘一次主窗口，让标题/任务栏立即恢复，不用等系统或用户交互
+    setTimeout(() => {
+        try {
+            const win = getMainWindow();
+            if (win && !win.isDestroyed() && checkLibraryPageUrl(win.webContents.getURL() || '')) {
+                const [w, h] = win.getSize();
+                win.setSize(w, h);
+            }
+        } catch (error) {
+            log.warn('[library] 播放启动后窗口重绘失败:', error);
+        }
+    }, 8000);
 }
 
 // 处理当前播放的媒体信息
