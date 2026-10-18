@@ -326,6 +326,8 @@ export class MpvPlayer extends BasePlayer {
      */
     private async seekWithRetry(position: number, maxRetries: number, delayMs: number): Promise<void> {
         let retryCount = 0;
+        // 指数退避：mpv 打开大文件期间（未响应跳转）避免高频 IPC 轰炸
+        let delay = delayMs;
 
         const attemptSeek = async (): Promise<void> => {
             return new Promise((resolve, reject) => {
@@ -344,16 +346,17 @@ export class MpvPlayer extends BasePlayer {
                     } catch (error) {
                         retryCount++;
                         if (retryCount <= maxRetries) {
-                            // 重试，使用固定延迟时间
+                            // 重试：延迟指数增长（上限 1 秒），降低启动瞬间负载
+                            delay = Math.min(Math.round(delay * 1.5), 1000);
                             setTimeout(() => {
                                 attemptSeek().then(resolve).catch(reject);
-                            }, delayMs);
+                            }, delay);
                         } else {
                             log.info(`跳转失败，已达到最大重试次数 ${maxRetries} (位置: ${position}s):`, error);
                             reject(error);
                         }
                     }
-                }, delayMs);
+                }, delay);
             });
         };
 
