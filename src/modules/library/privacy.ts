@@ -39,6 +39,30 @@ export function takeContinueByVisibility<T extends { item: { sourceId: string } 
     return entries.filter((entry) => privateSourceIds.has(entry.item.sourceId) === wantPrivate).slice(0, limit);
 }
 
+/**
+ * "继续观看"同剧合并：候选按最近播放倒序时，每个剧集组（showId）只保留第一条
+ * （即最近在看的那一集）；电影（无 showId）各自保留，顺序不变。
+ */
+export function dedupeContinueByShow<T extends { item: { id: string; showId: string | null } }>(
+    entries: readonly T[]
+): T[] {
+    const seenShowIds = new Set<string>();
+    const result: T[] = [];
+    for (const entry of entries) {
+        const showId = entry.item.showId;
+        if (showId === null) {
+            result.push(entry);
+            continue;
+        }
+        if (seenShowIds.has(showId)) {
+            continue;
+        }
+        seenShowIds.add(showId);
+        result.push(entry);
+    }
+    return result;
+}
+
 export function isValidPrivacyPassword(password: unknown): password is string {
     return typeof password === 'string' && password.trim().length >= PRIVACY_PASSWORD_MIN_LENGTH;
 }

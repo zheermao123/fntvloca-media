@@ -226,3 +226,28 @@ test('continue list is independent per visibility (privacy items must not crowd 
     const limited = takeContinueByVisibility(entries, privateIds, false, 5);
     assert.equal(limited.length, 5, '\u9650\u91cf\u751f\u6548');
 });
+
+test('dedupeContinueByShow keeps the latest entry per show and keeps movies separate', () => {
+    const { dedupeContinueByShow } = require('../dest/modules/library/privacy');
+    const mk = (id, showId) => ({ item: { id, showId, sourceId: 's' }, state: { itemId: id } });
+    const entries = [
+        mk('a', 'show-1'),
+        mk('b', null),
+        mk('c', 'show-1'),
+        mk('d', 'show-2'),
+        mk('e', null),
+        mk('f', 'show-2'),
+    ];
+
+    const result = dedupeContinueByShow(entries);
+    assert.deepEqual(
+        result.map((r) => r.item.id),
+        ['a', 'b', 'd', 'e'],
+        '\u6bcf\u5267\u53ea\u7559\u9996\u6761\uff08\u6700\u65b0\u5728\u770b\u7684\u90a3\u96c6\uff09\uff0c\u7535\u5f71\u5404\u81ea\u4fdd\u7559\uff0c\u987a\u5e8f\u4e0d\u53d8'
+    );
+
+    // 空列表与全电影场景
+    assert.deepEqual(dedupeContinueByShow([]), []);
+    const movies = [mk('m1', null), mk('m2', null)];
+    assert.deepEqual(dedupeContinueByShow(movies).map((r) => r.item.id), ['m1', 'm2']);
+});
