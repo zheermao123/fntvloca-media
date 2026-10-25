@@ -238,11 +238,41 @@ function eventHandler(fnapi: fn.ApiService) {
     };
 }
 
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 播放中切换：停止当前播放器并短暂等待其退出，避免新旧 mpv 实例叠加。
+ * 停止会触发 EXIT 事件链：最终进度回写 + 库页面刷新（复用现有机制，进度不丢）。
+ */
+async function stopCurrentPlayerForSwitch(): Promise<void> {
+    const old = currentPlayer;
+    currentPlayer = null;
+    if (!old) {
+        return;
+    }
+    try {
+        old.stop();
+    } catch (error) {
+        log.warn('停止旧播放器失败:', error);
+    }
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && old.isPlaying()) {
+        await sleep(100);
+    }
+    await sleep(300);
+}
+
 // 处理播放事件
 async function handlePlayMovie(_event: IpcMainEvent, request: PlayRequest): Promise<void> {
-    if (playbackStarting || currentPlayer?.isPlaying()) {
-        log.warn('播放器正在启动或播放，忽略重复播放请求');
+    if (playbackStarting) {
+        log.warn('播放器正在启动，忽略重复播放请求');
         return;
+    }
+    if (currentPlayer?.isPlaying()) {
+        log.info('播放中切换：停止当前播放并播放新内容');
+        await stopCurrentPlayerForSwitch();
     }
 
     playbackStarting = true;
@@ -485,9 +515,13 @@ function libraryEventHandler(store: LibraryStore) {
 
 // 库条目播放入口
 async function handlePlayLibraryItem(_event: IpcMainEvent, request: LibraryPlayRequest): Promise<void> {
-    if (playbackStarting || currentPlayer?.isPlaying()) {
-        log.warn('播放器正在启动或播放，忽略重复播放请求');
+    if (playbackStarting) {
+        log.warn('播放器正在启动，忽略重复播放请求');
         return;
+    }
+    if (currentPlayer?.isPlaying()) {
+        log.info('播放中切换：停止当前播放并播放新条目');
+        await stopCurrentPlayerForSwitch();
     }
 
     playbackStarting = true;

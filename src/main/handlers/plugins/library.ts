@@ -17,6 +17,7 @@ import { isPrivateSource } from '../../../modules/library/sourceCategory';
 import {
     CONTINUE_LIST_LIMIT,
     CONTINUE_SCAN_LIMIT,
+    dedupeContinueByShow,
     hashPrivacyPassword,
     isPrivacyUnlocked,
     isValidPrivacyPassword,
@@ -464,13 +465,21 @@ function init(): void {
             return;
         }
         const privateIds = privateSourceIds();
+        // 先按可见性过滤（不截断）→ 同剧合并（每剧只留最近在看的一集）→ 截取上限，
+        // 保证 20 个坑为 20 部不同的剧/电影
         const entries = takeContinueByVisibility(
             store.listContinueWatching(CONTINUE_SCAN_LIMIT),
             privateIds,
             wantPrivate,
-            CONTINUE_LIST_LIMIT
+            CONTINUE_SCAN_LIMIT
         );
-        reply(event, 'library:continue-info', { entries });
+        const deduped = dedupeContinueByShow(entries).slice(0, CONTINUE_LIST_LIMIT);
+        const enriched = deduped.map(({ item, state }) => ({
+            item,
+            state,
+            showTitle: item.showId ? store.getShow(item.showId)?.title ?? null : null,
+        }));
+        reply(event, 'library:continue-info', { entries: enriched });
     });
 
     registerHandler('library:set-watched', (event: IpcMainEvent, payload: { id?: string; watched?: boolean }) => {

@@ -24,6 +24,8 @@ export class MpvPlayer extends BasePlayer {
     // 播放列表相关
     private playlistItems: PlayItem[] = [];
     private playlistFilePath: string = '';
+    // EXIT 事件只处理一次：stop() 手动触发后，mpv 进程真正退出时的 quit 事件不再重复回写/刷新
+    private exitHandled = false;
 
     constructor(config: Config) {
         super(config);
@@ -34,6 +36,7 @@ export class MpvPlayer extends BasePlayer {
      */
     async playList(infos: PlayItem[], pos: number, args?: string[]): Promise<boolean> {
         try {
+            this.exitHandled = false;
             // 构建 MPV 参数
             const mpvArgs: string[] = [];
 
@@ -324,8 +327,7 @@ export class MpvPlayer extends BasePlayer {
      * @param maxRetries 最大重试次数
      * @param delayMs 每次重试的延迟时间（毫秒）
      */
-    private async seekWithRetry(position: number, maxRetries: number, delayMs: number): Promise<void> {
-        let retryCount = 0;
+    private async seekWithRetry(position: number, maxRetries: number, delayMs: number): Promise<void> {        let retryCount = 0;
         // 指数退避：mpv 打开大文件期间（未响应跳转）避免高频 IPC 轰炸
         let delay = delayMs;
 
@@ -488,6 +490,10 @@ export class MpvPlayer extends BasePlayer {
      * 处理退出事件
      */
     private handleExit(code: number): void {
+        if (this.exitHandled) {
+            return;
+        }
+        this.exitHandled = true;
         // 清理播放列表文件
         this.cleanupPlaylistFile();
 

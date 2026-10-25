@@ -88,6 +88,7 @@
         .continue-card .prog { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: rgba(255,255,255,0.2); }
         .continue-card .prog > i { display: block; height: 100%; background: var(--accent); }
         .continue-card .name { font-size: 12px; color: var(--text-dim); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .continue-card .sub { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; margin-top: 10px; }
         .card { cursor: pointer; }
@@ -376,14 +377,20 @@ function loadContinue() {
             return;
         }
         section.style.display = '';
-        row.replaceChildren(...entries.map(({ item, state: st }) => {
+        row.replaceChildren(...entries.map(({ item, state: st, showTitle }) => {
             const card = document.createElement('div');
             card.className = 'continue-card';
+            const isEpisode = item.kind === 'episode';
+            const mainTitle = (isEpisode && showTitle) ? showTitle : displayTitle(item);
+            const subText = isEpisode
+                ? `S${String(item.season ?? 0).padStart(2, '0')}E${String(item.episode ?? 0).padStart(2, '0')}`
+                : '';
             card.innerHTML = `
                 <div class="thumb">${posterImgHtml(item.posterPath, item.title)}
                     <div class="prog"><i style="width:${pct(st)}%"></i></div>
                 </div>
-                <div class="name">${escapeHtml(displayTitle(item))}</div>`;
+                <div class="name">${escapeHtml(mainTitle)}</div>
+                ${subText ? `<div class="sub">${escapeHtml(subText)}</div>` : ''}`;
             card.addEventListener('click', () => playItem(item.id));
             return card;
         }));
