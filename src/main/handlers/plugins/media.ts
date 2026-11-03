@@ -488,6 +488,7 @@ function libraryEventHandler(store: LibraryStore) {
                     const win = getMainWindow();
                     if (win && !win.isDestroyed() && checkLibraryPageUrl(win.webContents.getURL() || '')) {
                         win.webContents.send('library-playback-ended');
+                        log.info('[library] 已通知库页面刷新 (library-playback-ended)');
                     }
                 } catch (error) {
                     log.warn('[library] 通知库页面刷新失败:', error);
@@ -656,6 +657,35 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     }
 
     store.markPlaybackStart(clickedGuid);
+
+    // 同剧前集自动补标已看：开始看某集 = 前面"有进度但未标已看"的集视为看完
+    // （只补有进度的集；未开播过的集保持未看）
+    if (targetItem && targetItem.showId) {
+        try {
+            const episodes = store
+                .listItems({ showId: targetItem.showId })
+                .sort(
+                    (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
+                );
+            const targetIdx = episodes.findIndex((ep) => ep.id === targetItem.id);
+            if (targetIdx > 0) {
+                let marked = 0;
+                for (let i = 0; i < targetIdx; i += 1) {
+                    const ep = episodes[i];
+                    const ws = store.getWatchState(ep.id);
+                    if (ws && !ws.watched && ws.positionTs > 0) {
+                        store.setWatched(ep.id, true);
+                        marked += 1;
+                    }
+                }
+                if (marked > 0) {
+                    log.info(`[library] 已自动补标同剧前 ${marked} 集为已看`);
+                }
+            }
+        } catch (error) {
+            log.warn('[library] 前集补标已看失败:', error);
+        }
+    }
 
     const playConfig: ply.Config = {
         fnapi: null,

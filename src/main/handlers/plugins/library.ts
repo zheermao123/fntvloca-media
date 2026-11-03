@@ -17,7 +17,7 @@ import { isPrivateSource } from '../../../modules/library/sourceCategory';
 import {
     CONTINUE_LIST_LIMIT,
     CONTINUE_SCAN_LIMIT,
-    dedupeContinueByShow,
+    resolveShowContinuePoint,
     hashPrivacyPassword,
     isPrivacyUnlocked,
     isValidPrivacyPassword,
@@ -465,21 +465,87 @@ function init(): void {
             return;
         }
         const privateIds = privateSourceIds();
-        // 先按可见性过滤（不截断）→ 同剧合并（每剧只留最近在看的一集）→ 截取上限，
-        // 保证 20 个坑为 20 部不同的剧/电影
-        const entries = takeContinueByVisibility(
+        // 候选 = 有进度未看完的集（按可见性过滤，不截断）
+        const candidates = takeContinueByVisibility(
             store.listContinueWatching(CONTINUE_SCAN_LIMIT),
             privateIds,
             wantPrivate,
             CONTINUE_SCAN_LIMIT
         );
-        const deduped = dedupeContinueByShow(entries).slice(0, CONTINUE_LIST_LIMIT);
-        const enriched = deduped.map(({ item, state }) => ({
-            item,
-            state,
-            showTitle: item.showId ? store.getShow(item.showId)?.title ?? null : null,
-        }));
-        reply(event, 'library:continue-info', { entries: enriched });
+        // 候选顺序 = 最近播放倒序：按剧分组（保持首现顺序），每剧解析"真续看点"，
+        // 电影（无 showId）各自保留
+        const groups = new Map<string, typeof candidates>();
+        const movieEntries = candidates.filter((entry) => entry.item.showId === null);
+        for (const entry of candidates) {
+            if (entry.item.showId === null) {
+                continue;
+            }
+            const list = groups.get(entry.item.showId);
+            if (list) {
+                list.push(entry);
+            } else {
+                groups.set(entry.item.showId, [entry]);
+            }
+        }
+
+        const finalEntries: Array<{
+            item: ReturnType<typeof store.getItem> & object;
+            state: { itemId: string; watched: boolean; positionTs: number; durationTs: number; lastPlayedAt: number | null; playCount: number };
+            showTitle: string | null;
+            activityAt: number;
+        }> = [];
+        for (const entry of movieEntries) {
+            finalEntries.push({
+                item: entry.item,
+                state: entry.state,
+                showTitle: null,
+                activityAt: entry.state.lastPlayedAt ?? 0,
+            });
+        }
+        for (const [showId] of groups) {
+            const episodes = store
+                .listItems({ showId })
+                .sort(
+                    (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
+                );
+            const inputs = episodes.map((ep) => {
+                const ws = store.getWatchState(ep.id);
+                return {
+                    id: ep.id,
+                    watched: ws?.watched ?? false,
+                    positionTs: ws?.positionTs ?? 0,
+                    durationTs: ws?.durationTs ?? 0,
+                    lastPlayedAt: ws?.lastPlayedAt ?? null,
+                };
+            });
+            const target = resolveShowContinuePoint(inputs);
+            if (!target) {
+                continue;
+            }
+            const item = episodes.find((ep) => ep.id === target.id);
+            if (!item) {
+                continue;
+            }
+            const ws = store.getWatchState(item.id);
+            const state = ws ?? {
+                itemId: item.id,
+                watched: false,
+                positionTs: 0,
+                durationTs: 0,
+                lastPlayedAt: null,
+                playCount: 0,
+            };
+            const activityAt = inputs.reduce((max, i) => Math.max(max, i.lastPlayedAt ?? 0), 0);
+            finalEntries.push({
+                item,
+                state,
+                showTitle: store.getShow(showId)?.title ?? null,
+                activityAt,
+            });
+        }
+
+        finalEntries.sort((a, b) => b.activityAt - a.activityAt);
+        reply(event, 'library:continue-info', { entries: finalEntries.slice(0, CONTINUE_LIST_LIMIT) });
     });
 
     registerHandler('library:set-watched', (event: IpcMainEvent, payload: { id?: string; watched?: boolean }) => {

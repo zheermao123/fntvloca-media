@@ -40,27 +40,32 @@ export function takeContinueByVisibility<T extends { item: { sourceId: string } 
 }
 
 /**
- * "继续观看"同剧合并：候选按最近播放倒序时，每个剧集组（showId）只保留第一条
- * （即最近在看的那一集）；电影（无 showId）各自保留，顺序不变。
+ * "继续观看"真续看点：按 (season, episode) 升序的剧集列表中，
+ * 找出进度最前沿（有观看活动的最后一集）：
+ * - 前沿未看完 → 返回前沿集本身（续播它）
+ * - 前沿已看完 → 返回下一集（跨季进位；即使还没开播）
+ * - 整部已全部看完 → 返回 null（不再出现在继续观看）
  */
-export function dedupeContinueByShow<T extends { item: { id: string; showId: string | null } }>(
-    entries: readonly T[]
-): T[] {
-    const seenShowIds = new Set<string>();
-    const result: T[] = [];
-    for (const entry of entries) {
-        const showId = entry.item.showId;
-        if (showId === null) {
-            result.push(entry);
-            continue;
+export function resolveShowContinuePoint<
+    T extends { id: string; watched: boolean; positionTs: number; durationTs: number; lastPlayedAt: number | null }
+>(episodes: readonly T[]): T | null {
+    let frontier: T | null = null;
+    let frontierIndex = -1;
+    for (let i = 0; i < episodes.length; i += 1) {
+        const ep = episodes[i];
+        if (ep.watched || ep.positionTs > 0 || (ep.lastPlayedAt ?? 0) > 0) {
+            frontier = ep;
+            frontierIndex = i;
         }
-        if (seenShowIds.has(showId)) {
-            continue;
-        }
-        seenShowIds.add(showId);
-        result.push(entry);
     }
-    return result;
+    if (!frontier) {
+        return null;
+    }
+    const frontierDone = frontier.watched || (frontier.durationTs > 0 && frontier.positionTs >= 0.98 * frontier.durationTs);
+    if (!frontierDone) {
+        return frontier;
+    }
+    return episodes[frontierIndex + 1] ?? null;
 }
 
 export function isValidPrivacyPassword(password: unknown): password is string {

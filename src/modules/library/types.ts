@@ -135,7 +135,8 @@ export type WatchedEntry = {
     state: WatchState;
 };
 
-export const AUTO_WATCH_THRESHOLD = 0.95;
+/** 自动标记"已看"的进度阈值：90%（跳过片尾通常落在 91-93%，需覆盖该场景） */
+export const AUTO_WATCH_THRESHOLD = 0.9;
 
 /** 收藏目标类型：电影挂条目 id；季挂 '{showId}:{season}'（按季收藏）。
  * 'show' 为历史遗留（整剧收藏），仅用于旧数据迁移与级联清理，UI 不再写入 */
