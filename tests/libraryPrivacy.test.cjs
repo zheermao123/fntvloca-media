@@ -227,27 +227,38 @@ test('continue list is independent per visibility (privacy items must not crowd 
     assert.equal(limited.length, 5, '\u9650\u91cf\u751f\u6548');
 });
 
-test('dedupeContinueByShow keeps the latest entry per show and keeps movies separate', () => {
-    const { dedupeContinueByShow } = require('../dest/modules/library/privacy');
-    const mk = (id, showId) => ({ item: { id, showId, sourceId: 's' }, state: { itemId: id } });
-    const entries = [
-        mk('a', 'show-1'),
-        mk('b', null),
-        mk('c', 'show-1'),
-        mk('d', 'show-2'),
-        mk('e', null),
-        mk('f', 'show-2'),
+test('resolveShowContinuePoint returns the frontier episode while still in progress', () => {
+    const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
+    const ep = (id, season, episode, watched, positionTs, durationTs = 1000) =>
+        ({ id, season, episode, watched, positionTs, durationTs, lastPlayedAt: positionTs > 0 ? 1 : null });
+    const episodes = [
+        ep('e1', 1, 1, true, 1000),
+        ep('e2', 1, 2, true, 1000),
+        ep('e3', 1, 3, false, 930),
     ];
+    assert.equal(resolveShowContinuePoint(episodes).id, 'e3', '\u524d\u6cbf\u672a\u770b\u5b8c\u2192\u7eed\u64ad\u524d\u6cbf\u96c6');
+    assert.equal(resolveShowContinuePoint([]), null, '\u65e0\u89c2\u770b\u6d3b\u52a8\u2192 null');
+});
 
-    const result = dedupeContinueByShow(entries);
-    assert.deepEqual(
-        result.map((r) => r.item.id),
-        ['a', 'b', 'd', 'e'],
-        '\u6bcf\u5267\u53ea\u7559\u9996\u6761\uff08\u6700\u65b0\u5728\u770b\u7684\u90a3\u96c6\uff09\uff0c\u7535\u5f71\u5404\u81ea\u4fdd\u7559\uff0c\u987a\u5e8f\u4e0d\u53d8'
-    );
+test('resolveShowContinuePoint advances to the next episode when the frontier is done (cross-season)', () => {
+    const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
+    const ep = (id, season, episode, watched, positionTs = 1000, durationTs = 1000) =>
+        ({ id, season, episode, watched, positionTs, durationTs, lastPlayedAt: positionTs > 0 ? 1 : null });
+    const episodes = [
+        ep('s1e1', 1, 1, true),
+        ep('s1e2', 1, 2, true),
+        ep('s2e12', 2, 12, true),
+        ep('s3e1', 3, 1, true),
+        ep('s3e2', 3, 2, false, 0, 0),
+    ];
+    assert.equal(resolveShowContinuePoint(episodes).id, 's3e2', '\u524d\u6cbf\u770b\u5b8c\u2192\u4e0b\u4e00\u96c6\uff08\u8de8\u5b63\u8fdb\u4f4d\uff0c\u672a\u5f00\u64ad\u4e5f\u53ef\u4f5c\u7eed\u770b\u70b9\uff09');
+});
 
-    // 空列表与全电影场景
-    assert.deepEqual(dedupeContinueByShow([]), []);
-    const movies = [mk('m1', null), mk('m2', null)];
-    assert.deepEqual(dedupeContinueByShow(movies).map((r) => r.item.id), ['m1', 'm2']);
+test('resolveShowContinuePoint returns null when the whole show is finished', () => {
+    const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
+    const episodes = [
+        { id: 'a', season: 1, episode: 1, watched: true, positionTs: 1000, durationTs: 1000, lastPlayedAt: 1 },
+        { id: 'b', season: 1, episode: 2, watched: true, positionTs: 1000, durationTs: 1000, lastPlayedAt: 1 },
+    ];
+    assert.equal(resolveShowContinuePoint(episodes), null, '\u6574\u90e8\u770b\u5b8c\u2192\u4e0d\u518d\u51fa\u73b0\u5728\u7ee7\u7eed\u89c2\u770b');
 });

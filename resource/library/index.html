@@ -1235,6 +1235,9 @@ function startScrape() {
 
 // 播放器退出后由主进程通知：刷新继续观看与卡片状态
 ipc.on('library-playback-ended', () => {
+    if (window.log) {
+        window.log.info('[Renderer] 收到播放结束通知，刷新继续观看与媒体库');
+    }
     loadContinue();
     loadItems();
 });
