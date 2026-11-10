@@ -254,6 +254,19 @@ test('resolveShowContinuePoint advances to the next episode when the frontier is
     assert.equal(resolveShowContinuePoint(episodes).id, 's3e2', '\u524d\u6cbf\u770b\u5b8c\u2192\u4e0b\u4e00\u96c6\uff08\u8de8\u5b63\u8fdb\u4f4d\uff0c\u672a\u5f00\u64ad\u4e5f\u53ef\u4f5c\u7eed\u770b\u70b9\uff09');
 });
 
+test('resolveShowContinuePoint advances within the same season to a never-started episode', () => {
+    const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
+    const ep = (id, episode, watched, positionTs = 1000, durationTs = 1000) =>
+        ({ id, season: 1, episode, watched, positionTs, durationTs, lastPlayedAt: positionTs > 0 ? 1 : null });
+    const episodes = [
+        ep('e1', 1, true),
+        ep('e2', 2, true),
+        ep('e3', 3, false, 0, 0),
+        ep('e4', 4, false, 0, 0),
+    ];
+    assert.equal(resolveShowContinuePoint(episodes).id, 'e3', '\u540c\u5b63\u540e\u7eed\u672a\u5f00\u64ad\u96c6\u4f5c\u4e3a\u7eed\u770b\u70b9');
+});
+
 test('resolveShowContinuePoint returns null when the whole show is finished', () => {
     const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
     const episodes = [

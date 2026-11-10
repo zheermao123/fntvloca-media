@@ -465,19 +465,21 @@ function init(): void {
             return;
         }
         const privateIds = privateSourceIds();
-        // 候选 = 有进度未看完的集（按可见性过滤，不截断）
-        const candidates = takeContinueByVisibility(
-            store.listContinueWatching(CONTINUE_SCAN_LIMIT),
+        // 候选 = 任何有观看活动的条目（不限"看到一半"）：有进度的剧看完某集后，
+        // 仍应提示"接着看下一集"（Next Up）
+        const history = takeContinueByVisibility(
+            store.listHistory(CONTINUE_SCAN_LIMIT),
             privateIds,
             wantPrivate,
             CONTINUE_SCAN_LIMIT
         );
-        // 候选顺序 = 最近播放倒序：按剧分组（保持首现顺序），每剧解析"真续看点"，
-        // 电影（无 showId）各自保留
-        const groups = new Map<string, typeof candidates>();
-        const movieEntries = candidates.filter((entry) => entry.item.showId === null);
-        for (const entry of candidates) {
+        // 按剧分组（电影各自独立）；每剧解析"真续看点"：
+        // 前沿未看完 → 前沿集；前沿已看完 → 下一集（可未开播）；整部看完 → 不出现
+        const groups = new Map<string, typeof history>();
+        const movieEntries: typeof history = [];
+        for (const entry of history) {
             if (entry.item.showId === null) {
+                movieEntries.push(entry);
                 continue;
             }
             const list = groups.get(entry.item.showId);
@@ -494,7 +496,11 @@ function init(): void {
             showTitle: string | null;
             activityAt: number;
         }> = [];
+        // 电影：仅"有进度未看完"的出现；看完的不再出现
         for (const entry of movieEntries) {
+            if (entry.state.watched || entry.state.positionTs <= 0) {
+                continue;
+            }
             finalEntries.push({
                 item: entry.item,
                 state: entry.state,
