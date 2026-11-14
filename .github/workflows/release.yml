@@ -113,7 +113,7 @@ jobs:
         continue-on-error: true
 
       - name: Install dependencies
-        run: npm ci --omit=optional --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
         timeout-minutes: 10
 
       - name: Setup macOS specific dependencies
