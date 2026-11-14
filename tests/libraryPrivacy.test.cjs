@@ -227,51 +227,28 @@ test('continue list is independent per visibility (privacy items must not crowd 
     assert.equal(limited.length, 5, '\u9650\u91cf\u751f\u6548');
 });
 
-test('resolveShowContinuePoint returns the frontier episode while still in progress', () => {
-    const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
-    const ep = (id, season, episode, watched, positionTs, durationTs = 1000) =>
-        ({ id, season, episode, watched, positionTs, durationTs, lastPlayedAt: positionTs > 0 ? 1 : null });
-    const episodes = [
-        ep('e1', 1, 1, true, 1000),
-        ep('e2', 1, 2, true, 1000),
-        ep('e3', 1, 3, false, 930),
-    ];
-    assert.equal(resolveShowContinuePoint(episodes).id, 'e3', '\u524d\u6cbf\u672a\u770b\u5b8c\u2192\u7eed\u64ad\u524d\u6cbf\u96c6');
-    assert.equal(resolveShowContinuePoint([]), null, '\u65e0\u89c2\u770b\u6d3b\u52a8\u2192 null');
+test('pickContinueFrontier selects the entry with the highest season/episode', () => {
+    const { pickContinueFrontier } = require('../dest/modules/library/privacy');
+    const mk = (season, episode) => ({ item: { season, episode } });
+    assert.equal(pickContinueFrontier([]), null, 'empty entries -> null');
+    assert.equal(pickContinueFrontier([mk(1, 1)]).item.episode, 1);
+    const entries = [mk(1, 5), mk(2, 12), mk(2, 3), mk(1, 9)];
+    assert.equal(pickContinueFrontier(entries).item.season, 2);
+    assert.equal(pickContinueFrontier(entries).item.episode, 12, 'same season picks the highest episode');
 });
 
-test('resolveShowContinuePoint advances to the next episode when the frontier is done (cross-season)', () => {
-    const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
-    const ep = (id, season, episode, watched, positionTs = 1000, durationTs = 1000) =>
-        ({ id, season, episode, watched, positionTs, durationTs, lastPlayedAt: positionTs > 0 ? 1 : null });
-    const episodes = [
-        ep('s1e1', 1, 1, true),
-        ep('s1e2', 1, 2, true),
-        ep('s2e12', 2, 12, true),
-        ep('s3e1', 3, 1, true),
-        ep('s3e2', 3, 2, false, 0, 0),
-    ];
-    assert.equal(resolveShowContinuePoint(episodes).id, 's3e2', '\u524d\u6cbf\u770b\u5b8c\u2192\u4e0b\u4e00\u96c6\uff08\u8de8\u5b63\u8fdb\u4f4d\uff0c\u672a\u5f00\u64ad\u4e5f\u53ef\u4f5c\u7eed\u770b\u70b9\uff09');
+test('isContinueFrontierDone detects watched flag and >=98% progress', () => {
+    const { isContinueFrontierDone } = require('../dest/modules/library/privacy');
+    assert.equal(isContinueFrontierDone({ watched: true, positionTs: 1, durationTs: 1000 }), true);
+    assert.equal(isContinueFrontierDone({ watched: false, positionTs: 930, durationTs: 1000 }), false, '93% not watched -> not done');
+    assert.equal(isContinueFrontierDone({ watched: false, positionTs: 980, durationTs: 1000 }), true, '>=98% -> done');
+    assert.equal(isContinueFrontierDone({ watched: false, positionTs: 0, durationTs: 0 }), false, 'zero duration -> not done');
 });
 
-test('resolveShowContinuePoint advances within the same season to a never-started episode', () => {
-    const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
-    const ep = (id, episode, watched, positionTs = 1000, durationTs = 1000) =>
-        ({ id, season: 1, episode, watched, positionTs, durationTs, lastPlayedAt: positionTs > 0 ? 1 : null });
-    const episodes = [
-        ep('e1', 1, true),
-        ep('e2', 2, true),
-        ep('e3', 3, false, 0, 0),
-        ep('e4', 4, false, 0, 0),
-    ];
-    assert.equal(resolveShowContinuePoint(episodes).id, 'e3', '\u540c\u5b63\u540e\u7eed\u672a\u5f00\u64ad\u96c6\u4f5c\u4e3a\u7eed\u770b\u70b9');
-});
-
-test('resolveShowContinuePoint returns null when the whole show is finished', () => {
-    const { resolveShowContinuePoint } = require('../dest/modules/library/privacy');
-    const episodes = [
-        { id: 'a', season: 1, episode: 1, watched: true, positionTs: 1000, durationTs: 1000, lastPlayedAt: 1 },
-        { id: 'b', season: 1, episode: 2, watched: true, positionTs: 1000, durationTs: 1000, lastPlayedAt: 1 },
-    ];
-    assert.equal(resolveShowContinuePoint(episodes), null, '\u6574\u90e8\u770b\u5b8c\u2192\u4e0d\u518d\u51fa\u73b0\u5728\u7ee7\u7eed\u89c2\u770b');
+test('isContinueFrontierDone detects watched flag and >=98% progress', () => {
+    const { isContinueFrontierDone } = require('../dest/modules/library/privacy');
+    assert.equal(isContinueFrontierDone({ watched: true, positionTs: 1, durationTs: 1000 }), true);
+    assert.equal(isContinueFrontierDone({ watched: false, positionTs: 930, durationTs: 1000 }), false, '93% 未标已看 -> 未完');
+    assert.equal(isContinueFrontierDone({ watched: false, positionTs: 980, durationTs: 1000 }), true, '>=98% 视为看完');
+    assert.equal(isContinueFrontierDone({ watched: false, positionTs: 0, durationTs: 0 }), false, '无时长 -> 未完');
 });

@@ -40,32 +40,32 @@ export function takeContinueByVisibility<T extends { item: { sourceId: string } 
 }
 
 /**
- * "继续观看"真续看点：按 (season, episode) 升序的剧集列表中，
- * 找出进度最前沿（有观看活动的最后一集）：
- * - 前沿未看完 → 返回前沿集本身（续播它）
- * - 前沿已看完 → 返回下一集（跨季进位；即使还没开播）
- * - 整部已全部看完 → 返回 null（不再出现在继续观看）
+ * "继续观看"进度前沿：该剧观看记录条目中 (season, episode) 序号最大的一条。
+ * 只需传入该剧"有观看活动"的条目，无需逐集查询全部剧集状态。
  */
-export function resolveShowContinuePoint<
-    T extends { id: string; watched: boolean; positionTs: number; durationTs: number; lastPlayedAt: number | null }
->(episodes: readonly T[]): T | null {
+export function pickContinueFrontier<T extends { item: { season: number | null; episode: number | null } }>(
+    entries: readonly T[]
+): T | null {
     let frontier: T | null = null;
-    let frontierIndex = -1;
-    for (let i = 0; i < episodes.length; i += 1) {
-        const ep = episodes[i];
-        if (ep.watched || ep.positionTs > 0 || (ep.lastPlayedAt ?? 0) > 0) {
-            frontier = ep;
-            frontierIndex = i;
+    for (const entry of entries) {
+        if (!frontier) {
+            frontier = entry;
+            continue;
+        }
+        const a = frontier.item;
+        const b = entry.item;
+        const seasonA = a.season ?? 0;
+        const seasonB = b.season ?? 0;
+        if (seasonB > seasonA || (seasonB === seasonA && (b.episode ?? 0) > (a.episode ?? 0))) {
+            frontier = entry;
         }
     }
-    if (!frontier) {
-        return null;
-    }
-    const frontierDone = frontier.watched || (frontier.durationTs > 0 && frontier.positionTs >= 0.98 * frontier.durationTs);
-    if (!frontierDone) {
-        return frontier;
-    }
-    return episodes[frontierIndex + 1] ?? null;
+    return frontier;
+}
+
+/** 前沿是否已看完（已看标记，或进度 ≥98%） */
+export function isContinueFrontierDone(state: { watched: boolean; positionTs: number; durationTs: number }): boolean {
+    return state.watched || (state.durationTs > 0 && state.positionTs >= 0.98 * state.durationTs);
 }
 
 export function isValidPrivacyPassword(password: unknown): password is string {

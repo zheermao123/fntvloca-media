@@ -17,7 +17,8 @@ import { isPrivateSource } from '../../../modules/library/sourceCategory';
 import {
     CONTINUE_LIST_LIMIT,
     CONTINUE_SCAN_LIMIT,
-    resolveShowContinuePoint,
+    pickContinueFrontier,
+    isContinueFrontierDone,
     hashPrivacyPassword,
     isPrivacyUnlocked,
     isValidPrivacyPassword,
@@ -508,40 +509,38 @@ function init(): void {
                 activityAt: entry.state.lastPlayedAt ?? 0,
             });
         }
-        for (const [showId] of groups) {
-            const episodes = store
-                .listItems({ showId })
-                .sort(
-                    (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
-                );
-            const inputs = episodes.map((ep) => {
-                const ws = store.getWatchState(ep.id);
-                return {
-                    id: ep.id,
-                    watched: ws?.watched ?? false,
-                    positionTs: ws?.positionTs ?? 0,
-                    durationTs: ws?.durationTs ?? 0,
-                    lastPlayedAt: ws?.lastPlayedAt ?? null,
-                };
-            });
-            const target = resolveShowContinuePoint(inputs);
-            if (!target) {
+        for (const [showId, entries] of groups) {
+            // 前置：只根据该剧"有观看活动"的条目找进度前沿（无需逐集查询状态）
+            const frontier = pickContinueFrontier(entries);
+            if (!frontier) {
                 continue;
             }
-            const item = episodes.find((ep) => ep.id === target.id);
-            if (!item) {
-                continue;
+            let item = frontier.item;
+            let state = frontier.state;
+            if (isContinueFrontierDone(frontier.state)) {
+                // 前沿已看完 → 找下一集（仅此分支需要查一次剧集列表）
+                const episodes = store
+                    .listItems({ showId })
+                    .sort(
+                        (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
+                    );
+                const index = episodes.findIndex((ep) => ep.id === frontier.item.id);
+                if (index < 0 || index + 1 >= episodes.length) {
+                    continue; // 整部看完
+                }
+                const next = episodes[index + 1];
+                item = next;
+                state =
+                    store.getWatchState(next.id) ?? {
+                        itemId: next.id,
+                        watched: false,
+                        positionTs: 0,
+                        durationTs: 0,
+                        lastPlayedAt: null,
+                        playCount: 0,
+                    };
             }
-            const ws = store.getWatchState(item.id);
-            const state = ws ?? {
-                itemId: item.id,
-                watched: false,
-                positionTs: 0,
-                durationTs: 0,
-                lastPlayedAt: null,
-                playCount: 0,
-            };
-            const activityAt = inputs.reduce((max, i) => Math.max(max, i.lastPlayedAt ?? 0), 0);
+            const activityAt = entries.reduce((max, entry) => Math.max(max, entry.state.lastPlayedAt ?? 0), 0);
             finalEntries.push({
                 item,
                 state,
