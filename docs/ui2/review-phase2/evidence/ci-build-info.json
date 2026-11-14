@@ -1,1 +1,15 @@
-﻿{ "run_id": 43598158857, "head_sha": "71da62e61a35767cf45875e35d0eb5c49517d9e7", "artifact": "FNMedia_3.2.9_win_x64.exe", "bytes": 139650813, "first_failed_run": 43597938525 }
+{
+  "run_id": 43601112843,
+  "head_sha": "952e99bf9368e99cf8cc33f4b314aefb178efeef",
+  "artifact": "FNMedia_3.2.9_win_x64.exe",
+  "bytes": 139651439,
+  "install_smoke": [
+    "default classic OK",
+    "packaged-fallback classic OK"
+  ],
+  "release_job": "skipped",
+  "previous_runs": [
+    43597938525,
+    43598158857
+  ]
+}

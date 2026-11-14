@@ -1,3 +1,532 @@
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 5f51c29..6f6b38d 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -113,7 +113,7 @@ jobs:
+         continue-on-error: true
+ 
+       - name: Install dependencies
+-        run: npm ci --omit=optional --no-audit --no-fund
++        run: npm ci --no-audit --no-fund
+         timeout-minutes: 10
+ 
+       - name: Setup macOS specific dependencies
+@@ -209,6 +209,50 @@ jobs:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           CSC_IDENTITY_AUTO_DISCOVERY: false
+ 
++      - name: Windows install and classic smoke
++        if: matrix.platform == 'windows'
++        shell: pwsh
++        timeout-minutes: 8
++        run: |
++          $ErrorActionPreference = 'Stop'
++          $installer = Get-ChildItem release -Filter 'FNMedia_*.exe' | Select-Object -First 1
++          if (-not $installer) { throw 'CI installer not found' }
++          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
++          $appExe = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\fntv') -Filter '*.exe' |
++            Where-Object { $_.Name -notmatch '卸载|Uninstall' } | Select-Object -First 1
++          if (-not $appExe) { throw 'installed exe not found' }
++
++          function Test-Classic([string]$tag) {
++            Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
++            Start-Sleep -Seconds 2
++            $proc = Start-Process -FilePath $appExe.FullName -ArgumentList '--remote-debugging-port=9222' -PassThru
++            try {
++              $deadline = (Get-Date).AddSeconds(75)
++              $page = $null
++              while ((Get-Date) -lt $deadline) {
++                Start-Sleep -Seconds 2
++                try {
++                  $pages = Invoke-RestMethod 'http://127.0.0.1:9222/json' -TimeoutSec 3
++                  $page = $pages | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
++                } catch { $page = $null }
++                if ($page -and $page.title -match '媒体库') { break }
++              }
++              if (-not $page) { throw "[$tag] no CDP page" }
++              if ($page.url -notmatch 'app\.asar/resource/library/index\.html') { throw "[$tag] unexpected url: $($page.url)" }
++              if ($page.title -notmatch '媒体库') { throw "[$tag] unexpected title: $($page.title)" }
++              Write-Output "[$tag] classic smoke OK: $($page.title)"
++            } finally {
++              Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
++              try { $proc | Stop-Process -Force } catch {}
++            }
++          }
++
++          Test-Classic 'default'
++          $env:FNTV_UI_SHELL = 'react'
++          $env:FNTV_UI2_DEV_URL = 'http://127.0.0.1:5273'
++          Test-Classic 'packaged-fallback'
++          Remove-Item Env:FNTV_UI_SHELL, Env:FNTV_UI2_DEV_URL -ErrorAction SilentlyContinue
++
+       - name: Upload preview release assets
+         if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
+         shell: bash
+diff --git a/package.json b/package.json
+index 097f967..4b3b118 100644
+--- a/package.json
++++ b/package.json
+@@ -18,14 +18,15 @@
+         "start:mac": "npm run clean && npm run build:proxy:mac && npm run compile && electron .",
+         "compile": "tsc",
+         "renderer:typecheck": "tsc -p tsconfig.renderer.json",
++        "renderer:test-compile": "tsc -p tsconfig.renderer.test.json",
+         "renderer:build": "npm run renderer:typecheck && vite build",
+-        "test": "npm run compile && node --test tests/*.test.cjs",
++        "test": "npm run compile && npm run renderer:test-compile && node --test tests/*.test.cjs",
+         "watch": "tsc --watch",
+         "clean": "rimraf dest",
+-        "build:win": "npm-run-all -s build:proxy:win compile renderer:build && electron-builder --win",
+-        "build:mac": "npm-run-all -s build:proxy:mac:x64 build:proxy:mac:arm64 build:proxy:mac:universal compile renderer:build clean:proxy:mac && electron-builder --mac",
+-        "build:linux:x64": "npm run build:proxy:linux:x64 && electron-builder --linux AppImage --x64",
+-        "build:linux:arm64": "npm run build:proxy:linux:arm64 && electron-builder --linux AppImage --arm64",
++        "build:win": "npm-run-all -s build:proxy:win compile renderer:build && electron-builder --win --publish never",
++        "build:mac": "npm-run-all -s build:proxy:mac:x64 build:proxy:mac:arm64 build:proxy:mac:universal compile renderer:build clean:proxy:mac && electron-builder --mac --publish never",
++        "build:linux:x64": "npm run build:proxy:linux:x64 && electron-builder --linux AppImage --x64 --publish never",
++        "build:linux:arm64": "npm run build:proxy:linux:arm64 && electron-builder --linux AppImage --arm64 --publish never",
+         "build:linux": "npm-run-all -s compile renderer:build build:linux:x64 build:linux:arm64"
+     },
+     "author": "tracing",
+@@ -70,6 +71,7 @@
+         "node-mpv-2": "^2.0.0-beta.3",
+         "react": "^19.3.1",
+         "react-dom": "^19.3.1",
++        "react-router-dom": "^7.18.5",
+         "semver": "^7.7.2",
+         "uuid": "^13.0.0"
+     },
+diff --git a/scripts/ui2-privacy-e2e.cjs b/scripts/ui2-privacy-e2e.cjs
+new file mode 100644
+index 0000000..105a97c
+--- /dev/null
++++ b/scripts/ui2-privacy-e2e.cjs
+@@ -0,0 +1,289 @@
++/**
++ * 隐私模式端到端验证（隔离 USERPROFILE，不触碰真实 ~/.fntv）
++ *
++ * 前置：npm run compile（需要 dest/modules/library/privacy.js）与 ui2-renderer 构建。
++ * 用法：node scripts/ui2-privacy-e2e.cjs
++ */
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const { spawn, spawnSync } = require('node:child_process');
++
++const ROOT = path.resolve(__dirname, '..');
++const PORT = 9224;
++const PASSWORD = 'E2E-Pass-123';
++const WRONG_PASSWORD = 'wrong-pass';
++const TMP = path.join(os.tmpdir(), 'opencode');
++
++const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
++
++function fail(message) {
++    console.error('E2E FAILED:', message);
++    process.exit(1);
++}
++
++async function waitForPageTarget(timeoutMs = 30000) {
++    const deadline = Date.now() + timeoutMs;
++    while (Date.now() < deadline) {
++        try {
++            const pages = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
++            const page = pages.find((item) => item.type === 'page');
++            if (page && page.webSocketDebuggerUrl) {
++                return page;
++            }
++        } catch {
++            /* retry */
++        }
++        await sleep(500);
++    }
++    return null;
++}
++
++class Cdp {
++    constructor(ws) {
++        this.ws = ws;
++        this.id = 0;
++        this.pending = new Map();
++        ws.addEventListener('message', (event) => {
++            const message = JSON.parse(event.data);
++            if (message.id && this.pending.has(message.id)) {
++                const { resolve, reject } = this.pending.get(message.id);
++                this.pending.delete(message.id);
++                if (message.error) {
++                    reject(new Error(message.error.message));
++                } else {
++                    resolve(message.result);
++                }
++            }
++        });
++    }
++
++    static async connect(url) {
++        const ws = new WebSocket(url);
++        await new Promise((resolve, reject) => {
++            ws.addEventListener('open', resolve, { once: true });
++            ws.addEventListener('error', reject, { once: true });
++        });
++        return new Cdp(ws);
++    }
++
++    send(method, params = {}) {
++        const id = ++this.id;
++        return new Promise((resolve, reject) => {
++            this.pending.set(id, { resolve, reject });
++            this.ws.send(JSON.stringify({ id, method, params }));
++        });
++    }
++
++    async evaluate(expression) {
++        const result = await this.send('Runtime.evaluate', {
++            expression,
++            awaitPromise: true,
++            returnByValue: true,
++            userGesture: true,
++        });
++        if (result.exceptionDetails) {
++            throw new Error(result.exceptionDetails.exception?.description || 'evaluate exception');
++        }
++        return result.result.value;
++    }
++
++    async waitFor(expression, label, timeoutMs = 15000) {
++        const deadline = Date.now() + timeoutMs;
++        while (Date.now() < deadline) {
++            const value = await this.evaluate(expression).catch(() => null);
++            if (value) {
++                return value;
++            }
++            await sleep(300);
++        }
++        throw new Error(`waitFor timeout: ${label}`);
++    }
++
++    async screenshot(name) {
++        const result = await this.send('Page.captureScreenshot', { format: 'png' });
++        fs.mkdirSync(TMP, { recursive: true });
++        const file = path.join(TMP, name);
++        fs.writeFileSync(file, Buffer.from(result.data, 'base64'));
++        return file;
++    }
++}
++
++async function main() {
++    const privacy = require(path.join(ROOT, 'dest', 'modules', 'library', 'privacy.js'));
++    const electronPath = require('electron');
++    if (!fs.existsSync(path.join(ROOT, 'ui2-renderer', 'index.html'))) {
++        fail('缺少 ui2-renderer 构建产物，请先 npm run renderer:build');
++    }
++
++    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'fntv-privacy-e2e-'));
++    const configDir = profile;
++    fs.mkdirSync(configDir, { recursive: true });
++    fs.writeFileSync(
++        path.join(configDir, 'config.json'),
++        JSON.stringify({ privacyPasswordHash: privacy.hashPrivacyPassword(PASSWORD) }, null, 2)
++    );
++
++    const child = spawn(electronPath, ['.', `--remote-debugging-port=${PORT}`], {
++        cwd: ROOT,
++        env: {
++            ...process.env,
++            USERPROFILE: profile,
++            HOME: profile,
++            FNTV_USER_DATA_DIR: profile,
++            FNTV_UI_SHELL: 'react',
++            FNTV_UI2_DEV_URL: '',
++        },
++        stdio: 'ignore',
++    });
++
++    const report = { profile, steps: [], ok: true };
++    const step = async (name, fn) => {
++        try {
++            report.steps.push({ name, ok: true, detail: await fn() });
++        } catch (error) {
++            report.ok = false;
++            report.steps.push({ name, ok: false, error: error.message });
++            throw error;
++        }
++    };
++
++    try {
++        const target = await waitForPageTarget();
++        if (!target) {
++            fail('CDP 页面未就绪');
++        }
++        const cdp = await Cdp.connect(target.webSocketDebuggerUrl);
++        await cdp.send('Runtime.enable');
++        await cdp.send('Page.enable');
++
++        await step('boot', async () => {
++            await cdp.waitFor(`!!document.querySelector('.app-sidebar')`, 'sidebar');
++            return cdp.evaluate(`document.querySelector('.app-brand__name').textContent`);
++        });
++
++        await step('open privacy gate', async () => {
++            const clicked = await cdp.evaluate(`(() => {
++                const btn = document.querySelector('.app-privacy button');
++                if (!btn) return false;
++                btn.click();
++                return true;
++            })()`);
++            if (!clicked) {
++                throw new Error('privacy button not found');
++            }
++            await cdp.waitFor(`!!document.querySelector('.ui-dialog input[type="password"]')`, 'password input');
++            return cdp.evaluate(`document.querySelector('.ui-dialog__title')?.textContent ?? ''`);
++        });
++
++        const setPassword = (value) =>
++            cdp.evaluate(`(() => {
++                const input = document.querySelector('.ui-dialog input[type="password"]');
++                const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
++                setter.call(input, ${JSON.stringify(value)});
++                input.dispatchEvent(new Event('input', { bubbles: true }));
++                return input.value;
++            })()`);
++        const clickUnlock = () =>
++            cdp.evaluate(`(() => {
++                const btn = Array.from(document.querySelectorAll('.ui-dialog__footer button'))
++                    .find((item) => (item.textContent || '').trim() === '解锁');
++                if (!btn) return false;
++                btn.click();
++                return true;
++            })()`);
++
++        await step('wrong password rejected', async () => {
++            await setPassword(WRONG_PASSWORD);
++            await clickUnlock();
++            await cdp.waitFor(`document.body.innerText.includes('密码错误')`, 'wrong password error', 10000);
++            return 'error shown';
++        });
++
++        await step('correct password unlocks privacy mode', async () => {
++            await setPassword(PASSWORD);
++            const value = await cdp.evaluate(
++                `document.querySelector('.ui-dialog input[type="password"]')?.value ?? '<missing>'`
++            );
++            const clicked = await clickUnlock();
++            try {
++                await cdp.waitFor(`!document.querySelector('.ui-dialog')`, 'dialog closed', 10000);
++            } catch (error) {
++                const diagnostics = await cdp.evaluate(`({
++                    value: document.querySelector('.ui-dialog input[type="password"]')?.value ?? null,
++                    error: document.querySelector('.ui-dialog .ui-field__error')?.textContent ?? null,
++                    buttonDisabled: Array.from(document.querySelectorAll('.ui-dialog__footer button')).map((b) => ({ text: b.textContent.trim(), disabled: b.disabled })),
++                    sidebar: document.querySelector('.app-privacy button')?.textContent ?? null,
++                    title: document.querySelector('.ui-dialog__title')?.textContent ?? null
++                })`);
++                console.error('unlock diagnostics:', JSON.stringify({ value, clicked, ...diagnostics }, null, 2));
++                await cdp.screenshot('ui2-privacy-e2e-failure.png');
++                throw error;
++            }
++            await cdp.waitFor(
++                `(document.querySelector('.app-privacy button')?.textContent || '').includes('退出隐私模式')`,
++                'privacy active label'
++            );
++            return 'unlocked';
++        });
++
++        await step('privacy library is isolated', async () => {
++            await cdp.evaluate(`location.hash = '#/library/movies'; true`);
++            await cdp.waitFor(
++                `document.querySelector('.library-page__title')?.textContent === '隐私库'`,
++                'privacy library title'
++            );
++            await cdp.waitFor(`!!document.querySelector('.ui-empty-state')`, 'privacy empty state');
++            return cdp.evaluate(`document.querySelector('.library-page__count')?.textContent ?? ''`);
++        });
++
++        await step('exit privacy returns home', async () => {
++            await cdp.evaluate(`document.querySelector('.app-privacy button').click(); true`);
++            await cdp.waitFor(`location.hash === '#/home'`, 'redirect to home');
++            await cdp.waitFor(
++                `(document.querySelector('.app-privacy button')?.textContent || '').includes('进入隐私模式')`,
++                'privacy inactive label'
++            );
++            if (await cdp.evaluate(`!!document.querySelector('.ui-dialog')`)) {
++                throw new Error('dialog should be closed after exit');
++            }
++            return cdp.evaluate(`location.hash`);
++        });
++
++        await step('public view has no privacy title', async () => {
++            await cdp.evaluate(`location.hash = '#/library/movies'; true`);
++            await cdp.waitFor(
++                `document.querySelector('.library-page__title')?.textContent === '电影'`,
++                'public library title'
++            );
++            return 'public view restored';
++        });
++
++        report.screenshot = await cdp.screenshot('ui2-privacy-e2e.png');
++        cdp.ws.close();
++        report.ok = report.steps.every((item) => item.ok);
++    } catch (error) {
++        report.ok = false;
++        report.error = error.message;
++    } finally {
++        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
++        if (!process.env.E2E_KEEP_PROFILE) {
++            try {
++                fs.rmSync(profile, { recursive: true, force: true });
++            } catch {
++                /* ignore */
++            }
++        }
++    }
++
++    fs.mkdirSync(TMP, { recursive: true });
++    const resultFile = path.join(TMP, 'privacy-e2e-result.json');
++    fs.writeFileSync(resultFile, JSON.stringify(report, null, 2));
++    console.log(JSON.stringify(report, null, 2));
++    console.log(`RESULT_FILE=${resultFile}`);
++    process.exit(report.ok ? 0 : 1);
++}
++
++main().catch((error) => {
++    fail(error.stack || String(error));
++});
+diff --git a/src/main/handlers/plugins/library.ts b/src/main/handlers/plugins/library.ts
+index f8187f7..3f03f49 100644
+--- a/src/main/handlers/plugins/library.ts
++++ b/src/main/handlers/plugins/library.ts
+@@ -1,6 +1,7 @@
+ import { dialog, IpcMainEvent } from 'electron';
+ import * as fs from 'fs';
+ import { registerHandler } from '../core/ipcHandler';
++import { createSingleFlight } from './scanGuard';
+ import { getMainWindow } from '../../common/mainwin';
+ import * as log from '../../../modules/logger';
+ import * as fnConfig from '../../../modules/fn_config/config';
+@@ -37,7 +38,7 @@ import {
+  * 负责源管理、扫描、条目查询与 TMDB 刮削的 IPC 接口；播放走 play-library-item（media.ts）。
+  */
+ 
+-let scanning = false;
++const scanSingleFlight = createSingleFlight();
+ let scraping = false;
+ let lastScrapeSummary: { scraped: number; failed: number; skipped: number } | null = null;
+ 
+@@ -141,38 +142,36 @@ function listSourcesPayload(privateOnly: boolean): { sources: unknown[] } {
+ }
+ 
+ async function runScan(event: IpcMainEvent, sourceId?: string): Promise<void> {
+-    if (scanning) {
+-        reply(event, 'library:scan-done', { error: '已有扫描任务在进行中' });
+-        return;
+-    }
+-    scanning = true;
+-    try {
+-        const store = getLibraryStore();
+-        const targets = sourceId
+-            ? [sourceId]
+-            : store.listSources().filter((s) => s.type === 'local').map((s) => s.id);
+-        const totals = { added: 0, updated: 0, removed: 0, skipped: 0 };
+-        const removedSourceNames: string[] = [];
+-        for (const id of targets) {
+-            try {
+-                const summary = await scanSource(id);
+-                totals.added += summary.added;
+-                totals.updated += summary.updated;
+-                totals.removed += summary.removed;
+-                totals.skipped += summary.skipped;
+-                if (summary.removedSource && removedSourceNames.length < 5) {
+-                    removedSourceNames.push(summary.removedSource.name);
++    const outcome = await scanSingleFlight.run(async () => {
++        try {
++            const store = getLibraryStore();
++            const targets = sourceId
++                ? [sourceId]
++                : store.listSources().filter((s) => s.type === 'local').map((s) => s.id);
++            const totals = { added: 0, updated: 0, removed: 0, skipped: 0 };
++            const removedSourceNames: string[] = [];
++            for (const id of targets) {
++                try {
++                    const summary = await scanSource(id);
++                    totals.added += summary.added;
++                    totals.updated += summary.updated;
++                    totals.removed += summary.removed;
++                    totals.skipped += summary.skipped;
++                    if (summary.removedSource && removedSourceNames.length < 5) {
++                        removedSourceNames.push(summary.removedSource.name);
++                    }
++                } catch (error) {
++                    log.error('[library] 扫描源失败:', id, error);
+                 }
+-            } catch (error) {
+-                log.error('[library] 扫描源失败:', id, error);
+             }
++            reply(event, 'library:scan-done', { ...totals, removedSources: removedSourceNames.length ? removedSourceNames : undefined });
++        } catch (error) {
++            log.error('[library] 扫描失败:', error);
++            reply(event, 'library:scan-done', { error: error instanceof Error ? error.message : String(error) });
+         }
+-        reply(event, 'library:scan-done', { ...totals, removedSources: removedSourceNames.length ? removedSourceNames : undefined });
+-    } catch (error) {
+-        log.error('[library] 扫描失败:', error);
+-        reply(event, 'library:scan-done', { error: error instanceof Error ? error.message : String(error) });
+-    } finally {
+-        scanning = false;
++    });
++    if (!outcome.started) {
++        reply(event, 'library:scan-done', { error: '已有扫描任务在进行中' });
+     }
+ }
+ 
+diff --git a/src/main/handlers/plugins/scanGuard.ts b/src/main/handlers/plugins/scanGuard.ts
+new file mode 100644
+index 0000000..5c86306
+--- /dev/null
++++ b/src/main/handlers/plugins/scanGuard.ts
+@@ -0,0 +1,23 @@
++/**
++ * 单飞（single-flight）守卫：用于主进程扫描等互斥任务。
++ * 并发触发时第二个调用立即得到 started=false，任务异常也会释放。
++ */
++export type SingleFlightOutcome<T> = { started: true; value: T } | { started: false };
++
++export function createSingleFlight() {
++    let running = false;
++    return {
++        isRunning: () => running,
++        async run<T>(task: () => Promise<T>): Promise<SingleFlightOutcome<T>> {
++            if (running) {
++                return { started: false };
++            }
++            running = true;
++            try {
++                return { started: true, value: await task() };
++            } finally {
++                running = false;
++            }
++        },
++    };
++}
+diff --git a/src/public/constants.ts b/src/public/constants.ts
+index c20859e..81ffd7c 100644
+--- a/src/public/constants.ts
++++ b/src/public/constants.ts
+@@ -2,4 +2,15 @@ import * as fs from 'node:fs';
+ import * as path from 'node:path';
+ import { app } from 'electron';
+ 
+-export const USER_DATA_PATH: string = path.join(app.getPath('home'), '.fntv');
++/**
++ * 开发态可通过 FNTV_USER_DATA_DIR 覆盖数据目录（用于隔离 E2E；打包版忽略）。
++ */
++function resolveUserDataPath(): string {
++    const override = app.isPackaged ? undefined : process.env.FNTV_USER_DATA_DIR;
++    if (override && override.trim().length > 0) {
++        return path.resolve(override.trim());
++    }
++    return path.join(app.getPath('home'), '.fntv');
++}
++
++export const USER_DATA_PATH: string = resolveUserDataPath();
 diff --git a/src/renderer/app/AppShell.tsx b/src/renderer/app/AppShell.tsx
 new file mode 100644
 index 0000000..71cd80c
@@ -1337,6 +1866,108 @@ index 0000000..7f2add1
 +    signal?.addEventListener('abort', onAbort, { once: true });
 +    return reply.promise.finally(() => signal?.removeEventListener('abort', onAbort));
 +}
+diff --git a/tests/libraryScanGuard.test.cjs b/tests/libraryScanGuard.test.cjs
+new file mode 100644
+index 0000000..da4ea6e
+--- /dev/null
++++ b/tests/libraryScanGuard.test.cjs
+@@ -0,0 +1,53 @@
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const path = require('node:path');
++
++const { createSingleFlight } = require(
++    path.join(__dirname, '..', 'dest', 'main', 'handlers', 'plugins', 'scanGuard.js')
++);
++
++function deferred() {
++    let resolve;
++    let reject;
++    const promise = new Promise((res, rej) => {
++        resolve = res;
++        reject = rej;
++    });
++    return { promise, resolve, reject };
++}
++
++test('concurrent scan triggers are rejected while first is running', async () => {
++    const guard = createSingleFlight();
++    const gate = deferred();
++    const first = guard.run(async () => {
++        await gate.promise;
++        return 'done';
++    });
++    assert.equal(guard.isRunning(), true);
++    const second = await guard.run(async () => 'should-not-run');
++    assert.deepEqual(second, { started: false });
++    gate.resolve();
++    assert.deepEqual(await first, { started: true, value: 'done' });
++    assert.equal(guard.isRunning(), false);
++});
++
++test('guard releases after completion and allows the next scan', async () => {
++    const guard = createSingleFlight();
++    await guard.run(async () => undefined);
++    const next = await guard.run(async () => 42);
++    assert.deepEqual(next, { started: true, value: 42 });
++    assert.equal(guard.isRunning(), false);
++});
++
++test('guard releases after task failure and next scan proceeds', async () => {
++    const guard = createSingleFlight();
++    await assert.rejects(
++        guard.run(async () => {
++            throw new Error('boom');
++        }),
++        /boom/
++    );
++    assert.equal(guard.isRunning(), false);
++    const retry = await guard.run(async () => 'ok');
++    assert.deepEqual(retry, { started: true, value: 'ok' });
++});
+diff --git a/tests/privacyPassword.test.cjs b/tests/privacyPassword.test.cjs
+new file mode 100644
+index 0000000..5e71466
+--- /dev/null
++++ b/tests/privacyPassword.test.cjs
+@@ -0,0 +1,37 @@
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const path = require('node:path');
++
++const privacy = require(path.join(__dirname, '..', 'dest', 'modules', 'library', 'privacy.js'));
++
++test('privacy password validation enforces trimmed minimum length', () => {
++    assert.equal(privacy.isValidPrivacyPassword('abcd'), true);
++    assert.equal(privacy.isValidPrivacyPassword('   ab'), false);
++    assert.equal(privacy.isValidPrivacyPassword('abc'), false);
++    assert.equal(privacy.isValidPrivacyPassword(1234), false);
++    assert.equal(privacy.PRIVACY_PASSWORD_MIN_LENGTH, 4);
++});
++
++test('scrypt hash verifies only the correct password', () => {
++    const hash = privacy.hashPrivacyPassword('E2E-Pass-123');
++    assert.match(hash, /^scrypt\$\d+\$[^$]+\$[^$]+$/);
++    assert.equal(privacy.verifyPrivacyPassword('E2E-Pass-123', hash), true);
++    assert.equal(privacy.verifyPrivacyPassword('wrong-pass', hash), false);
++    assert.equal(privacy.verifyPrivacyPassword('E2E-Pass-123', null), false);
++    assert.equal(privacy.verifyPrivacyPassword('E2E-Pass-123', 'broken'), false);
++    assert.equal(privacy.verifyPrivacyPassword('E2E-Pass-123', 'scrypt$x$bad$bad'), false);
++});
++
++test('salt makes hashes unique and unlock state is memory-only toggle', () => {
++    const a = privacy.hashPrivacyPassword('same-password');
++    const b = privacy.hashPrivacyPassword('same-password');
++    assert.notEqual(a, b);
++    assert.equal(privacy.verifyPrivacyPassword('same-password', a), true);
++    assert.equal(privacy.verifyPrivacyPassword('same-password', b), true);
++
++    privacy.setPrivacyUnlocked(false);
++    assert.equal(privacy.isPrivacyUnlocked(), false);
++    privacy.setPrivacyUnlocked(true);
++    assert.equal(privacy.isPrivacyUnlocked(), true);
++    privacy.setPrivacyUnlocked(false);
++});
 diff --git a/tests/ui2Bridge.test.cjs b/tests/ui2Bridge.test.cjs
 new file mode 100644
 index 0000000..34fb707
@@ -1401,10 +2032,10 @@ index 0000000..34fb707
 +});
 diff --git a/tests/ui2Lifecycle.test.cjs b/tests/ui2Lifecycle.test.cjs
 new file mode 100644
-index 0000000..55d0958
+index 0000000..3d04a6f
 --- /dev/null
 +++ b/tests/ui2Lifecycle.test.cjs
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,56 @@
 +const { test } = require('node:test');
 +const assert = require('node:assert/strict');
 +const fs = require('node:fs');
@@ -1451,6 +2082,17 @@ index 0000000..55d0958
 +    assert.ok(tasksService.includes('onceReplyCancellable'));
 +    assert.ok(tasksService.includes('IPC_CANCELLED'));
 +});
++
++test('main-process scan uses a single-flight guard (duplicate triggers rejected)', () => {
++    const library = read('src/main/handlers/plugins/library.ts');
++    assert.ok(library.includes('scanSingleFlight.run'));
++    assert.ok(library.includes("已有扫描任务在进行中"));
++    assert.ok(!library.includes('let scanning = false;'));
++    const guard = read('src/main/handlers/plugins/scanGuard.ts');
++    assert.ok(guard.includes('started: false'));
++    assert.ok(guard.includes('finally'));
++});
+\ No newline at end of file
 diff --git a/tsconfig.renderer.test.json b/tsconfig.renderer.test.json
 new file mode 100644
 index 0000000..b940da9

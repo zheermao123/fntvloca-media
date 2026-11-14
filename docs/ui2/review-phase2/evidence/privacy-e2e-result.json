@@ -1,0 +1,42 @@
+{
+  "profile": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\fntv-privacy-e2e-LjtJch",
+  "steps": [
+    {
+      "name": "boot",
+      "ok": true,
+      "detail": "飞牛影视"
+    },
+    {
+      "name": "open privacy gate",
+      "ok": true,
+      "detail": "进入隐私模式"
+    },
+    {
+      "name": "wrong password rejected",
+      "ok": true,
+      "detail": "error shown"
+    },
+    {
+      "name": "correct password unlocks privacy mode",
+      "ok": true,
+      "detail": "unlocked"
+    },
+    {
+      "name": "privacy library is isolated",
+      "ok": true,
+      "detail": "0 部 / 季"
+    },
+    {
+      "name": "exit privacy returns home",
+      "ok": true,
+      "detail": "#/home"
+    },
+    {
+      "name": "public view has no privacy title",
+      "ok": true,
+      "detail": "public view restored"
+    }
+  ],
+  "ok": true,
+  "screenshot": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\opencode\\ui2-privacy-e2e.png"
+}

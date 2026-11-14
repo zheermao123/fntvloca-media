@@ -309,3 +309,11 @@ Apple 风格 Light 默认设计系统：tokens、reset/global/组件样式、主
 - 合并后验证：`npm test` 249/249；`npm run renderer:build` exit 0。
 - 发布边界：未打 tag、未创建 Release、未将 React 设为默认 UI；正式安装仍为 classic。
 - 发布前未关闭事项：隐私真实密码端到端验证、扫描离页后主进程继续运行的边界测试、electron-builder 隐式发布（建议显式 `--publish never`）、CI 产物实际安装冒烟、macOS/Linux 验证。
+---
+
+## 发布准入阻塞项修复（2026-11-14）
+
+- 打包脚本显式 `--publish never`；CI Windows 增加静默安装 + classic 默认/回退冒烟（run `43601112843` 通过）。
+- 主进程扫描单飞守卫（重复触发拒绝、异常释放）+ 行为测试；新增隔离数据目录隐私 E2E（错误密码/正确解锁/退出回跳）。
+- 新增 `tests/privacyPassword.test.cjs`、`tests/libraryScanGuard.test.cjs`；总测试 **256/256**。
+- 证据：`docs/ui2/review-phase2/evidence/privacy-e2e-result.json`、`ci-install-smoke.log`；本机重装 CI 产物复验 classic。

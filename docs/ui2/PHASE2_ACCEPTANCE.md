@@ -128,3 +128,35 @@ Phase 2 全部阶段（P2-01 ~ P2-08）功能、命令与运行时验收 **通�
 - 实际安装后验证：标题「媒体库 v3.2.9」、`#titlebar` 存在、无 `.app-shell-root`（classic 默认）。
 - 回退验证：打包环境设置 `FNTV_UI_SHELL=react` + dev URL 后仍加载 classic（`resolveUiShell` 对 packaged 强制 classic）。
 - 安装包 `app.asar` 内含 `ui2-renderer`（index.html + JS/CSS 资产，5 条目），资源随包分发但不影响默认壳层。
+## 9. 发布准入阻塞项修复（2026-11-14）
+
+### 隐式发布风险
+
+- 所有 electron-builder 打包脚本显式追加 `--publish never`（win/mac/linux x64/arm64）。
+- CI 构建步骤仍由独立 Release Job 统一负责发布；本次 workflow_dispatch 的 Release Job 保持 skipped。
+
+### CI 安装冒烟
+
+- release.yml 新增 Windows 步骤：静默安装 CI 产物 → 启动 → CDP 校验 URL 为 `app.asar/resource/library/index.html` 且标题含「媒体库」→ 关闭。
+- 同时验证回退：设置 `FNTV_UI_SHELL=react` + dev URL 后，打包版仍加载 classic。
+- run `43601112843`（SHA `952e99b`）成功，日志确认：
+  - `[default] classic smoke OK: 媒体库 v3.2.9`
+  - `[packaged-fallback] classic smoke OK: 媒体库 v3.2.9`
+- 本机再次安装该 CI 产物验证：标题「媒体库 v3.2.9」、`#titlebar` 存在、无 React 根节点。
+
+### 扫描重复触发
+
+- 主进程 `runScan` 改为 `createSingleFlight` 守卫：扫描期间再次触发立即返回「已有扫描任务在进行中」，异常/完成后释放；不再依赖渲染层状态。
+- 新增 `tests/libraryScanGuard.test.cjs`（并发拒绝/完成释放/异常释放）与生命周期契约断言。
+
+### 隐私真实密码端到端
+
+- 新增仅开发态生效的 `FNTV_USER_DATA_DIR` 覆盖（打包版忽略），E2E 使用隔离数据目录，不触碰真实 `~/.fntv`。
+- 新增 `scripts/ui2-privacy-e2e.cjs`：真实打开密码弹窗 → 错误密码被拒 → 正确密码解锁 → 隐私库 → 退出自动回首页 → 公开视图恢复。
+- 结果：7 个步骤全部通过；证据 `privacy-e2e-result.json`、`ui2-privacy-e2e.png`。
+- 新增 `tests/privacyPassword.test.cjs`：scrypt 哈希校验、错误/畸形哈希、加盐唯一性、内存解锁状态。
+
+### 汇总
+
+- `npm test` **256 / 256 通过**；compile / renderer:typecheck / renderer:build 全绿。
+- 注意：Phase 2 仍未启用 React 为默认 UI，未打 tag、未创建 Release。
