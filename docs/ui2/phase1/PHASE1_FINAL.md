@@ -35,7 +35,7 @@ Tag：`ui2-phase1-complete`
 | 项 | 值 |
 |---|---|
 | Phase 1 开始前 HEAD（main） | `b97b0502fba455067c58851e4d20a8c4b3f4ce3a`（chore: v3.2.9） |
-| Phase 1 最终提交 | `__PHASE1_COMMIT_SHA__`（本次提交，见 git log） |
+| Phase 1 最终提交 | `53a9af0903950fc08716cfae955054f5cd1bbd21`（本次提交，见 git log） |
 | Tag | `ui2-phase1-complete`（annotated，回滚锚点） |
 | 分支 | `ui2-integration` |
 
