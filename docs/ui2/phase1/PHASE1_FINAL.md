@@ -35,8 +35,9 @@ Tag：`ui2-phase1-complete`
 | 项 | 值 |
 |---|---|
 | Phase 1 开始前 HEAD（main） | `b97b0502fba455067c58851e4d20a8c4b3f4ce3a`（chore: v3.2.9） |
-| Phase 1 最终提交 | `53a9af0903950fc08716cfae955054f5cd1bbd21`（本次提交，见 git log） |
-| Tag | `ui2-phase1-complete`（annotated，回滚锚点） |
+| Phase 1 主提交（feat） | `53a9af0903950fc08716cfae955054f5cd1bbd21` |
+| SHA 记录提交（docs） | `61ddf800c555a280c86e2fc698c5fd6d6b670531` |
+| Tag | `ui2-phase1-complete`（annotated，指向 61ddf80；tag 对象 `be3035c`） |
 | 分支 | `ui2-integration` |
 
 回滚：`git checkout ui2-phase1-complete` 可回到 Phase 1 完成态；或 `git reset --hard b97b050` 回到 Phase 1 之前（仅在工作分支、且确认不丢失未提交内容时使用）。详见 `ROLLBACK.md`。
