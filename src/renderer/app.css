@@ -10,19 +10,19 @@ body,
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    background: #f7f7f8;
-    color: #1c1c1e;
+    font-family: var(--font-family-base);
+    background: var(--color-bg);
+    color: var(--color-text-primary);
 }
 
 .app-shell .title {
-    font-size: 22px;
-    font-weight: 600;
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-semibold);
     margin: 0;
 }
 
 .app-shell .subtitle {
-    font-size: 13px;
-    color: #8e8e93;
-    margin-top: 8px;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+    margin-top: var(--space-2);
 }
