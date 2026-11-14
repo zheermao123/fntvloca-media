@@ -1,5 +1,5 @@
 /** 刮削任务适配（library:scrape / scrape-status / scrape-started / 进度 / done） */
-import { getBridge, invoke, onceReply, sendChannel } from '../desktop/desktopBridge';
+import { getBridge, invoke, onceReplyCancellable, sendChannel } from '../desktop/desktopBridge';
 import type { ScrapeProgressDto, ScrapeSummaryDto } from '../../pages/tasks/tasks.mapper';
 
 export type ScrapeStatusResult = {
@@ -26,15 +26,40 @@ export function onScrapeProgress(listener: (progress: ScrapeProgressDto) => void
 }
 
 /** 返回 started；未启动时含主进程错误（如缺少 TMDB API Key） */
-export async function startScrape(): Promise<{ started: boolean; error?: string }> {
-    const wait = onceReply<{ started?: boolean; error?: string }>('library:scrape-started', START_TIMEOUT_MS);
-    if (!sendChannel('library:scrape', { force: false })) {
-        throw new Error('BRIDGE_UNAVAILABLE');
+export async function startScrape(signal?: AbortSignal): Promise<{ started: boolean; error?: string }> {
+    if (signal?.aborted) {
+        throw new Error('IPC_CANCELLED');
     }
-    const result = await wait;
-    return { started: result?.started === true, error: result?.error };
+    const reply = onceReplyCancellable<{ started?: boolean; error?: string }>(
+        'library:scrape-started',
+        START_TIMEOUT_MS
+    );
+    const onAbort = () => {
+        reply.cancel();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+        if (!sendChannel('library:scrape', { force: false })) {
+            throw new Error('BRIDGE_UNAVAILABLE');
+        }
+        const result = await reply.promise;
+        return { started: result?.started === true, error: result?.error };
+    } finally {
+        signal?.removeEventListener('abort', onAbort);
+    }
 }
 
-export function waitScrapeDone(): Promise<{ summary?: ScrapeSummaryDto; error?: string }> {
-    return onceReply('library-scrape-done', DONE_TIMEOUT_MS);
+export function waitScrapeDone(signal?: AbortSignal): Promise<{ summary?: ScrapeSummaryDto; error?: string }> {
+    if (signal?.aborted) {
+        return Promise.reject(new Error('IPC_CANCELLED'));
+    }
+    const reply = onceReplyCancellable<{ summary?: ScrapeSummaryDto; error?: string }>(
+        'library-scrape-done',
+        DONE_TIMEOUT_MS
+    );
+    const onAbort = () => {
+        reply.cancel();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    return reply.promise.finally(() => signal?.removeEventListener('abort', onAbort));
 }

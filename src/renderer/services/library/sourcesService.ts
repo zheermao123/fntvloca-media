@@ -1,5 +1,5 @@
 /** 媒体源查询与扫描动作适配（library:list-sources / library:scan） */
-import { invoke, onceReply, sendChannel } from '../desktop/desktopBridge';
+import { invoke, onceReplyCancellable, sendChannel } from '../desktop/desktopBridge';
 import type { ScanDoneDto, SourceDto } from '../../pages/sources/sources.mapper';
 
 const SCAN_TIMEOUT_MS = 30 * 60 * 1000;
@@ -14,10 +14,21 @@ export async function fetchSources(privateActive: boolean): Promise<{ sources: S
 }
 
 /** 触发扫描并等待完成汇总（主进程扫描期间无进度事件，仅完成回包） */
-export async function runLibraryScan(sourceId?: string): Promise<ScanDoneDto> {
-    const wait = onceReply<ScanDoneDto>('library:scan-done', SCAN_TIMEOUT_MS);
-    if (!sendChannel('library:scan', { sourceId })) {
-        throw new Error('BRIDGE_UNAVAILABLE');
+export async function runLibraryScan(sourceId?: string, signal?: AbortSignal): Promise<ScanDoneDto> {
+    if (signal?.aborted) {
+        throw new Error('IPC_CANCELLED');
     }
-    return wait;
+    const reply = onceReplyCancellable<ScanDoneDto>('library:scan-done', SCAN_TIMEOUT_MS);
+    const onAbort = () => {
+        reply.cancel();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+        if (!sendChannel('library:scan', { sourceId })) {
+            throw new Error('BRIDGE_UNAVAILABLE');
+        }
+        return await reply.promise;
+    } finally {
+        signal?.removeEventListener('abort', onAbort);
+    }
 }

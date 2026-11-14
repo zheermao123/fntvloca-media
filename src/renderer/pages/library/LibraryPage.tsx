@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
 import { CATEGORY_META, resolveCategoryFromSegment } from '../../app/routes';
@@ -32,11 +32,13 @@ export function LibraryPage() {
     const [favorite, setFavorite] = useState<FavoriteFilterKey>('all');
     const [view, setView] = useState<ViewMode>('grid');
     const [state, setState] = useState<LoadState>({ status: 'loading' });
+    const requestSeqRef = useRef(0);
 
     const load = useCallback(async () => {
         if (!category) {
             return;
         }
+        const seq = ++requestSeqRef.current;
         setState({ status: 'loading' });
         try {
             const entries = await queryCatalog({
@@ -47,8 +49,14 @@ export function LibraryPage() {
                 limit: QUERY_LIMIT,
                 private: privacy.active,
             });
+            if (requestSeqRef.current !== seq) {
+                return;
+            }
             setState({ status: 'success', entries });
         } catch (error) {
+            if (requestSeqRef.current !== seq) {
+                return;
+            }
             setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
         }
     }, [category, sort, watched, favorite, privacy.active]);

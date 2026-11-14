@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { WindowFrame } from '../layout/WindowFrame';
 import { Sidebar } from '../layout/Sidebar';
 import { MainRegion } from '../layout/MainRegion';
 import { PageHeader } from '../layout/PageHeader';
 import { Dialog } from '../components/ui/Dialog';
 import { SearchPanel } from '../pages/search/SearchPanel';
-import { CATEGORY_META, resolveCategoryFromSegment } from './routes';
+import { usePrivacyState } from './PrivacyStateProvider';
+import { CATEGORY_META, ROUTES, resolveCategoryFromSegment } from './routes';
 
 function titleForPath(pathname: string): string {
     if (pathname === '/home' || pathname === '/') {
@@ -31,8 +32,19 @@ function titleForPath(pathname: string): string {
 
 export function AppShell() {
     const location = useLocation();
+    const navigate = useNavigate();
+    const privacy = usePrivacyState();
     const [searchOpen, setSearchOpen] = useState(false);
     const title = useMemo(() => titleForPath(location.pathname), [location.pathname]);
+    const prevPrivacyActive = useRef(privacy.active);
+
+    useEffect(() => {
+        if (prevPrivacyActive.current && !privacy.active) {
+            setSearchOpen(false);
+            navigate(ROUTES.home, { replace: true });
+        }
+        prevPrivacyActive.current = privacy.active;
+    }, [privacy.active, navigate]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {

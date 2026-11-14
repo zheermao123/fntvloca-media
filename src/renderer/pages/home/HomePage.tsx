@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
 import { fetchHomeOverview } from '../../services/library/libraryService';
 import type { HomeOverview } from '../../services/library/library.types';
@@ -19,13 +19,21 @@ type LoadState =
 export function HomePage() {
     const privacy = usePrivacyState();
     const [state, setState] = useState<LoadState>({ status: 'loading' });
+    const requestSeqRef = useRef(0);
 
     const load = useCallback(async () => {
+        const seq = ++requestSeqRef.current;
         setState({ status: 'loading' });
         try {
             const data = await fetchHomeOverview();
+            if (requestSeqRef.current !== seq) {
+                return;
+            }
             setState({ status: 'success', data });
         } catch (error) {
+            if (requestSeqRef.current !== seq) {
+                return;
+            }
             setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
         }
     }, []);

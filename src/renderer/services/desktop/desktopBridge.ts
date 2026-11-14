@@ -1,7 +1,7 @@
 /** 渲染层统一访问 preload 桥接（P2-07 归口；此处为服务层唯一入口） */
-import { getBridge, onceReply, sendChannel } from '../../app/bridge';
+import { getBridge, onceReply, onceReplyCancellable, sendChannel } from '../../app/bridge';
 
-export { getBridge, onceReply, sendChannel };
+export { getBridge, onceReply, onceReplyCancellable, sendChannel };
 
 /** 发送请求并等待对应回复通道（FIFO 配对；主进程 catalog 等同步 handler 响应有序） */
 export async function invoke<T>(

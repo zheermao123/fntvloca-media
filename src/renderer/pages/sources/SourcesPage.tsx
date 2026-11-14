@@ -20,24 +20,35 @@ export function SourcesPage() {
     const [scanningId, setScanningId] = useState<string | null>(null);
     const [banner, setBanner] = useState('');
     const aliveRef = useRef(true);
+    const requestSeqRef = useRef(0);
+    const scanAbortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
         aliveRef.current = true;
         return () => {
             aliveRef.current = false;
+            scanAbortRef.current?.abort();
+            scanAbortRef.current = null;
         };
     }, []);
 
     const load = useCallback(async () => {
+        const seq = ++requestSeqRef.current;
         setState({ status: 'loading' });
         try {
             const result = await fetchSources(privacy.active);
+            if (!aliveRef.current || requestSeqRef.current !== seq) {
+                return;
+            }
             setState({
                 status: 'success',
                 rows: toSourceRows(result.sources as SourceDto[], privacy.active),
                 locked: result.locked,
             });
         } catch (error) {
+            if (!aliveRef.current || requestSeqRef.current !== seq) {
+                return;
+            }
             setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
         }
     }, [privacy.active]);
@@ -50,20 +61,25 @@ export function SourcesPage() {
         if (scanningId) {
             return;
         }
+        const controller = new AbortController();
+        scanAbortRef.current = controller;
         setScanningId(sourceId);
         setBanner('正在扫描，完成后显示结果…');
         try {
-            const result = await runLibraryScan(sourceId);
-            if (aliveRef.current) {
+            const result = await runLibraryScan(sourceId, controller.signal);
+            if (aliveRef.current && !controller.signal.aborted) {
                 setBanner(formatScanResult(result));
                 await load();
             }
         } catch (error) {
-            if (aliveRef.current) {
+            if (aliveRef.current && !controller.signal.aborted) {
                 setBanner(`扫描失败：${error instanceof Error ? error.message : '未知错误'}`);
             }
         } finally {
-            if (aliveRef.current) {
+            if (scanAbortRef.current === controller) {
+                scanAbortRef.current = null;
+            }
+            if (aliveRef.current && !controller.signal.aborted) {
                 setScanningId(null);
             }
         }

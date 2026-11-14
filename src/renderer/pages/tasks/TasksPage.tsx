@@ -22,6 +22,11 @@ export function TasksPage() {
     const [banner, setBanner] = useState('');
     const aliveRef = useRef(true);
     const unsubscribeRef = useRef<(() => void) | null>(null);
+    const requestSeqRef = useRef(0);
+    const scanInFlightRef = useRef(false);
+    const scrapeInFlightRef = useRef(false);
+    const scanAbortRef = useRef<AbortController | null>(null);
+    const scrapeAbortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
         aliveRef.current = true;
@@ -29,15 +34,26 @@ export function TasksPage() {
             aliveRef.current = false;
             unsubscribeRef.current?.();
             unsubscribeRef.current = null;
+            scanAbortRef.current?.abort();
+            scrapeAbortRef.current?.abort();
+            scanAbortRef.current = null;
+            scrapeAbortRef.current = null;
         };
     }, []);
 
     const load = useCallback(async () => {
+        const seq = ++requestSeqRef.current;
         setState({ status: 'loading' });
         try {
             const result = await fetchScrapeStatus();
+            if (!aliveRef.current || requestSeqRef.current !== seq) {
+                return;
+            }
             setState({ status: 'success', running: result.running, lastSummary: result.lastSummary });
         } catch (error) {
+            if (!aliveRef.current || requestSeqRef.current !== seq) {
+                return;
+            }
             setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
         }
     }, []);
@@ -47,25 +63,41 @@ export function TasksPage() {
     }, [load]);
 
     const scan = async () => {
+        if (scanInFlightRef.current) {
+            return;
+        }
+        scanInFlightRef.current = true;
+        const controller = new AbortController();
+        scanAbortRef.current = controller;
         setScanPending(true);
         setBanner('正在扫描媒体库，完成后显示汇总…');
         try {
-            const result = await runLibraryScan();
-            if (aliveRef.current) {
+            const result = await runLibraryScan(undefined, controller.signal);
+            if (aliveRef.current && !controller.signal.aborted) {
                 setBanner(formatScanResult(result));
             }
         } catch (error) {
-            if (aliveRef.current) {
+            if (aliveRef.current && !controller.signal.aborted) {
                 setBanner(`扫描失败：${error instanceof Error ? error.message : '未知错误'}`);
             }
         } finally {
-            if (aliveRef.current) {
+            scanInFlightRef.current = false;
+            if (scanAbortRef.current === controller) {
+                scanAbortRef.current = null;
+            }
+            if (aliveRef.current && !controller.signal.aborted) {
                 setScanPending(false);
             }
         }
     };
 
     const scrape = async () => {
+        if (scrapeInFlightRef.current) {
+            return;
+        }
+        scrapeInFlightRef.current = true;
+        const controller = new AbortController();
+        scrapeAbortRef.current = controller;
         setScrapePending(true);
         setBanner('');
         setProgress(null);
@@ -76,33 +108,42 @@ export function TasksPage() {
             }
         });
         try {
-            const started = await startScrape();
+            const started = await startScrape(controller.signal);
+            if (controller.signal.aborted) {
+                return;
+            }
             if (!started.started) {
-                setBanner(started.error || '无法开始刮削');
-                unsubscribeRef.current?.();
-                unsubscribeRef.current = null;
+                if (aliveRef.current) {
+                    setBanner(started.error || '无法开始刮削');
+                }
                 return;
             }
             if (aliveRef.current) {
                 setState({ status: 'success', running: true, lastSummary: null });
             }
-            const done = await waitScrapeDone();
-            if (aliveRef.current) {
+            const done = await waitScrapeDone(controller.signal);
+            if (aliveRef.current && !controller.signal.aborted) {
                 if (done.error) {
                     setBanner(`刮削失败：${done.error}`);
                 } else {
                     setBanner(`刮削已完成：成功 ${done.summary?.scraped ?? 0}，失败 ${done.summary?.failed ?? 0}，跳过 ${done.summary?.skipped ?? 0}`);
                 }
             }
-            await load();
+            if (!controller.signal.aborted) {
+                await load();
+            }
         } catch (error) {
-            if (aliveRef.current) {
+            if (aliveRef.current && !controller.signal.aborted) {
                 setBanner(`刮削失败：${error instanceof Error ? error.message : '未知错误'}`);
             }
         } finally {
+            scrapeInFlightRef.current = false;
+            if (scrapeAbortRef.current === controller) {
+                scrapeAbortRef.current = null;
+            }
             unsubscribeRef.current?.();
             unsubscribeRef.current = null;
-            if (aliveRef.current) {
+            if (aliveRef.current && !controller.signal.aborted) {
                 setScrapePending(false);
                 setProgress(null);
             }

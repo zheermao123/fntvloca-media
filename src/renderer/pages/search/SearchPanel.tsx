@@ -30,17 +30,25 @@ export function SearchPanel({ onNavigate }: { onNavigate: () => void }) {
             setState({ status: 'idle' });
             return;
         }
+        let cancelled = false;
         setState({ status: 'loading' });
         const timer = window.setTimeout(() => {
             queryCatalog({ query: keyword, limit: SEARCH_LIMIT, private: privacy.active })
                 .then((entries) => {
-                    setState({ status: 'success', cards: mapCatalogEntries(entries) });
+                    if (!cancelled) {
+                        setState({ status: 'success', cards: mapCatalogEntries(entries) });
+                    }
                 })
                 .catch((error: unknown) => {
-                    setState({ status: 'error', message: error instanceof Error ? error.message : '搜索失败' });
+                    if (!cancelled) {
+                        setState({ status: 'error', message: error instanceof Error ? error.message : '搜索失败' });
+                    }
                 });
         }, DEBOUNCE_MS);
-        return () => window.clearTimeout(timer);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, [query, privacy.active]);
 
     return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { parseMediaRoute } from '../../services/library/library.mapper';
 import { fetchItemInfo, fetchShowInfo, playLibraryItem } from '../../services/media/mediaService';
@@ -22,25 +22,34 @@ export function MediaDetailPage() {
     const navigate = useNavigate();
     const parsed = useMemo(() => parseMediaRoute(id ?? '', location.search), [id, location.search]);
     const [state, setState] = useState<LoadState>({ status: 'loading' });
+    const requestSeqRef = useRef(0);
 
     const load = useCallback(async () => {
         if (!id) {
             setState({ status: 'error', message: '缺少媒体 ID' });
             return;
         }
+        const seq = ++requestSeqRef.current;
         setState({ status: 'loading' });
         try {
             if (parsed.kind === 'season') {
                 const result = await fetchShowInfo(parsed.showId, parsed.season);
-                setState({
-                    status: 'success',
-                    model: mapSeasonDetail(result.show, parsed.season, result.episodes, result.states),
-                });
+                if (requestSeqRef.current === seq) {
+                    setState({
+                        status: 'success',
+                        model: mapSeasonDetail(result.show, parsed.season, result.episodes, result.states),
+                    });
+                }
             } else {
                 const result = await fetchItemInfo(parsed.itemId);
-                setState({ status: 'success', model: mapMovieDetail(result.item) });
+                if (requestSeqRef.current === seq) {
+                    setState({ status: 'success', model: mapMovieDetail(result.item) });
+                }
             }
         } catch (error) {
+            if (requestSeqRef.current !== seq) {
+                return;
+            }
             setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
         }
     }, [id, parsed]);

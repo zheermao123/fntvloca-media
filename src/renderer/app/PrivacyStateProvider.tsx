@@ -77,13 +77,16 @@ export function PrivacyStateProvider({ children }: { children: ReactNode }) {
 
     const submitPassword = useCallback(
         async (value: string) => {
-            if (!state.available) {
+            if (!state.available || busy) {
                 return;
             }
             setBusy(true);
             setError(null);
             try {
-                sendChannel('library:privacy-unlock', { password: value });
+                if (!sendChannel('library:privacy-unlock', { password: value })) {
+                    setError('桌面桥接不可用');
+                    return;
+                }
                 const result = await onceReply<{ success?: boolean; unlocked?: boolean; error?: string }>('library:privacy-result');
                 if (result?.success && result.unlocked) {
                     setState((prev) => ({ ...prev, unlocked: true }));
@@ -99,21 +102,28 @@ export function PrivacyStateProvider({ children }: { children: ReactNode }) {
                 setBusy(false);
             }
         },
-        [state.available]
+        [state.available, busy]
     );
 
     const deactivate = useCallback(async () => {
-        if (!sendChannel('library:privacy-lock')) {
+        if (busy) {
             return;
         }
+        setBusy(true);
         try {
-            await onceReply('library:privacy-result');
-        } catch {
-            // 忽略超时；本地状态仍然退出隐私模式
+            if (sendChannel('library:privacy-lock')) {
+                try {
+                    await onceReply('library:privacy-result');
+                } catch {
+                    // 忽略超时；本地状态仍然退出隐私模式
+                }
+            }
+        } finally {
+            setActive(false);
+            setState((prev) => ({ ...prev, unlocked: false }));
+            setBusy(false);
         }
-        setActive(false);
-        setState((prev) => ({ ...prev, unlocked: false }));
-    }, []);
+    }, [busy]);
 
     const value = useMemo<PrivacyContextValue>(
         () => ({
