@@ -1,0 +1,51 @@
+diff --git a/tests/ui2DevCsp.test.cjs b/tests/ui2DevCsp.test.cjs
+new file mode 100644
+index 0000000..7725dbd
+--- /dev/null
++++ b/tests/ui2DevCsp.test.cjs
+@@ -0,0 +1,29 @@
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++
++const source = fs.readFileSync(path.join(__dirname, '..', 'vite.config.ts'), 'utf8');
++
++function extractCsp(name) {
++    const match = source.match(new RegExp(`const ${name} =\\s*\\n?\\s*"([^"]+)"`));
++    assert.ok(match, `${name} not found`);
++    return match[1];
++}
++
++test('production CSP stays strict (no unsafe-inline/eval, no remote)', () => {
++    const csp = extractCsp('PRODUCTION_CSP');
++    assert.ok(csp.includes("script-src 'self'"));
++    assert.ok(csp.includes("style-src 'self'"));
++    assert.ok(csp.includes("connect-src 'none'"));
++    assert.ok(!csp.includes('unsafe-inline'));
++    assert.ok(!csp.includes('unsafe-eval'));
++});
++
++test('development CSP only loosens inline styles for Vite injection', () => {
++    const csp = extractCsp('DEVELOPMENT_CSP');
++    assert.ok(csp.includes("style-src 'self' 'unsafe-inline'"));
++    assert.ok(csp.includes("script-src 'self'") && !csp.includes("script-src 'self' 'unsafe-inline'"));
++    assert.ok(csp.includes('connect-src') && csp.includes('ws://127.0.0.1:5273'));
++    assert.ok(!csp.includes('unsafe-eval'));
++});
+diff --git a/vite.config.ts b/vite.config.ts
+index 292c7f7..e06048c 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -10,9 +10,9 @@ import react from '@vitejs/plugin-react';
+ 
+ const PRODUCTION_CSP =
+     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' file: data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'";
+-// 开发期最小例外：仅固定 loopback 的 HMR websocket
++// 开发期最小例外：固定 loopback 的 HMR websocket + Vite/标题栏的内联 style 注入
+ const DEVELOPMENT_CSP =
+-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' file: data:; font-src 'self' data:; connect-src 'self' ws://127.0.0.1:5273; object-src 'none'; base-uri 'none'";
++    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:; font-src 'self' data:; connect-src 'self' ws://127.0.0.1:5273; object-src 'none'; base-uri 'none'";
+ 
+ function devCspOverride(): Plugin {
+     return {
