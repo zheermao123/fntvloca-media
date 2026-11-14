@@ -292,3 +292,12 @@ Apple 风格 Light 默认设计系统：tokens、reset/global/组件样式、主
 
 - dev http 源无法加载 `file://` 海报缓存（开发截图仅占位图），验收以 file:// 构建为准。
 - file:// React 冒烟存在 6 条标题栏插件内联样式 CSP 拒绝（`titlebarStyleViolations`）；插件未修改，打包版始终 classic、React 不启用。
+---
+
+## 发布前审查与 CI 构建（2026-11-14）
+
+- 修复异步生命周期：隐私退出回首页/关闭搜索、解锁防重入、请求序号丢弃过期响应、扫描/刮削等待可取消（commit `853d5b5`）。
+- 新增 `tests/ui2Bridge.test.cjs`（取消/超时清理）与 `tests/ui2Lifecycle.test.cjs`（生命周期契约）；**249/249**。
+- 干净目录 `npm ci` + 全量测试通过；CI 首次失败定位为 `--omit=optional` 缺少 rolldown 原生绑定，修复后 Windows 构建成功（run `43598158857`，SHA `71da62e`）。
+- CI 安装包实测：classic 默认启动正常；`FNTV_UI_SHELL=react` 在打包环境仍回退 classic；asar 含 `ui2-renderer`。
+- 分支 `feature/ui2-phase2` 已推送用于 CI；未合并 main、未打 tag、未创建 Release。

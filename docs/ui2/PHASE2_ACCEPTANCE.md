@@ -94,3 +94,37 @@
 ## 7. 结论
 
 Phase 2 全部阶段（P2-01 ~ P2-08）功能、命令与运行时验收 **通过**；默认 classic 行为未改变，React UI 可在开发/验证模式完整使用。Phase 2 分支未推送，等待用户确认后再决定合并/发布节奏。
+
+## 8. 发布前审查（2026-11-14）
+
+### 1) CSP 检查
+
+- `git diff ui2-integration...HEAD -- vite.config.ts`：`unsafe-inline` 仅出现在 `DEVELOPMENT_CSP` 的 `style-src`；`PRODUCTION_CSP` 保持 `style-src 'self'`。
+- `ui2-renderer/index.html`（生产构建）无 `unsafe-inline` / `unsafe-eval` / localhost / ws。
+- `tests/ui2DevCsp.test.cjs` 持续断言生产 CSP 严格性。
+
+### 2) 隐私切换 / 路由 / 异步状态
+
+- 隐私退出：关闭搜索并跳转 `/home`（AppShell），避免退出后残留私有详情页；解锁/退出增加 busy 防重入与桥接不可用提示。
+- 媒体库/首页/详情/搜索：请求序号或 `cancelled` 标记丢弃过期响应，避免快速切换分类/路由/关键词时旧结果覆盖新状态。
+- 媒体源/任务页加载同样带请求序号与存活标记。
+
+### 3) 监听清理
+
+- 新增可取消的 `onceReplyCancellable`（取消时 `off` 监听并 reject `IPC_CANCELLED`）。
+- 扫描/刮削长等待支持 `AbortSignal`；离开页面或组件卸载时 abort 并清理进度订阅。
+- 扫描/刮削增加 in-flight 同步锁，防止重复点击产生并行等待与重复订阅。
+
+### 4) 干净环境安装与测试
+
+- 临时干净目录（无 node_modules/.git/.npmrc）执行 `npm ci` 成功；`npm test` **249 / 249 通过**。
+- 说明：本机 Node 24 的 Electron postinstall 静默失败为已知环境问题，已用本地缓存补齐 Electron 运行时；CI（Node 22）执行真实全新安装。
+
+### 5) CI 构建与安装验证
+
+- 首次 CI（run 43597938525）失败：`npm ci --omit=optional` 排除了 Vite 8/rolldown 的 `@rolldown/binding-win32-x64-msvc`；已修复 CI 安装参数（commit `71da62e`），PR CI 同步修正。
+- 复跑 CI（run 43598158857，SHA `71da62e`）Windows 构建成功；Release 任务按 workflow_dispatch 条件跳过（未创建 Release）。
+- 产物：`FNMedia_3.2.9_win_x64.exe`（139,650,813 字节）。
+- 实际安装后验证：标题「媒体库 v3.2.9」、`#titlebar` 存在、无 `.app-shell-root`（classic 默认）。
+- 回退验证：打包环境设置 `FNTV_UI_SHELL=react` + dev URL 后仍加载 classic（`resolveUiShell` 对 packaged 强制 classic）。
+- 安装包 `app.asar` 内含 `ui2-renderer`（index.html + JS/CSS 资产，5 条目），资源随包分发但不影响默认壳层。
