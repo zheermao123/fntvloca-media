@@ -3,6 +3,7 @@ import * as path from 'path';
 import { contextBridge, ipcRenderer, shell } from 'electron';
 
 import { HookType, runHooks } from './core/hooks';
+import { isDevBridgeOrigin } from './core/devOrigin';
 
 // 导入渲染进程日志模块
 import preloadLogger from './core/logger';
@@ -20,6 +21,8 @@ const SEND_CHANNELS = new Set([
     'library:scrape-status', 'library:settings-get', 'library:settings-set',
     'library:scrape-item', 'library:search-tmdb', 'library:apply-match',
     'library:catalog', 'library:show',
+    'library:set-source-category',
+    'library:test-source', 'library:update-source', 'library:history',
     'library:privacy-begin', 'library:privacy-set-password', 'library:privacy-unlock',
     'library:privacy-lock', 'library:privacy-reset',
 ]);
@@ -36,6 +39,8 @@ const RECEIVE_CHANNELS = new Set([
     'library:settings-info', 'library:settings-set',
     'library:search-results', 'library:match-applied',
     'library:catalog-info', 'library:show-info',
+    'library:source-updated', 'library:scrape-status-info',
+    'library:test-source-result', 'library:history-info',
     'library:privacy-state', 'library:privacy-result',
 ]);
 type PageListener = (...args: unknown[]) => void;
@@ -56,8 +61,21 @@ function wrapListener(channel: string, listener: PageListener): (...args: unknow
     return wrapped;
 }
 
-function exposeLoginPageApi(): void {
-    if (window.location.protocol !== 'file:') return;
+/**
+ * 是否向当前页面暴露桥接 API：
+ * - file: 页面（登录页 / classic 媒体库）始终允许；
+ * - 仅开发启动器显式指定的 loopback Vite origin（FNTV_UI_SHELL=react 且 127.0.0.1|localhost:5273）允许；
+ * - 其他任何页面（https、局域网、远程、错误端口）一律不暴露。
+ */
+function shouldExposeBridge(): boolean {
+    if (window.location.protocol === 'file:') {
+        return true;
+    }
+    return isDevBridgeOrigin(window.location.href, process.env.FNTV_UI_SHELL);
+}
+
+function exposePageApi(): void {
+    if (!shouldExposeBridge()) return;
 
     const api = {
         send(channel: string, ...args: unknown[]) {
@@ -93,7 +111,7 @@ function exposeLoginPageApi(): void {
     contextBridge.exposeInMainWorld('logger', preloadLogger);
 }
 
-exposeLoginPageApi();
+exposePageApi();
 
 // 自动加载插件
 const pluginsDir = path.join(__dirname, 'plugins');

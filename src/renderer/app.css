@@ -1,0 +1,28 @@
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+}
+
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: #f7f7f8;
+    color: #1c1c1e;
+}
+
+.app-shell .title {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.app-shell .subtitle {
+    font-size: 13px;
+    color: #8e8e93;
+    margin-top: 8px;
+}

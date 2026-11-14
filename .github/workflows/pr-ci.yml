@@ -1,0 +1,38 @@
+name: PR CI
+
+# PR 门禁：向 ui2-integration（以及 main）提交的 Pull Request 必须先通过构建与测试，
+# 避免等到正式 Release 才发现问题。
+on:
+  pull_request:
+    branches:
+      - ui2-integration
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --omit=optional --no-audit --no-fund
+        timeout-minutes: 15
+
+      - name: Compile TypeScript
+        run: npm run compile
+        timeout-minutes: 5
+
+      - name: Run tests
+        run: npm test
+        timeout-minutes: 15
+
+      - name: Build renderer
+        run: npm run renderer:build
+        timeout-minutes: 5

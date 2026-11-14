@@ -58,6 +58,7 @@
         "dest",
         "release",
         "log",
-        "third_party"
+        "third_party",
+        "src/renderer"
     ]
 }

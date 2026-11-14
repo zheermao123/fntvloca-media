@@ -113,14 +113,14 @@ jobs:
         continue-on-error: true
 
       - name: Install dependencies
-        run: npm install --no-optional --no-audit --no-fund
+        run: npm ci --omit=optional --no-audit --no-fund
         timeout-minutes: 10
 
       - name: Setup macOS specific dependencies
         if: runner.os == 'macOS'
         run: |
-          # 确保 dmg-license 正确安装
-          npm install dmg-license --save-dev
+          # 确保 dmg-license 正确安装（不修改 package.json / lockfile）
+          npm install dmg-license --no-save --no-audit --no-fund
         timeout-minutes: 5
 
       - name: Setup Python (for native modules)
@@ -184,6 +184,14 @@ jobs:
 
       - name: Compile TypeScript
         run: npm run compile
+        timeout-minutes: 5
+
+      - name: Run tests
+        run: npm test
+        timeout-minutes: 10
+
+      - name: Build renderer (UI 2.0)
+        run: npm run renderer:build
         timeout-minutes: 5
 
       - name: Build application

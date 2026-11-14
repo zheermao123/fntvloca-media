@@ -2,7 +2,6 @@ node_modules
 release
 tmp
 third_party/*
-package-lock.json
 !.gitkip
 *.zip
 log
@@ -15,3 +14,10 @@ play_video.py
 *.exe
 .idea
 .vscode
+ui2-renderer
+
+# Keep docs ignored except FN Media UI 2.0 records
+!/docs/
+/docs/*
+!/docs/ui2/
+!/docs/ui2/**

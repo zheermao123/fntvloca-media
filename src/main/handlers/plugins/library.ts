@@ -14,6 +14,10 @@ import { LibraryScraper } from '../../../modules/library/scraper';
 import { buildCatalog } from '../../../modules/library/catalog';
 import { categoryOfSource, folderNameFromPath, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
 import { isPrivateSource } from '../../../modules/library/sourceCategory';
+import { testLocalRoot, testWebdavSource } from '../../../modules/library/sourceTest';
+import { planSourceUpdate } from '../../../modules/library/sourceEdit';
+import type { SourceUpdatePatch } from '../../../modules/library/sourceEdit';
+import { clampHistoryLimit, toHistoryItemView } from '../../../modules/library/historyView';
 import {
     CONTINUE_LIST_LIMIT,
     CONTINUE_SCAN_LIMIT,
@@ -456,6 +460,143 @@ function init(): void {
         } catch (error) {
             log.error('[library] 剧集组查询失败:', error);
             reply(event, 'library:show-info', { error: error instanceof Error ? error.message : String(error) });
+        }
+    });
+
+    // B1：媒体源连接测试（saved / draft 两种形态；requestId 回传至发起方）
+    registerHandler('library:test-source', (
+        event: IpcMainEvent,
+        payload?: { requestId?: string; sourceId?: string; type?: string; rootPath?: string; url?: string; username?: string; password?: string }
+    ) => {
+        const requestId = typeof payload?.requestId === 'string' ? payload.requestId : '';
+        void (async () => {
+            try {
+                const sourceId = typeof payload?.sourceId === 'string' ? payload.sourceId : '';
+                if (sourceId) {
+                    const source = store.getSource(sourceId);
+                    if (!source) {
+                        reply(event, 'library:test-source-result', { requestId, reachable: false, latencyMs: 0, reason: 'not_found', message: '媒体源不存在' });
+                        return;
+                    }
+                    if (isPrivateSource(source) && !isPrivacyUnlocked()) {
+                        reply(event, 'library:test-source-result', { requestId, reachable: false, latencyMs: 0, reason: 'auth', message: '需要解锁隐私模式' });
+                        return;
+                    }
+                    if (source.type === 'local') {
+                        reply(event, 'library:test-source-result', { requestId, ...(await testLocalRoot(source.config.rootPath ?? '')) });
+                        return;
+                    }
+                    if (source.type === 'webdav') {
+                        const password = decryptSecret(source.config.passwordEnc || '') || undefined;
+                        reply(event, 'library:test-source-result', {
+                            requestId,
+                            ...(await testWebdavSource({
+                                type: 'webdav',
+                                url: source.config.url ?? '',
+                                username: source.config.username || undefined,
+                                password,
+                            })),
+                        });
+                        return;
+                    }
+                    reply(event, 'library:test-source-result', { requestId, reachable: false, latencyMs: 0, reason: 'network', message: '暂不支持该源类型' });
+                    return;
+                }
+                if (payload?.type === 'local') {
+                    reply(event, 'library:test-source-result', { requestId, ...(await testLocalRoot(payload?.rootPath ?? '')) });
+                    return;
+                }
+                if (payload?.type === 'webdav') {
+                    reply(event, 'library:test-source-result', {
+                        requestId,
+                        ...(await testWebdavSource({
+                            type: 'webdav',
+                            url: payload?.url ?? '',
+                            username: payload.username?.trim() || undefined,
+                            password: payload.password || undefined,
+                        })),
+                    });
+                    return;
+                }
+                reply(event, 'library:test-source-result', { requestId, reachable: false, latencyMs: 0, reason: 'network', message: '无效的测试目标' });
+            } catch (error) {
+                log.warn('[library] 源连接测试失败');
+                reply(event, 'library:test-source-result', { requestId, reachable: false, latencyMs: 0, reason: 'network', message: '连接测试失败' });
+            }
+        })();
+    });
+
+    // B2：编辑媒体源（结果复用 library:source-updated，兼容旧 UI 监听）
+    registerHandler('library:update-source', (event: IpcMainEvent, payload?: Record<string, unknown>) => {
+        try {
+            const id = typeof payload?.id === 'string' ? payload.id : '';
+            const current = id ? store.getSource(id) : null;
+            if (!current) {
+                reply(event, 'library:source-updated', { success: false, error: '媒体源不存在' });
+                return;
+            }
+            if (isPrivateSource(current) && !isPrivacyUnlocked()) {
+                reply(event, 'library:source-updated', { success: false, error: '需要解锁隐私模式' });
+                return;
+            }
+            const result = planSourceUpdate(current, payload as SourceUpdatePatch);
+            if (!result.ok) {
+                reply(event, 'library:source-updated', { success: false, error: result.message });
+                return;
+            }
+            const plan = result.plan;
+            if (plan.passwordAction === 'replace' && typeof plan.replacePassword === 'string') {
+                plan.next.config.passwordEnc = encryptSecret(plan.replacePassword);
+            }
+            // 本地源改路径：同文件夹查重（排除自身）
+            const nextRoot = plan.next.config.rootPath ?? '';
+            if (
+                current.type === 'local' &&
+                nextRoot &&
+                normalizeLocalRoot(nextRoot) !== normalizeLocalRoot(current.config.rootPath ?? '')
+            ) {
+                const needle = normalizeLocalRoot(nextRoot);
+                const duplicate = store
+                    .listSources()
+                    .some(
+                        (s) =>
+                            s.id !== current.id &&
+                            s.type === 'local' &&
+                            normalizeLocalRoot(s.config.rootPath ?? '') === needle
+                    );
+                if (duplicate) {
+                    reply(event, 'library:source-updated', { success: false, error: '该文件夹已添加过' });
+                    return;
+                }
+            }
+            store.updateSource(plan.next);
+            reply(event, 'library:source-updated', { success: true });
+        } catch (error) {
+            log.error('[library] 编辑源失败:', error);
+            reply(event, 'library:source-updated', { success: false, error: '编辑失败' });
+        }
+    });
+
+    // B3：最近播放历史（limit 钳制 1..50，默认 20；隐私过滤与 continue 同款可见性规则）
+    registerHandler('library:history', (event: IpcMainEvent, payload?: { limit?: number; requestId?: string; private?: boolean }) => {
+        const requestId = typeof payload?.requestId === 'string' ? payload.requestId : '';
+        try {
+            const wantPrivate = payload?.private === true;
+            if (wantPrivate && !isPrivacyUnlocked()) {
+                reply(event, 'library:history-info', { requestId, entries: [] });
+                return;
+            }
+            const limit = clampHistoryLimit(payload?.limit);
+            const entries = takeContinueByVisibility(
+                store.listHistory(CONTINUE_SCAN_LIMIT),
+                privateSourceIds(),
+                wantPrivate,
+                limit
+            );
+            reply(event, 'library:history-info', { requestId, entries: entries.map(toHistoryItemView) });
+        } catch (error) {
+            log.error('[library] 读取播放历史失败:', error);
+            reply(event, 'library:history-info', { requestId, error: 'INTERNAL_ERROR' });
         }
     });
 
