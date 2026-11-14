@@ -1,0 +1,101 @@
+/* UI 2.0 Design Tokens（Apple 风格，Light 默认；Dark 预留） */
+:root,
+[data-theme='light'] {
+    /* 颜色 */
+    --color-bg: #f5f5f7;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f0f0f2;
+    --color-surface-hover: #eaeaec;
+    --color-text-primary: #1d1d1f;
+    --color-text-secondary: #6e6e73;
+    --color-text-tertiary: #86868b;
+    --color-border: rgba(0, 0, 0, 0.08);
+    --color-border-strong: rgba(0, 0, 0, 0.16);
+    --color-accent: #0071e3;
+    --color-accent-hover: #0077ed;
+    --color-accent-soft: rgba(0, 113, 227, 0.12);
+    --color-danger: #d70015;
+    --color-danger-soft: rgba(215, 0, 21, 0.1);
+    --color-star: #ff9f0a;
+    --color-overlay: rgba(0, 0, 0, 0.4);
+    --color-focus-ring: rgba(0, 113, 227, 0.45);
+
+    /* 字体 */
+    --font-family-base: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'PingFang SC',
+        'Microsoft YaHei', sans-serif;
+    --font-size-xs: 11px;
+    --font-size-sm: 12px;
+    --font-size-md: 13px;
+    --font-size-lg: 15px;
+    --font-size-xl: 17px;
+    --font-size-2xl: 22px;
+    --font-size-3xl: 28px;
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+
+    /* 间距 */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+
+    /* 圆角 */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-pill: 999px;
+
+    /* 阴影 */
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.08);
+    --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.12);
+
+    /* 层级 */
+    --z-toolbar: 100;
+    --z-dropdown: 1000;
+    --z-modal: 2000;
+    --z-tooltip: 3000;
+    --z-toast: 4000;
+
+    /* 动效 */
+    --duration-fast: 150ms;
+    --duration-medium: 200ms;
+    --easing-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+    /* 布局 */
+    --layout-titlebar-height: 32px;
+    --layout-sidebar-width: 200px;
+    --layout-page-max-width: 1440px;
+}
+
+[data-theme='dark'] {
+    --color-bg: #1c1c1e;
+    --color-surface: #2c2c2e;
+    --color-surface-muted: #3a3a3c;
+    --color-surface-hover: #3f3f42;
+    --color-text-primary: #f5f5f7;
+    --color-text-secondary: #a1a1a6;
+    --color-text-tertiary: #8e8e93;
+    --color-border: rgba(255, 255, 255, 0.1);
+    --color-border-strong: rgba(255, 255, 255, 0.2);
+    --color-accent: #2997ff;
+    --color-accent-hover: #47a5ff;
+    --color-accent-soft: rgba(41, 151, 255, 0.16);
+    --color-danger: #ff453a;
+    --color-danger-soft: rgba(255, 69, 58, 0.16);
+    --color-star: #ffd60a;
+    --color-overlay: rgba(0, 0, 0, 0.6);
+    --color-focus-ring: rgba(41, 151, 255, 0.55);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5);
+}

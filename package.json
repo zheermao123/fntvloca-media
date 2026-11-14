@@ -18,8 +18,9 @@
         "start:mac": "npm run clean && npm run build:proxy:mac && npm run compile && electron .",
         "compile": "tsc",
         "renderer:typecheck": "tsc -p tsconfig.renderer.json",
+        "renderer:test-compile": "tsc -p tsconfig.renderer.test.json",
         "renderer:build": "npm run renderer:typecheck && vite build",
-        "test": "npm run compile && node --test tests/*.test.cjs",
+        "test": "npm run compile && npm run renderer:test-compile && node --test tests/*.test.cjs",
         "watch": "tsc --watch",
         "clean": "rimraf dest",
         "build:win": "npm-run-all -s build:proxy:win compile renderer:build && electron-builder --win",
@@ -70,6 +71,7 @@
         "node-mpv-2": "^2.0.0-beta.3",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
+        "react-router-dom": "^7.18.5",
         "semver": "^7.7.2",
         "uuid": "^13.0.0"
     },
