@@ -17,5 +17,5 @@
         "noEmit": false,
         "sourceMap": false
     },
-    "include": ["src/renderer/services/**/*.ts", "src/renderer/utils/**/*.ts", "src/renderer/bridge.d.ts"]
+    "include": ["src/renderer/services/**/*.ts", "src/renderer/utils/**/*.ts", "src/renderer/pages/library/library.mapper.ts", "src/renderer/pages/library/library.types.ts", "src/renderer/bridge.d.ts"]
 }

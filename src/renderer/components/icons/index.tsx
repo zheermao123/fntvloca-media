@@ -156,3 +156,25 @@ export function LockIcon({ size = 16, ...rest }: IconProps) {
         </svg>
     );
 }
+
+export function GridIcon({ size = 16, ...rest }: IconProps) {
+    return (
+        <svg {...baseProps(size)} {...rest}>
+            <rect x="4" y="4" width="7" height="7" rx="1.5" />
+            <rect x="13" y="4" width="7" height="7" rx="1.5" />
+            <rect x="4" y="13" width="7" height="7" rx="1.5" />
+            <rect x="13" y="13" width="7" height="7" rx="1.5" />
+        </svg>
+    );
+}
+
+export function ListIcon({ size = 16, ...rest }: IconProps) {
+    return (
+        <svg {...baseProps(size)} {...rest}>
+            <path d="M8 6h12M8 12h12M8 18h12" />
+            <circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none" />
+            <circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none" />
+            <circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}

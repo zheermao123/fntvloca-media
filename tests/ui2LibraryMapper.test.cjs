@@ -86,3 +86,26 @@ test('route helpers encode ids and summarize caps category counts', () => {
     assert.deepEqual(mapper.summarizeCategory('movie', 600, 600), { category: 'movie', count: 600, capped: true });
     assert.deepEqual(mapper.summarizeCategory('movie', 599, 600), { category: 'movie', count: 599, capped: false });
 });
+
+test('library rows reuse card mapping with meta segments', () => {
+    const rows = require(path.join(__dirname, '..', 'tmp', 'renderer-test', 'pages', 'library', 'library.mapper.js'));
+    const mapped = rows.mapLibraryRows([
+        {
+            type: 'season',
+            show: { id: 'show-1', title: 'Show A', year: 2021, posterPath: null, overview: null },
+            season: 2,
+            seasonCount: 3,
+            episodeCount: 10,
+            watchedCount: 4,
+            favorite: false,
+            progressPct: 0,
+            resumeItemId: 'ep-1',
+            addedAt: 1,
+            lastPlayedAt: 2,
+        },
+    ]);
+    assert.equal(mapped.length, 1);
+    assert.deepEqual(mapped[0].meta, ['第 2 季', '全 10 集', '2021']);
+    assert.equal(mapped[0].statusText, '已看 4/10');
+    assert.equal(mapped[0].route, '/media/show-1?season=2');
+});
