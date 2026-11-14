@@ -6,6 +6,7 @@ import './styles/reset.css';
 import './styles/global.css';
 import './styles/components.css';
 import './styles/shell.css';
+import './styles/pages.css';
 
 const container = document.getElementById('root');
 if (!container) {

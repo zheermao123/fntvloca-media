@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": ["ES2022", "DOM"],
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "jsx": "react-jsx",
+        "strict": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true,
+        "resolveJsonModule": true,
+        "types": ["vite/client", "node"],
+        "rootDir": "src/renderer",
+        "outDir": "tmp/renderer-test",
+        "noEmit": false,
+        "sourceMap": false
+    },
+    "include": ["src/renderer/services/**/*.ts", "src/renderer/utils/**/*.ts", "src/renderer/bridge.d.ts"]
+}
