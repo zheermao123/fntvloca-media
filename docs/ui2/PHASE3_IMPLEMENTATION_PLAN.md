@@ -244,6 +244,16 @@ npm run renderer:build
 
 ---
 
+### 批次 A 执行状态（2026-11-14）
+
+- [x] A-01 隐私完整 E2E（隔离环境 15 步）→ `phase3/A-privacy-e2e.md`
+- [x] A-02 扫描单飞 + 任务监听/取消行为测试 → `phase3/A-task-lifecycle.md`
+- [x] A-03 预览构建禁止隐式发布（全部打包入口），CI 权限最小化 → `phase3/A-ci-publish-safety.md`
+- [x] A-04 CI 隔离安装/启动/回退/卸载冒烟 → `phase3/A-install-smoke.md`
+- [x] A-05 Windows 回归通过；macOS/Linux 标记未验证 → `phase3/A-platform-matrix.md`
+
+**批次 A Gate：通过（Windows）**；跨平台运行仍为未验证项。停点 P3-A0：等待用户确认后进入批次 B。
+
 ## 5. 批次 B：核心产品能力完善
 
 **目标：** 优先解决真实大库使用中的可用性和反馈问题，再完善详情、搜索、首页和媒体源。避免先做视觉装饰。

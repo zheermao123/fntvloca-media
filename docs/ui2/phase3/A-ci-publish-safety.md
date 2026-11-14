@@ -35,7 +35,7 @@ build:linux:arm64... electron-builder --linux AppImage --arm64 --publish never
   - `git grep -n "publish never" package.json`
   - `git grep -n "permissions\\|contents:" .github/workflows/release.yml`
   - `git grep -n "release upload\\|Upload preview release assets" .github/workflows`
-- CI 验证：run `<PENDING>`（Windows preview）。构建日志不出现 publishing/release upload；Release Job 为 skipped；仅 artifact 上传。
+- CI 验证：run `43604704680`（Windows preview，commit `67360ce`）。构建日志不出现 publishing/release upload；Release Job 为 skipped；仅 artifact 上传。日志同时确认安装/回退/卸载冒烟通过。
 - 本批次未执行任何发布动作，未修改版本号。
 
 ## 风险与回滚
