@@ -242,6 +242,21 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** 强制主窗口重绘一次：负载回落后清除可能滞留的"(未响应)"标题/任务栏状态 */
+function nudgeLibraryWindow(delayMs: number): void {
+    setTimeout(() => {
+        try {
+            const win = getMainWindow();
+            if (win && !win.isDestroyed() && checkLibraryPageUrl(win.webContents.getURL() || '')) {
+                const [w, h] = win.getSize();
+                win.setSize(w, h);
+            }
+        } catch (error) {
+            log.warn('[library] 窗口重绘失败:', error);
+        }
+    }, delayMs);
+}
+
 /**
  * 播放中切换：停止当前播放器并短暂等待其退出，避免新旧 mpv 实例叠加。
  * 停止会触发 EXIT 事件链：最终进度回写 + 库页面刷新（复用现有机制，进度不丢）。
@@ -489,6 +504,8 @@ function libraryEventHandler(store: LibraryStore) {
                     if (win && !win.isDestroyed() && checkLibraryPageUrl(win.webContents.getURL() || '')) {
                         win.webContents.send('library-playback-ended');
                         log.info('[library] 已通知库页面刷新 (library-playback-ended)');
+                        // 播放结束也重绘一次，清除可能滞留的"(未响应)"任务栏文字
+                        nudgeLibraryWindow(500);
                     }
                 } catch (error) {
                     log.warn('[library] 通知库页面刷新失败:', error);
@@ -706,17 +723,7 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
 
     // mpv 启动瞬间（4K HDR 初始化等）系统负载高，主窗口可能被 Windows 标记"(未响应)"；
     // 负载回落后强制重绘一次主窗口，让标题/任务栏立即恢复，不用等系统或用户交互
-    setTimeout(() => {
-        try {
-            const win = getMainWindow();
-            if (win && !win.isDestroyed() && checkLibraryPageUrl(win.webContents.getURL() || '')) {
-                const [w, h] = win.getSize();
-                win.setSize(w, h);
-            }
-        } catch (error) {
-            log.warn('[library] 播放启动后窗口重绘失败:', error);
-        }
-    }, 8000);
+    nudgeLibraryWindow(8000);
 }
 
 // 处理当前播放的媒体信息
