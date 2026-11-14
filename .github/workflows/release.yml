@@ -27,8 +27,7 @@ on:
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   # 检查提交消息是否应该跳过构建
@@ -253,34 +252,6 @@ jobs:
           Test-Classic 'packaged-fallback'
           Remove-Item Env:FNTV_UI_SHELL, Env:FNTV_UI2_DEV_URL -ErrorAction SilentlyContinue
 
-      - name: Upload preview release assets
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
-        run: |
-          case "${{ matrix.platform }}" in
-            windows) assets=(release/*.exe) ;;
-            macos) assets=(release/*.dmg) ;;
-            linux) assets=(release/*.AppImage) ;;
-            *)
-              echo "Unsupported platform: ${{ matrix.platform }}" >&2
-              exit 1
-              ;;
-          esac
-
-          for asset in "${assets[@]}"; do
-            if [ ! -f "$asset" ]; then
-              echo "Missing release asset: $asset" >&2
-              exit 1
-            fi
-          done
-
-          gh release upload "$RELEASE_TAG" "${assets[@]}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --clobber
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -318,6 +289,8 @@ jobs:
     name: Create Release
     needs: [check-commit, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     if: >-
       success() &&
       needs.check-commit.outputs.should-skip != 'true' &&
