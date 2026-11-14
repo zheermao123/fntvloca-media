@@ -301,3 +301,11 @@ Apple 风格 Light 默认设计系统：tokens、reset/global/组件样式、主
 - 干净目录 `npm ci` + 全量测试通过；CI 首次失败定位为 `--omit=optional` 缺少 rolldown 原生绑定，修复后 Windows 构建成功（run `43598158857`，SHA `71da62e`）。
 - CI 安装包实测：classic 默认启动正常；`FNTV_UI_SHELL=react` 在打包环境仍回退 classic；asar 含 `ui2-renderer`。
 - 分支 `feature/ui2-phase2` 已推送用于 CI；未合并 main、未打 tag、未创建 Release。
+---
+
+## Phase 2 合并记录（2026-11-14）
+
+- 合并提交：`4279f31 feat(ui2): merge Phase 2 into ui2-integration`（`--no-ff`，来源 `feature/ui2-phase2` @ `581f002`）。
+- 合并后验证：`npm test` 249/249；`npm run renderer:build` exit 0。
+- 发布边界：未打 tag、未创建 Release、未将 React 设为默认 UI；正式安装仍为 classic。
+- 发布前未关闭事项：隐私真实密码端到端验证、扫描离页后主进程继续运行的边界测试、electron-builder 隐式发布（建议显式 `--publish never`）、CI 产物实际安装冒烟、macOS/Linux 验证。
