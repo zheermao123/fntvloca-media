@@ -265,3 +265,30 @@ Apple 风格 Light 默认设计系统：tokens、reset/global/组件样式、主
 - 分支 `feature/ui2-phase2`：P2-00 f24ab6e、P2-01 4933e03、P2-02 ca24640、P2-03 fb0c70c、P2-04 677a988、P2-05 782a814、P2-06 b3f2dc4、P2-07/08 见最新提交；**未推送**
 - 测试 241/241；打包默认 classic；React UI 仅开发/显式验证模式可用
 - 下一步：等待用户确认合并/推送/发布节奏（Phase 2 不在本次自动推送）
+---
+
+## P2-07/08 复审修复：开发模式样式缺失（2026-11-14）
+
+### 问题
+
+- 复审发现开发 React 壳截图只有默认 HTML 样式，而 file:// 构建截图正常；功能断言与“Console errors 0”未覆盖 CSS。
+- 根因：开发 CSP `style-src 'self'` 拒绝 Vite 开发模式的 `updateStyle` 内联 `<style>` 注入（以及标题栏插件的内联样式）；生产构建为外链 CSS 不受影响。CSP 拒绝记录在 Log 安全域而非 Runtime console，导致原断言假通过。
+
+### 修复
+
+- `vite.config.ts`：仅 DEVELOPMENT_CSP 改为 `style-src 'self' 'unsafe-inline'`；PRODUCTION_CSP 保持不变。
+- 新增 `tests/ui2DevCsp.test.cjs`（2 项）：生产 CSP 严格性 + 开发 CSP 仅样式放宽、脚本仍禁止内联、HMR 仅 loopback。
+- 验收脚本增强：样式断言（styleSheets 规则数、body 背景、链接颜色）、Log 安全域采集；区分预期内标题栏内联样式违规（6 条，既有插件、未修改）与非预期违规。
+- canonical 运行时截图改为 file:// 构建（样式+海报完整），开发模式修复后截图另存 `ui2-p207-dev-*`。
+
+### 验证
+
+- 开发模式：240 条 CSS 规则、body `rgb(245, 245, 247)`、0 CSP 拒绝；11 步全过。
+- file:// 构建：样式断言通过（236 条规则）、11 步全过、non-titlebar security violations 0、console errors 0。
+- `npm run compile` / `npm run renderer:typecheck` / `npm run renderer:build` exit 0；`npm test` **243 / 243 通过**。
+- 证据：`phase2-evidence\`（更新后的 `ui2-p207-*.png`、`ui2-p207-dev-*.png`、`p207-result.json`、`p207-dev-result.json`）。
+
+### 已知限制（记录，不阻塞验收）
+
+- dev http 源无法加载 `file://` 海报缓存（开发截图仅占位图），验收以 file:// 构建为准。
+- file:// React 冒烟存在 6 条标题栏插件内联样式 CSP 拒绝（`titlebarStyleViolations`）；插件未修改，打包版始终 classic、React 不启用。

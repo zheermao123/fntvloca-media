@@ -10,9 +10,9 @@ import react from '@vitejs/plugin-react';
 
 const PRODUCTION_CSP =
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' file: data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'";
-// 开发期最小例外：仅固定 loopback 的 HMR websocket
+// 开发期最小例外：固定 loopback 的 HMR websocket + Vite/标题栏的内联 style 注入
 const DEVELOPMENT_CSP =
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' file: data:; font-src 'self' data:; connect-src 'self' ws://127.0.0.1:5273; object-src 'none'; base-uri 'none'";
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:; font-src 'self' data:; connect-src 'self' ws://127.0.0.1:5273; object-src 'none'; base-uri 'none'";
 
 function devCspOverride(): Plugin {
     return {
