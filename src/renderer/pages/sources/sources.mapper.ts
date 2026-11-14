@@ -49,6 +49,9 @@ export function sourceLocation(source: SourceDto, privacyActive: boolean): strin
         return '已隐藏（隐私模式）';
     }
     const config = source.config ?? {};
+    if (typeof config.rootPath === 'string' && config.rootPath.length > 0) {
+        return config.rootPath;
+    }
     if (typeof config.path === 'string' && config.path.length > 0) {
         return config.path;
     }

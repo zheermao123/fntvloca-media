@@ -125,3 +125,143 @@ Apple 风格 Light 默认设计系统：tokens、reset/global/组件样式、主
 - 页面内容为诚实占位（P2-03 首页 / P2-04 媒体库 / P2-05 详情 / P2-06 搜索·源·任务）；搜索弹层明确标注 P2-06 接入，无假按钮
 - 隐私模式的数据级过滤随 P2-04 接入（provider 已具备模式状态与门禁）
 - **等待用户确认后进入 P2-03（首页）**
+
+---
+
+## P2-03 首页（2026-11-14）
+
+用户指令「一直执行到完成」：P2-03 起连续执行剩余阶段，不再逐阶段等待确认；每阶段仍执行 DoD 检查（compile/test/typecheck/build + 运行时验证 + 日志）。
+
+### 文件清单
+
+- **新增** `src/renderer/pages/home/`：`HomePage.tsx`、`HomeHeader.tsx`、`LibraryOverview.tsx`、`RecentlyAddedSection.tsx`、`CategoryQuickLinks.tsx`、`HomeEmptyState.tsx`
+- **新增** `src/renderer/components/media/`：`MediaCard.tsx`、`PosterImage.tsx`
+- **新增** `src/renderer/services/desktop/desktopBridge.ts`、`src/renderer/services/library/library.types.ts`、`library.mapper.ts`、`libraryService.ts`
+- **新增** `tsconfig.renderer.test.json`（services/utils/bridge 编译到 `tmp/renderer-test`，供 node:test 使用）
+- **修改** `pages.css`（首页布局）、`package.json`（renderer:test-compile）
+- **删除** P2-02 首页占位
+
+### 关键实现
+
+- 首页真实数据：4 分类 `library:catalog` 计数 + 最近添加 12 条；分类卡跳转、海报缺图占位、加载/错误/空态
+- 映射纯函数 `mapCatalogEntry/seasonStatusText/parseMediaRoute` 可单测；路由 `?season=` 约定成型
+
+### 命令与结果
+
+| 命令 | 结果 |
+|---|---|
+| `npm run renderer:typecheck` / `renderer:build` | exit 0 |
+| `npm test` | **233 / 233 通过**（227 + 6 新增） |
+
+提交：`fb0c70c feat(ui2): build home dashboard`
+
+---
+
+## P2-04 媒体库分类页（2026-11-14）
+
+### 文件清单
+
+- **新增** `src/renderer/pages/library/`：`library.types.ts`、`library.mapper.ts`（`mapLibraryRows`）、`LibraryPageHeader.tsx`、`LibraryToolbar.tsx`、`MediaGrid.tsx`、`MediaListView.tsx`、`LibraryLoadingState.tsx`、`LibraryEmptyState.tsx`、`LibraryErrorState.tsx`
+- **修改** `LibraryPage.tsx`（重写）、`components/icons/index.tsx`（GridIcon/ListIcon）、`styles/pages.css`、`tests/ui2LibraryMapper.test.cjs`、`tsconfig.renderer.test.json`
+
+### 关键实现
+
+- 四分类共用页面：`/library/movies|tv|anime|others`；隐私模式走 `private: true` 并显示「隐私库」
+- 工具栏仅提供真实接口支持项：排序（最近添加/标题/年份/最近播放）、观看状态、收藏状态、网格/列表切换
+- loading 骨架、空态（区分隐私锁）、错误重试、600 条上限提示
+- 列表复用卡片映射（同一路由/状态语义）
+
+### 命令与结果
+
+| 命令 | 结果 |
+|---|---|
+| `npm run renderer:typecheck` / `renderer:build` | exit 0 |
+| `npm test` | **234 / 234 通过**（+1 行映射测试） |
+| 运行时（P2-07 合并验证） | 电影 41 卡、剧集 40 卡、列表/网格真实数据 |
+
+提交：`677a988 feat(ui2): build categorized media library`
+
+---
+
+## P2-05 媒体详情与播放接线（2026-11-14）
+
+### 文件清单
+
+- **新增** `src/renderer/pages/detail/`：`detail.types.ts`、`detail.mapper.ts`、`MediaDetailPage.tsx`（重写）、`DetailHero.tsx`、`MetadataLine.tsx`、`OverviewSection.tsx`、`FileInfoSection.tsx`、`PrimaryActions.tsx`
+- **新增** `src/renderer/services/media/mediaService.ts`（fetchShowInfo/fetchItemInfo/playLibraryItem）
+- **修改** `styles/pages.css`、`tests/ui2DetailMapper.test.cjs`、`tsconfig.renderer.test.json`
+
+### 关键实现
+
+- 电影：`library:item` → 标题/元数据/简介/文件信息/播放；季：`library:show?season` → 剧集列表 + 集状态
+- 续播纯函数：最近进行中 → 首个未看 → 首集；主按钮「继续播放/播放」fire-and-forget（短暂“已发起播放…”，不虚构成功）
+- 文件信息仅展示 basename/大小/清晰度；剧集行可点击播放（沿用既有链路）
+
+### 命令与结果
+
+| 命令 | 结果 |
+|---|---|
+| `npm run renderer:typecheck` / `renderer:build` | exit 0 |
+| `npm test` | **238 / 238 通过**（+4 详情映射测试） |
+| 运行时（P2-07 合并验证） | 电影详情《黑客帝国4》元数据/文件齐全；季详情《半泽直树2》9 集 + 续播 |
+
+提交：`782a814 feat(ui2): build media detail page with playback wiring`
+
+---
+
+## P2-06 全局搜索、媒体源、任务页（2026-11-14）
+
+### 文件清单
+
+- **新增** `src/renderer/pages/search/SearchPanel.tsx`（AppShell Dialog 接入，替换占位）
+- **新增** `src/renderer/pages/sources/`：`SourcesPage.tsx`、`sources.mapper.ts`
+- **新增** `src/renderer/pages/tasks/`：`TasksPage.tsx`、`tasks.mapper.ts`
+- **新增** `src/renderer/services/library/sourcesService.ts`、`tasksService.ts`
+- **修改** `app/AppShell.tsx`、`styles/pages.css`、`tests/ui2SourcesTasks.test.cjs`、`tsconfig.renderer.test.json`
+
+### 关键实现
+
+- 搜索：Ctrl/Cmd+K 弹层，`library:catalog query` 300ms 防抖、隐私态、最多 50 条、结果跳详情
+- 媒体源：`library:list-sources`（本地 `rootPath`/WebDAV URL 脱敏、隐私隐藏地址、类型/上次扫描/条目数）；按源触发 `library:scan` 并等待完成汇总
+- 任务：`library:scrape-status` 真实状态、触发刮削（`scrape-started`/进度/`scrape-done` 汇总）、触发扫描；扫描无实时进度如实标注
+- 修正：MediaCard 键使用 `key` 字段；preload 监听签名适配
+
+### 命令与结果
+
+| 命令 | 结果 |
+|---|---|
+| `npm run renderer:typecheck` / `renderer:build` | exit 0 |
+| `npm test` | **241 / 241 通过**（+3 源/任务映射测试） |
+| 运行时（P2-07 合并验证） | 搜索 8 结果；6 个真实源（`D:\【电影】`）；2 张任务卡；console 0 错误 |
+
+提交：`b3f2dc4 feat(ui2): add global search, sources and tasks pages`
+
+---
+
+## P2-07 证据、集成与运行时验收（2026-11-14）
+
+### 验收执行
+
+- 开发 React 壳（Vite 5273 + 真实 IPC/CDP 9222）：11 个步骤全部通过，证据 `C:\Users\Administrator\AppData\Local\Temp\opencode\p207-result.json`；截图 `ui2-p207-{library,detail,tv,season-detail,search,sources,tasks,privacy}.png`
+- file:// React 构建（非 Vite）：电影页 12 卡、console 0 错误 → `p207-react-result.json` / `ui2-p207-file-library.png`
+- 默认 classic：`#titlebar` 存在、无 `.app-shell-root`、标题「媒体库 v3.2.9」 → `p207-classic-result.json`
+- 打包 smoke：`electron-builder --win --dir`（本地 electronDist 覆盖）；asar 含 `ui2-renderer`（index.html + 2 资产）；打包 exe classic 启动正常
+- 验收中发现并修复：媒体源位置未读取本地源 `config.rootPath`（已修 + 单测）
+
+### 命令与结果
+
+`npm run compile` / `npm test`（241）/ `npm run renderer:typecheck` / `npm run renderer:build` 全绿。`npm ci` 未执行（Node 24 下 Electron postinstall 已知问题，见验收文档）。
+
+---
+
+## P2-08 文档与交付（2026-11-14）
+
+- 新增 `docs/ui2/PHASE2_ACCEPTANCE.md`（命令、页面、生产/打包证据、缺口与偏差）
+- 新增 `docs/ui2/PHASE2_ROLLBACK.md`（默认 classic、运行时/代码/数据/版本回滚）
+- 本日志补齐 P2-03 ~ P2-08
+
+### Phase 2 最终状态
+
+- 分支 `feature/ui2-phase2`：P2-00 f24ab6e、P2-01 4933e03、P2-02 ca24640、P2-03 fb0c70c、P2-04 677a988、P2-05 782a814、P2-06 b3f2dc4、P2-07/08 见最新提交；**未推送**
+- 测试 241/241；打包默认 classic；React UI 仅开发/显式验证模式可用
+- 下一步：等待用户确认合并/推送/发布节奏（Phase 2 不在本次自动推送）

@@ -30,7 +30,7 @@ test('source rows hide sensitive locations in privacy mode and strip url credent
                 id: 's1',
                 type: 'local',
                 name: 'Local',
-                config: { path: 'E:\\media' },
+                config: { rootPath: 'E:\\media' },
                 createdAt: 1,
                 lastScanAt: 1,
                 itemCount: 1,
