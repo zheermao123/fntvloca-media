@@ -44,3 +44,13 @@ test('long-lived task waits are cancellable and listeners are cleaned', () => {
     assert.ok(tasksService.includes('onceReplyCancellable'));
     assert.ok(tasksService.includes('IPC_CANCELLED'));
 });
+
+test('main-process scan uses a single-flight guard (duplicate triggers rejected)', () => {
+    const library = read('src/main/handlers/plugins/library.ts');
+    assert.ok(library.includes('scanSingleFlight.run'));
+    assert.ok(library.includes("已有扫描任务在进行中"));
+    assert.ok(!library.includes('let scanning = false;'));
+    const guard = read('src/main/handlers/plugins/scanGuard.ts');
+    assert.ok(guard.includes('started: false'));
+    assert.ok(guard.includes('finally'));
+});

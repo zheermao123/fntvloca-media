@@ -1,6 +1,7 @@
 import { dialog, IpcMainEvent } from 'electron';
 import * as fs from 'fs';
 import { registerHandler } from '../core/ipcHandler';
+import { createSingleFlight } from './scanGuard';
 import { getMainWindow } from '../../common/mainwin';
 import * as log from '../../../modules/logger';
 import * as fnConfig from '../../../modules/fn_config/config';
@@ -37,7 +38,7 @@ import {
  * 负责源管理、扫描、条目查询与 TMDB 刮削的 IPC 接口；播放走 play-library-item（media.ts）。
  */
 
-let scanning = false;
+const scanSingleFlight = createSingleFlight();
 let scraping = false;
 let lastScrapeSummary: { scraped: number; failed: number; skipped: number } | null = null;
 
@@ -141,38 +142,36 @@ function listSourcesPayload(privateOnly: boolean): { sources: unknown[] } {
 }
 
 async function runScan(event: IpcMainEvent, sourceId?: string): Promise<void> {
-    if (scanning) {
-        reply(event, 'library:scan-done', { error: '已有扫描任务在进行中' });
-        return;
-    }
-    scanning = true;
-    try {
-        const store = getLibraryStore();
-        const targets = sourceId
-            ? [sourceId]
-            : store.listSources().filter((s) => s.type === 'local').map((s) => s.id);
-        const totals = { added: 0, updated: 0, removed: 0, skipped: 0 };
-        const removedSourceNames: string[] = [];
-        for (const id of targets) {
-            try {
-                const summary = await scanSource(id);
-                totals.added += summary.added;
-                totals.updated += summary.updated;
-                totals.removed += summary.removed;
-                totals.skipped += summary.skipped;
-                if (summary.removedSource && removedSourceNames.length < 5) {
-                    removedSourceNames.push(summary.removedSource.name);
+    const outcome = await scanSingleFlight.run(async () => {
+        try {
+            const store = getLibraryStore();
+            const targets = sourceId
+                ? [sourceId]
+                : store.listSources().filter((s) => s.type === 'local').map((s) => s.id);
+            const totals = { added: 0, updated: 0, removed: 0, skipped: 0 };
+            const removedSourceNames: string[] = [];
+            for (const id of targets) {
+                try {
+                    const summary = await scanSource(id);
+                    totals.added += summary.added;
+                    totals.updated += summary.updated;
+                    totals.removed += summary.removed;
+                    totals.skipped += summary.skipped;
+                    if (summary.removedSource && removedSourceNames.length < 5) {
+                        removedSourceNames.push(summary.removedSource.name);
+                    }
+                } catch (error) {
+                    log.error('[library] 扫描源失败:', id, error);
                 }
-            } catch (error) {
-                log.error('[library] 扫描源失败:', id, error);
             }
+            reply(event, 'library:scan-done', { ...totals, removedSources: removedSourceNames.length ? removedSourceNames : undefined });
+        } catch (error) {
+            log.error('[library] 扫描失败:', error);
+            reply(event, 'library:scan-done', { error: error instanceof Error ? error.message : String(error) });
         }
-        reply(event, 'library:scan-done', { ...totals, removedSources: removedSourceNames.length ? removedSourceNames : undefined });
-    } catch (error) {
-        log.error('[library] 扫描失败:', error);
-        reply(event, 'library:scan-done', { error: error instanceof Error ? error.message : String(error) });
-    } finally {
-        scanning = false;
+    });
+    if (!outcome.started) {
+        reply(event, 'library:scan-done', { error: '已有扫描任务在进行中' });
     }
 }
 

@@ -209,6 +209,50 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Windows install and classic smoke
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem release -Filter 'FNMedia_*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'CI installer not found' }
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          $appExe = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\fntv') -Filter '*.exe' |
+            Where-Object { $_.Name -notmatch '卸载|Uninstall' } | Select-Object -First 1
+          if (-not $appExe) { throw 'installed exe not found' }
+
+          function Test-Classic([string]$tag) {
+            Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
+            Start-Sleep -Seconds 2
+            $proc = Start-Process -FilePath $appExe.FullName -ArgumentList '--remote-debugging-port=9222' -PassThru
+            try {
+              $deadline = (Get-Date).AddSeconds(75)
+              $page = $null
+              while ((Get-Date) -lt $deadline) {
+                Start-Sleep -Seconds 2
+                try {
+                  $pages = Invoke-RestMethod 'http://127.0.0.1:9222/json' -TimeoutSec 3
+                  $page = $pages | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
+                } catch { $page = $null }
+                if ($page -and $page.title -match '媒体库') { break }
+              }
+              if (-not $page) { throw "[$tag] no CDP page" }
+              if ($page.url -notmatch 'app\.asar/resource/library/index\.html') { throw "[$tag] unexpected url: $($page.url)" }
+              if ($page.title -notmatch '媒体库') { throw "[$tag] unexpected title: $($page.title)" }
+              Write-Output "[$tag] classic smoke OK: $($page.title)"
+            } finally {
+              Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
+              try { $proc | Stop-Process -Force } catch {}
+            }
+          }
+
+          Test-Classic 'default'
+          $env:FNTV_UI_SHELL = 'react'
+          $env:FNTV_UI2_DEV_URL = 'http://127.0.0.1:5273'
+          Test-Classic 'packaged-fallback'
+          Remove-Item Env:FNTV_UI_SHELL, Env:FNTV_UI2_DEV_URL -ErrorAction SilentlyContinue
+
       - name: Upload preview release assets
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
         shell: bash
