@@ -252,6 +252,17 @@ jobs:
           Test-Classic 'packaged-fallback'
           Remove-Item Env:FNTV_UI_SHELL, Env:FNTV_UI2_DEV_URL -ErrorAction SilentlyContinue
 
+          $uninstaller = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\fntv') -Filter 'Uninstall*.exe' | Select-Object -First 1
+          if (-not $uninstaller) { throw 'uninstaller not found' }
+          Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait
+          $removed = $false
+          for ($i = 0; $i -lt 15; $i++) {
+            if (-not (Test-Path $appExe.FullName)) { $removed = $true; break }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $removed) { throw 'app still present after uninstall' }
+          Write-Output 'uninstall smoke OK'
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

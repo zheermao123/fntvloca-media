@@ -1,0 +1,108 @@
+{
+  "profile": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\fntv-privacy-e2e-CU99rJ",
+  "steps": [
+    {
+      "name": "boot isolated app",
+      "ok": true,
+      "detail": "飞牛影视"
+    },
+    {
+      "name": "seed private source and scan",
+      "ok": true,
+      "detail": {
+        "added": 1,
+        "sourceId": "5a0df77c-a8b4-44cf-8bd8-5198ea1e28c6"
+      }
+    },
+    {
+      "name": "rapid gate open keeps single dialog",
+      "ok": true,
+      "detail": 1
+    },
+    {
+      "name": "wrong password rejected (double click)",
+      "ok": true,
+      "detail": "error shown once"
+    },
+    {
+      "name": "correct password unlocks (double click)",
+      "ok": true,
+      "detail": "unlocked"
+    },
+    {
+      "name": "privacy library shows private fixture only",
+      "ok": true,
+      "detail": {
+        "count": 1,
+        "title": "E2E Private",
+        "href": "#/media/1b94b796-deb3-4471-931b-e0ae1e553121?season=1"
+      }
+    },
+    {
+      "name": "private detail opens while unlocked",
+      "ok": true,
+      "detail": "E2E Private 第 1 季"
+    },
+    {
+      "name": "private search works in privacy mode",
+      "ok": true,
+      "detail": 1
+    },
+    {
+      "name": "lock returns home and clears privacy UI",
+      "ok": true,
+      "detail": "locked"
+    },
+    {
+      "name": "history back cannot restore private content",
+      "ok": true,
+      "detail": {
+        "hash": "#/media/1b94b796-deb3-4471-931b-e0ae1e553121?season=1",
+        "detailTitle": null
+      }
+    },
+    {
+      "name": "direct private route is gated while locked",
+      "ok": true,
+      "detail": {
+        "body": "FN\n飞牛影视\n首页\n电影\n剧集\n动漫\n其他视频\n管理\n媒体源\n任务状态\n进入隐私模式\n版本 3.2.9\n媒体详情\n搜索\nCtrl K\n返回\n媒体详情加载失败\n\n需要解锁隐私模式\n\n重试\n \n ",
+        "error": true,
+        "detailTitle": null
+      }
+    },
+    {
+      "name": "locked search has no private results",
+      "ok": true,
+      "detail": {
+        "results": 0,
+        "empty": true,
+        "body": "全局搜索\n搜索\n\n按标题搜索（含剧集名），不支持按文件名搜索；结果最多 50 条。\n\n未找到匹配内容\n\n试试更短的关键词，或确认媒体库已完成扫描与收录。"
+      }
+    },
+    {
+      "name": "public library stays empty for private-only fixture",
+      "ok": true,
+      "detail": {
+        "cards": 0,
+        "body": "FN\n飞牛影视\n首页\n电影\n剧集\n动漫\n其他视频\n管理\n媒体源\n任务状态\n进入隐私模式\n版本 3.2.9\n电影\n搜索\nCtrl K\n电影\n0 部 / 季\n排序：最近添加\n观看：全部\n收藏：全部\n暂无媒体内容\n\n该分类下没有媒体内容。添加媒体源并扫描后即可在此浏览。\n\n \n ",
+        "sample": []
+      }
+    },
+    {
+      "name": "restart keeps privacy locked and gated",
+      "ok": true,
+      "detail": {
+        "label": "进入隐私模式"
+      }
+    },
+    {
+      "name": "close during unlock keeps privacy locked after restart",
+      "ok": true,
+      "detail": {
+        "label": "进入隐私模式"
+      }
+    }
+  ],
+  "ok": true,
+  "screenshot": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\opencode\\ui2-privacy-e2e.png"
+}
