@@ -5,9 +5,7 @@ import { Sidebar } from '../layout/Sidebar';
 import { MainRegion } from '../layout/MainRegion';
 import { PageHeader } from '../layout/PageHeader';
 import { Dialog } from '../components/ui/Dialog';
-import { Input } from '../components/ui/Input';
-import { EmptyState } from '../components/ui/EmptyState';
-import { SearchIcon } from '../components/icons';
+import { SearchPanel } from '../pages/search/SearchPanel';
 import { CATEGORY_META, resolveCategoryFromSegment } from './routes';
 
 function titleForPath(pathname: string): string {
@@ -59,20 +57,7 @@ export function AppShell() {
                 </MainRegion>
             </WindowFrame>
             <Dialog open={searchOpen} title="全局搜索" onClose={() => setSearchOpen(false)}>
-                <div className="app-search-placeholder">
-                    <Input
-                        label="搜索"
-                        placeholder="搜索标题…"
-                        data-autofocus
-                        disabled
-                        aria-label="全局搜索（即将接入）"
-                    />
-                    <EmptyState
-                        icon={<SearchIcon size={22} />}
-                        title="全局搜索即将接入"
-                        description="真实搜索数据将在 P2-06 阶段接入，当前入口仅用于占位验证快捷键与焦点管理。"
-                    />
-                </div>
+                <SearchPanel onNavigate={() => setSearchOpen(false)} />
             </Dialog>
         </div>
     );

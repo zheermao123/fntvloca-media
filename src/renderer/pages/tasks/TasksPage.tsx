@@ -1,14 +1,192 @@
-import { EmptyState } from '../../components/ui/EmptyState';
-import { ScanIcon } from '../../components/icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '../../components/ui/Button';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { ScanIcon, SparklesIcon } from '../../components/icons';
+import { runLibraryScan } from '../../services/library/sourcesService';
+import { fetchScrapeStatus, onScrapeProgress, startScrape, waitScrapeDone } from '../../services/library/tasksService';
+import { formatScanResult } from '../sources/sources.mapper';
+import { describeScrapeSummary, scrapePercent } from './tasks.mapper';
+import type { ScrapeProgressDto, ScrapeSummaryDto } from './tasks.mapper';
+
+type StatusState =
+    | { status: 'loading' }
+    | { status: 'error'; message: string }
+    | { status: 'success'; running: boolean; lastSummary: ScrapeSummaryDto | null };
 
 export function TasksPage() {
+    const [state, setState] = useState<StatusState>({ status: 'loading' });
+    const [scanPending, setScanPending] = useState(false);
+    const [scrapePending, setScrapePending] = useState(false);
+    const [progress, setProgress] = useState<ScrapeProgressDto | null>(null);
+    const [banner, setBanner] = useState('');
+    const aliveRef = useRef(true);
+    const unsubscribeRef = useRef<(() => void) | null>(null);
+
+    useEffect(() => {
+        aliveRef.current = true;
+        return () => {
+            aliveRef.current = false;
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+        };
+    }, []);
+
+    const load = useCallback(async () => {
+        setState({ status: 'loading' });
+        try {
+            const result = await fetchScrapeStatus();
+            setState({ status: 'success', running: result.running, lastSummary: result.lastSummary });
+        } catch (error) {
+            setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
+        }
+    }, []);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    const scan = async () => {
+        setScanPending(true);
+        setBanner('正在扫描媒体库，完成后显示汇总…');
+        try {
+            const result = await runLibraryScan();
+            if (aliveRef.current) {
+                setBanner(formatScanResult(result));
+            }
+        } catch (error) {
+            if (aliveRef.current) {
+                setBanner(`扫描失败：${error instanceof Error ? error.message : '未知错误'}`);
+            }
+        } finally {
+            if (aliveRef.current) {
+                setScanPending(false);
+            }
+        }
+    };
+
+    const scrape = async () => {
+        setScrapePending(true);
+        setBanner('');
+        setProgress(null);
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = onScrapeProgress((value) => {
+            if (aliveRef.current) {
+                setProgress(value);
+            }
+        });
+        try {
+            const started = await startScrape();
+            if (!started.started) {
+                setBanner(started.error || '无法开始刮削');
+                unsubscribeRef.current?.();
+                unsubscribeRef.current = null;
+                return;
+            }
+            if (aliveRef.current) {
+                setState({ status: 'success', running: true, lastSummary: null });
+            }
+            const done = await waitScrapeDone();
+            if (aliveRef.current) {
+                if (done.error) {
+                    setBanner(`刮削失败：${done.error}`);
+                } else {
+                    setBanner(`刮削已完成：成功 ${done.summary?.scraped ?? 0}，失败 ${done.summary?.failed ?? 0}，跳过 ${done.summary?.skipped ?? 0}`);
+                }
+            }
+            await load();
+        } catch (error) {
+            if (aliveRef.current) {
+                setBanner(`刮削失败：${error instanceof Error ? error.message : '未知错误'}`);
+            }
+        } finally {
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            if (aliveRef.current) {
+                setScrapePending(false);
+                setProgress(null);
+            }
+        }
+    };
+
+    const running = state.status === 'success' ? state.running : false;
+    const summaryText = state.status === 'success' ? describeScrapeSummary(state.lastSummary) : null;
+
     return (
-        <section className="app-page">
-            <EmptyState
-                icon={<ScanIcon size={26} />}
-                title="任务状态即将接入"
-                description="扫描/刮削的进程内状态与最近结果摘要将在 P2-06 阶段接入；不新增任务持久化能力。"
-            />
+        <section className="app-page" aria-label="任务状态">
+            <header className="library-page__header">
+                <div>
+                    <h2 className="library-page__title">任务状态</h2>
+                    <p className="library-page__count">扫描与 TMDB 刮削（数据来自既有主进程任务）</p>
+                </div>
+            </header>
+            {progress ? (
+                <div className="task-banner" role="status">
+                    正在刮削：{progress.title || '准备中'}（{progress.done}/{progress.total}）
+                </div>
+            ) : null}
+            {banner ? (
+                <div className="task-banner" role="status">
+                    {banner}
+                </div>
+            ) : null}
+            {state.status === 'loading' ? (
+                <div className="tasks-grid" aria-hidden="true">
+                    <Skeleton variant="text" />
+                    <Skeleton variant="text" />
+                </div>
+            ) : null}
+            {state.status === 'error' ? (
+                <ErrorState title="任务状态加载失败" description={state.message} onRetry={() => void load()} />
+            ) : null}
+            {state.status === 'success' ? (
+                <div className="tasks-grid">
+                    <div className="task-card">
+                        <h3 className="task-card__title">扫描媒体库</h3>
+                        <p className="task-card__desc">
+                            重新扫描所有本地媒体源，添加新文件并清理失效条目。扫描不提供实时进度，完成后显示汇总。
+                        </p>
+                        <div className="task-card__actions">
+                            <Button
+                                variant="primary"
+                                iconLeft={<ScanIcon size={14} />}
+                                disabled={scanPending || running}
+                                onClick={() => void scan()}
+                            >
+                                {scanPending ? '扫描中…' : '开始扫描'}
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="task-card">
+                        <h3 className="task-card__title">TMDB 刮削</h3>
+                        <p className="task-card__desc">
+                            {running
+                                ? '刮削任务正在进行中…'
+                                : summaryText ?? '尚未执行过刮削。刮削需要先在设置中配置 TMDB API Key。'}
+                        </p>
+                        {progress ? (
+                            <div className="task-progress">
+                                <progress value={progress.done} max={Math.max(progress.total, 1)}>
+                                    {scrapePercent(progress)}%
+                                </progress>
+                                <span>
+                                    {progress.title || '准备中'} · {scrapePercent(progress)}%
+                                </span>
+                            </div>
+                        ) : null}
+                        <div className="task-card__actions">
+                            <Button
+                                variant="primary"
+                                iconLeft={<SparklesIcon size={14} />}
+                                disabled={scrapePending || running || scanPending}
+                                onClick={() => void scrape()}
+                            >
+                                {running || scrapePending ? '刮削中…' : '开始刮削'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </section>
     );
 }
