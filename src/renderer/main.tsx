@@ -1,12 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
-import { ThemeProvider } from './theme/ThemeProvider';
+import { AppBootstrap } from './app/AppBootstrap';
 import './styles/tokens.css';
 import './styles/reset.css';
 import './styles/global.css';
 import './styles/components.css';
-import './app.css';
+import './styles/shell.css';
 
 const container = document.getElementById('root');
 if (!container) {
@@ -15,8 +14,6 @@ if (!container) {
 
 createRoot(container).render(
     <StrictMode>
-        <ThemeProvider>
-            <App />
-        </ThemeProvider>
+        <AppBootstrap />
     </StrictMode>
 );

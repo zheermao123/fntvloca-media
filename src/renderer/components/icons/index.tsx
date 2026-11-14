@@ -128,3 +128,31 @@ export function CheckIcon({ size = 16, ...rest }: IconProps) {
         </svg>
     );
 }
+
+export function HomeIcon({ size = 16, ...rest }: IconProps) {
+    return (
+        <svg {...baseProps(size)} {...rest}>
+            <path d="m4 11 8-6.5L20 11" />
+            <path d="M6.5 9.8V19h11V9.8" />
+            <path d="M10 19v-5h4v5" />
+        </svg>
+    );
+}
+
+export function TvIcon({ size = 16, ...rest }: IconProps) {
+    return (
+        <svg {...baseProps(size)} {...rest}>
+            <rect x="3.5" y="6.5" width="17" height="11" rx="2" />
+            <path d="m8 3.5 4 3 4-3" />
+        </svg>
+    );
+}
+
+export function LockIcon({ size = 16, ...rest }: IconProps) {
+    return (
+        <svg {...baseProps(size)} {...rest}>
+            <rect x="5" y="10.5" width="14" height="9.5" rx="2" />
+            <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+        </svg>
+    );
+}

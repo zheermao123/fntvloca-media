@@ -76,3 +76,52 @@ Apple 风格 Light 默认设计系统：tokens、reset/global/组件样式、主
 - 渲染层纯函数单测（theme/fileUrl）暂以源码断言替代；P2-04 mapper 测试时增加 renderer 测试编译方案（不改现有 Node CJS 测试体系）
 - G3 播放结果反馈、G2 扫描状态按基线缺口处理，不在 Phase 2 扩展
 - **等待用户确认后进入 P2-02（App Shell、窗口与路由）**
+
+---
+
+## P2-02 App Shell、窗口与路由（2026-11-14）
+
+### 已批准决策落地
+
+- 路由：安装 `react-router-dom@^7.18.5`，使用 **HashRouter**；`category=other → /library/others`；路由切换不依赖服务器回退
+- 标题栏：**复用 preload 注入的 `#custom-titlebar`**（实测 32px、Win/Linux 3 个自绘按钮）；React 未创建第二套窗控（因此未新增 WindowControls/MacTrafficLights 组件，与计划文件清单的差异本日志记录）；`app-window` 定位从 `top: 32px` 开始
+- 播放：维持 fire-and-forget（本阶段未接播放）
+
+### 文件清单
+
+**新增 `src/renderer/app/`**：`routes.ts`（路由常量/分类映射）、`bridge.ts`（preload 薄封装 + onceReply 超时）、`AppBootstrap.tsx`（ErrorBoundary→Theme→Privacy→Router）、`AppRouter.tsx`（HashRouter 路由表）、`AppShell.tsx`（布局 + Cmd/Ctrl+K 搜索入口 + 占位搜索弹层）、`PrivacyStateProvider.tsx`（privacy-begin/unlock/lock 真实接线 + 密码门禁 Dialog）、`AppErrorBoundary.tsx`
+
+**新增 `src/renderer/layout/`**：`WindowFrame.tsx`（标题栏下方内容区）、`Sidebar.tsx`（品牌/导航/管理/隐私入口/真实版本号 get-version）、`PrimaryNavigation.tsx`（NavLink 活动态）、`PageHeader.tsx`（标题 + 搜索触发，Ctrl K 提示）、`MainRegion.tsx`
+
+**新增 `src/renderer/pages/`**：`home/HomePage`、`library/LibraryPage`（`:category` 解析，非法段重定向首页）、`detail/MediaDetailPage`（返回按钮）、`sources/SourcesPage`、`tasks/TasksPage`（诚实空态，标注接入阶段）
+
+**其他**：`components/icons/index.tsx` 增加 Home/Tv/Lock 图标；`styles/shell.css`（布局全部 tokens + 交互元素 `-webkit-app-region: no-drag`）；`main.tsx` 改为挂载 `AppBootstrap`；**删除** 旧壳 `App.tsx` 与 `app.css`
+
+**测试**：`tests/ui2Shell.test.cjs`（5 项）：HashRouter/路由表/other 映射、标题栏预留与 no-drag、文件清单、Ctrl/Cmd+K 与隐私接线
+
+### 命令与结果
+
+| 命令 | 结果 |
+|---|---|
+| `npm run renderer:typecheck` | exit 0 |
+| `npm run renderer:build` | exit 0（CSS 14.92 KB / JS 275.52 KB，含 react-router-dom） |
+| `npm test` | **227 / 227 通过**（222 + 5 新增） |
+| `npm run compile` | exit 0 |
+| CDP 运行时实测（dev electron `--remote-debugging-port=9222`） | 标题栏注入=true/32px/3 按钮；首页标题=首页；侧栏=首页/电影/剧集/动漫/其他视频/媒体源/任务状态/进入隐私模式；`/library/others`→标题「其他视频」且导航活动态正确、hash 正确；`/library/anime`→动漫；`/media/abc123`→媒体详情+返回按钮；隐私入口→密码输入弹窗（privacy-begin/unlock 真实接线），关闭正常 |
+| 截图 | `C:\Users\Administrator\AppData\Local\Temp\opencode\ui2-p202-shell.png`（Apple 风格导航壳 + 注入窗控 + 真实版本 3.2.9） |
+
+### DoD 自检（P2-02）
+
+- [x] 变更文件清单明确（含删除项）
+- [x] 无未说明 IPC（仅使用既有 privacy-begin/unlock/lock、get-version）、无 DB 变更；新增 1 个已批准依赖 react-router-dom
+- [x] compile / test / typecheck / build 全绿
+- [x] 路由打开正确页面占位；导航 active 正确；`category=other → /library/others`
+- [x] 拖拽区不遮挡交互控件（内容区从 32px 下方开始，交互元素 no-drag）；键盘焦点可见（global focus-visible）
+- [x] 隐私状态由可信 API 提供，门禁弹窗真实可用；未解锁不展示隐私数据（本阶段尚无隐私数据展示）
+- [x] 未改变 main/窗口行为、未改 preload 白名单、未绕过 classic 回退、未改 CSP/sandbox
+
+### 遗留与下一步
+
+- 页面内容为诚实占位（P2-03 首页 / P2-04 媒体库 / P2-05 详情 / P2-06 搜索·源·任务）；搜索弹层明确标注 P2-06 接入，无假按钮
+- 隐私模式的数据级过滤随 P2-04 接入（provider 已具备模式状态与门禁）
+- **等待用户确认后进入 P2-03（首页）**
