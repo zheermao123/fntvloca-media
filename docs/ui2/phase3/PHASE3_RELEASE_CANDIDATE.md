@@ -98,3 +98,8 @@ Phase 3 在 Windows 环境达到发布候选质量标准：核心流程、隐私
 - Windows CI run `43676835518`：274/274、NSIS、安装/回退/卸载冒烟通过；产物 SHA256 `62FA6B8DE8584CDEC80AAF8A810B63AD4F5C263DABED688018677DA4AE83F69A`。
 - 本机升级/卸载/官方 v3.2.9 回滚实测通过；回滚方案见 `docs/ui2/integration/ROLLBACK.md`。
 - 功能冻结；未发现新增集成阻塞问题；React 默认 UI 未切换（单独决策）。
+## 11. 正式发布门禁（第四阶段）
+
+- 发布环境与负向路径验证结果见 `docs/ui2/release/FORMAL_RELEASE_GATE_REPORT.md`。
+- `release` Environment 已配置 required reviewer 与仅 release 分支策略；正式 Tag/Release 仍未执行。
+- release 分支同步与正向审批验证因旧代码/旧 workflow 不兼容而阻塞，等待用户决定是否同步 Release Candidate。

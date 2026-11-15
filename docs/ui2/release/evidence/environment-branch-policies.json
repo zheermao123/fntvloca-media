@@ -1,0 +1,11 @@
+﻿{
+    "total_count":  1,
+    "branch_policies":  [
+                            {
+                                "id":  66768760,
+                                "node_id":  "MDE2OkdhdGVCcmFuY2hQb2xpY3k2Njc2ODc2MA==",
+                                "name":  "release",
+                                "type":  "branch"
+                            }
+                        ]
+}
