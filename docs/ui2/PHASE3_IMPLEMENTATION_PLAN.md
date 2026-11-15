@@ -260,6 +260,9 @@ npm run renderer:build
 
 ### B-01 媒体库分页、排序、筛选与大库性能（P0，优先开发）
 
+> **B-01 执行状态（2026-11-15）：已停止在 ADR 停点。** 真实库 111 卡（2–16ms）；17k/21k fixture 下 limit=600 仍全量构建（中位 119–143ms，全量 +168.8MB）。现有接口无 offset/total，无法诚实分页。方案 A（扩展 library:catalog + SQL 下推/总数）属 L2，待批准：`docs/ui2/phase3/adr/B-01-catalog-pagination.md`。
+
+
 **现状问题**
 - 当前分类计数依赖多次 catalog 查询，查询上限可能导致计数不完整（已知 G1）。
 - 真实媒体库规模为 17,000+ 条目；Phase 2 当前卡片列表和数据获取方式尚未证明适合大库持续使用。
