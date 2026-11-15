@@ -28,6 +28,7 @@ ADR：`docs/ui2/phase3/adr/B-01-catalog-pagination.md`（已按方案 A 实施�
 | `npm run compile` / `renderer:typecheck` / `renderer:build` | 全部 exit 0 |
 | 真实库 file:// 回归（12 步） | 通过，console errors 0 |
 | 隐私 E2E（隔离 fixture，15 步） | 通过 |
+| CI run `43665118021`（commit `5323037`） | 265/265 测试、Windows 构建/安装/回退/卸载冒烟通过 |
 
 ## 大库性能（21,000 条目 fixture：17k 电影 + 500 剧 × 8 集）
 
