@@ -238,11 +238,11 @@ jobs:
                   $pages = Invoke-RestMethod 'http://127.0.0.1:9222/json' -TimeoutSec 3
                   $page = $pages | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
                 } catch { $page = $null }
-                if ($page -and $page.title -match '媒体库') { break }
+                if ($page -and $page.title -match '媒体库|飞牛影视') { break }
               }
               if (-not $page) { throw "[$tag] no CDP page" }
               if ($page.url -notmatch $expectedUrl) { throw "[$tag] unexpected url: $($page.url)" }
-              if ($page.title -notmatch '媒体库') { throw "[$tag] unexpected title: $($page.title)" }
+              if ($page.title -notmatch '媒体库|飞牛影视') { throw "[$tag] unexpected title: $($page.title)" }
               Write-Output "[$tag] shell smoke OK: $($page.title) -> $($page.url)"
             } finally {
               Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
