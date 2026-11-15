@@ -67,3 +67,8 @@ UI 2.0 重写后，隐私模式入口与后端门禁保留，但旧 classic UI �
 - 数据核对：`DATA_MATCH=true`（76 源 / 345 剧 / 11,598 条目 / 341 观看状态 / 7 收藏 / 64 季；隐私密码与 TMDB 配置保留）
 - 安装前备份：`C:\Users\Administrator\.fntv-backup-20261115-151115-pre341`
 - 说明：真实隐私密码解锁由用户本机输入；自动化隐私 E2E 使用隔离数据目录，不包含真实密码。
+## 播放修复（3.4.2）
+
+- 根因：preload 的 classic 播放按钮接管插件在 React 页面同样生效，拦截并阻止了 React 播放按钮 click，改用旧 `play-movie`，导致点击无反应。
+- 修复：`playButton`/`playMaskButton` 在 React UI 页面（file:// ui2-renderer 或 dev 5273）禁用；classic 保持原行为。
+- 验证：隔离 E2E 点击播放进入 React 处理器（按钮显示“已发起播放”）；开发日志确认走 `Library play event received itemId`，不再出现 `Play movie event received`。

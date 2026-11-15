@@ -567,6 +567,24 @@ async function main() {
             return 'actions applied';
         });
 
+        await step('privacy playback click reaches library playback', async () => {
+            const clicked = await cdp.evaluate(`(() => {
+                const btn = Array.from(document.querySelectorAll('.detail-actions button'))
+                    .find((el) => ['播放', '继续播放'].includes((el.textContent || '').trim()));
+                if (!btn) return false;
+                btn.click();
+                return true;
+            })()`);
+            if (!clicked) {
+                throw new Error('play button missing');
+            }
+            await cdp.waitFor(
+                `Array.from(document.querySelectorAll('.detail-actions button')).some((el) => (el.textContent || '').includes('已发起播放'))`,
+                'play click reached react handler'
+            );
+            spawnSync('taskkill', ['/IM', 'mpv.exe', '/F'], { stdio: 'ignore' });
+            return 'play click handled';
+        });
         await step('private search works in privacy mode', async () => {
             await cdp.evaluate(
                 `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true })); true`
