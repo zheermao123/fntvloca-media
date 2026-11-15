@@ -73,7 +73,7 @@
 - 向 `release` 分支 push 现在只构建并上传 Actions artifacts，不再自动创建 Release/Tag。
 - 删除未使用的 `release_tag` 输入，避免“预览上传”语义与实际行为不符。
 - Release 描述已改为：Windows 已安装冒烟；macOS/Linux 仅提供构建产物、未实机验证（用户已接受风险）。
-- 预览构建（publish=false）验证 run：<PENDING>。
+- 预览构建（publish=false）验证 run：`43670765660`（Windows）；构建/安装冒烟成功，Create Release Job 为 skipped。
 
 ## 8. 回滚
 
