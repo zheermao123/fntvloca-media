@@ -6,6 +6,8 @@ import type {
     ItemMetadataPatch,
     LibraryItem,
     ListItemQuery,
+    MovieCatalogPage,
+    MovieCatalogQuery,
     NewItem,
     NewShow,
     NewSource,
@@ -56,6 +58,9 @@ export type LibraryStore = {
     removeItemsExcept(sourceId: string, keepIds: string[]): string[];
 
     getWatchState(itemId: string): WatchState | null;
+    listWatchStates(): WatchState[];
+    /** 电影目录分页（SQL/内存下推；total 与筛选同口径） */
+    queryMovieCatalog(query: MovieCatalogQuery): MovieCatalogPage;
     markPlaybackStart(itemId: string): void;
     recordProgress(itemId: string, positionTs: number, durationTs: number): void;
     setWatched(itemId: string, watched: boolean): void;

@@ -1,0 +1,2122 @@
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 5f51c29..6f6b38d 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -113,7 +113,7 @@ jobs:
+         continue-on-error: true
+ 
+       - name: Install dependencies
+-        run: npm ci --omit=optional --no-audit --no-fund
++        run: npm ci --no-audit --no-fund
+         timeout-minutes: 10
+ 
+       - name: Setup macOS specific dependencies
+@@ -209,6 +209,50 @@ jobs:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           CSC_IDENTITY_AUTO_DISCOVERY: false
+ 
++      - name: Windows install and classic smoke
++        if: matrix.platform == 'windows'
++        shell: pwsh
++        timeout-minutes: 8
++        run: |
++          $ErrorActionPreference = 'Stop'
++          $installer = Get-ChildItem release -Filter 'FNMedia_*.exe' | Select-Object -First 1
++          if (-not $installer) { throw 'CI installer not found' }
++          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
++          $appExe = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\fntv') -Filter '*.exe' |
++            Where-Object { $_.Name -notmatch '卸载|Uninstall' } | Select-Object -First 1
++          if (-not $appExe) { throw 'installed exe not found' }
++
++          function Test-Classic([string]$tag) {
++            Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
++            Start-Sleep -Seconds 2
++            $proc = Start-Process -FilePath $appExe.FullName -ArgumentList '--remote-debugging-port=9222' -PassThru
++            try {
++              $deadline = (Get-Date).AddSeconds(75)
++              $page = $null
++              while ((Get-Date) -lt $deadline) {
++                Start-Sleep -Seconds 2
++                try {
++                  $pages = Invoke-RestMethod 'http://127.0.0.1:9222/json' -TimeoutSec 3
++                  $page = $pages | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
++                } catch { $page = $null }
++                if ($page -and $page.title -match '媒体库') { break }
++              }
++              if (-not $page) { throw "[$tag] no CDP page" }
++              if ($page.url -notmatch 'app\.asar/resource/library/index\.html') { throw "[$tag] unexpected url: $($page.url)" }
++              if ($page.title -notmatch '媒体库') { throw "[$tag] unexpected title: $($page.title)" }
++              Write-Output "[$tag] classic smoke OK: $($page.title)"
++            } finally {
++              Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
++              try { $proc | Stop-Process -Force } catch {}
++            }
++          }
++
++          Test-Classic 'default'
++          $env:FNTV_UI_SHELL = 'react'
++          $env:FNTV_UI2_DEV_URL = 'http://127.0.0.1:5273'
++          Test-Classic 'packaged-fallback'
++          Remove-Item Env:FNTV_UI_SHELL, Env:FNTV_UI2_DEV_URL -ErrorAction SilentlyContinue
++
+       - name: Upload preview release assets
+         if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
+         shell: bash
+diff --git a/package.json b/package.json
+index 097f967..4b3b118 100644
+--- a/package.json
++++ b/package.json
+@@ -18,14 +18,15 @@
+         "start:mac": "npm run clean && npm run build:proxy:mac && npm run compile && electron .",
+         "compile": "tsc",
+         "renderer:typecheck": "tsc -p tsconfig.renderer.json",
++        "renderer:test-compile": "tsc -p tsconfig.renderer.test.json",
+         "renderer:build": "npm run renderer:typecheck && vite build",
+-        "test": "npm run compile && node --test tests/*.test.cjs",
++        "test": "npm run compile && npm run renderer:test-compile && node --test tests/*.test.cjs",
+         "watch": "tsc --watch",
+         "clean": "rimraf dest",
+-        "build:win": "npm-run-all -s build:proxy:win compile renderer:build && electron-builder --win",
+-        "build:mac": "npm-run-all -s build:proxy:mac:x64 build:proxy:mac:arm64 build:proxy:mac:universal compile renderer:build clean:proxy:mac && electron-builder --mac",
+-        "build:linux:x64": "npm run build:proxy:linux:x64 && electron-builder --linux AppImage --x64",
+-        "build:linux:arm64": "npm run build:proxy:linux:arm64 && electron-builder --linux AppImage --arm64",
++        "build:win": "npm-run-all -s build:proxy:win compile renderer:build && electron-builder --win --publish never",
++        "build:mac": "npm-run-all -s build:proxy:mac:x64 build:proxy:mac:arm64 build:proxy:mac:universal compile renderer:build clean:proxy:mac && electron-builder --mac --publish never",
++        "build:linux:x64": "npm run build:proxy:linux:x64 && electron-builder --linux AppImage --x64 --publish never",
++        "build:linux:arm64": "npm run build:proxy:linux:arm64 && electron-builder --linux AppImage --arm64 --publish never",
+         "build:linux": "npm-run-all -s compile renderer:build build:linux:x64 build:linux:arm64"
+     },
+     "author": "tracing",
+@@ -70,6 +71,7 @@
+         "node-mpv-2": "^2.0.0-beta.3",
+         "react": "^19.3.1",
+         "react-dom": "^19.3.1",
++        "react-router-dom": "^7.18.5",
+         "semver": "^7.7.2",
+         "uuid": "^13.0.0"
+     },
+diff --git a/scripts/ui2-privacy-e2e.cjs b/scripts/ui2-privacy-e2e.cjs
+new file mode 100644
+index 0000000..105a97c
+--- /dev/null
++++ b/scripts/ui2-privacy-e2e.cjs
+@@ -0,0 +1,289 @@
++/**
++ * 隐私模式端到端验证（隔离 USERPROFILE，不触碰真实 ~/.fntv）
++ *
++ * 前置：npm run compile（需要 dest/modules/library/privacy.js）与 ui2-renderer 构建。
++ * 用法：node scripts/ui2-privacy-e2e.cjs
++ */
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const { spawn, spawnSync } = require('node:child_process');
++
++const ROOT = path.resolve(__dirname, '..');
++const PORT = 9224;
++const PASSWORD = 'E2E-Pass-123';
++const WRONG_PASSWORD = 'wrong-pass';
++const TMP = path.join(os.tmpdir(), 'opencode');
++
++const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
++
++function fail(message) {
++    console.error('E2E FAILED:', message);
++    process.exit(1);
++}
++
++async function waitForPageTarget(timeoutMs = 30000) {
++    const deadline = Date.now() + timeoutMs;
++    while (Date.now() < deadline) {
++        try {
++            const pages = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
++            const page = pages.find((item) => item.type === 'page');
++            if (page && page.webSocketDebuggerUrl) {
++                return page;
++            }
++        } catch {
++            /* retry */
++        }
++        await sleep(500);
++    }
++    return null;
++}
++
++class Cdp {
++    constructor(ws) {
++        this.ws = ws;
++        this.id = 0;
++        this.pending = new Map();
++        ws.addEventListener('message', (event) => {
++            const message = JSON.parse(event.data);
++            if (message.id && this.pending.has(message.id)) {
++                const { resolve, reject } = this.pending.get(message.id);
++                this.pending.delete(message.id);
++                if (message.error) {
++                    reject(new Error(message.error.message));
++                } else {
++                    resolve(message.result);
++                }
++            }
++        });
++    }
++
++    static async connect(url) {
++        const ws = new WebSocket(url);
++        await new Promise((resolve, reject) => {
++            ws.addEventListener('open', resolve, { once: true });
++            ws.addEventListener('error', reject, { once: true });
++        });
++        return new Cdp(ws);
++    }
++
++    send(method, params = {}) {
++        const id = ++this.id;
++        return new Promise((resolve, reject) => {
++            this.pending.set(id, { resolve, reject });
++            this.ws.send(JSON.stringify({ id, method, params }));
++        });
++    }
++
++    async evaluate(expression) {
++        const result = await this.send('Runtime.evaluate', {
++            expression,
++            awaitPromise: true,
++            returnByValue: true,
++            userGesture: true,
++        });
++        if (result.exceptionDetails) {
++            throw new Error(result.exceptionDetails.exception?.description || 'evaluate exception');
++        }
++        return result.result.value;
++    }
++
++    async waitFor(expression, label, timeoutMs = 15000) {
++        const deadline = Date.now() + timeoutMs;
++        while (Date.now() < deadline) {
++            const value = await this.evaluate(expression).catch(() => null);
++            if (value) {
++                return value;
++            }
++            await sleep(300);
++        }
++        throw new Error(`waitFor timeout: ${label}`);
++    }
++
++    async screenshot(name) {
++        const result = await this.send('Page.captureScreenshot', { format: 'png' });
++        fs.mkdirSync(TMP, { recursive: true });
++        const file = path.join(TMP, name);
++        fs.writeFileSync(file, Buffer.from(result.data, 'base64'));
++        return file;
++    }
++}
++
++async function main() {
++    const privacy = require(path.join(ROOT, 'dest', 'modules', 'library', 'privacy.js'));
++    const electronPath = require('electron');
++    if (!fs.existsSync(path.join(ROOT, 'ui2-renderer', 'index.html'))) {
++        fail('缺少 ui2-renderer 构建产物，请先 npm run renderer:build');
++    }
++
++    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'fntv-privacy-e2e-'));
++    const configDir = profile;
++    fs.mkdirSync(configDir, { recursive: true });
++    fs.writeFileSync(
++        path.join(configDir, 'config.json'),
++        JSON.stringify({ privacyPasswordHash: privacy.hashPrivacyPassword(PASSWORD) }, null, 2)
++    );
++
++    const child = spawn(electronPath, ['.', `--remote-debugging-port=${PORT}`], {
++        cwd: ROOT,
++        env: {
++            ...process.env,
++            USERPROFILE: profile,
++            HOME: profile,
++            FNTV_USER_DATA_DIR: profile,
++            FNTV_UI_SHELL: 'react',
++            FNTV_UI2_DEV_URL: '',
++        },
++        stdio: 'ignore',
++    });
++
++    const report = { profile, steps: [], ok: true };
++    const step = async (name, fn) => {
++        try {
++            report.steps.push({ name, ok: true, detail: await fn() });
++        } catch (error) {
++            report.ok = false;
++            report.steps.push({ name, ok: false, error: error.message });
++            throw error;
++        }
++    };
++
++    try {
++        const target = await waitForPageTarget();
++        if (!target) {
++            fail('CDP 页面未就绪');
++        }
++        const cdp = await Cdp.connect(target.webSocketDebuggerUrl);
++        await cdp.send('Runtime.enable');
++        await cdp.send('Page.enable');
++
++        await step('boot', async () => {
++            await cdp.waitFor(`!!document.querySelector('.app-sidebar')`, 'sidebar');
++            return cdp.evaluate(`document.querySelector('.app-brand__name').textContent`);
++        });
++
++        await step('open privacy gate', async () => {
++            const clicked = await cdp.evaluate(`(() => {
++                const btn = document.querySelector('.app-privacy button');
++                if (!btn) return false;
++                btn.click();
++                return true;
++            })()`);
++            if (!clicked) {
++                throw new Error('privacy button not found');
++            }
++            await cdp.waitFor(`!!document.querySelector('.ui-dialog input[type="password"]')`, 'password input');
++            return cdp.evaluate(`document.querySelector('.ui-dialog__title')?.textContent ?? ''`);
++        });
++
++        const setPassword = (value) =>
++            cdp.evaluate(`(() => {
++                const input = document.querySelector('.ui-dialog input[type="password"]');
++                const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
++                setter.call(input, ${JSON.stringify(value)});
++                input.dispatchEvent(new Event('input', { bubbles: true }));
++                return input.value;
++            })()`);
++        const clickUnlock = () =>
++            cdp.evaluate(`(() => {
++                const btn = Array.from(document.querySelectorAll('.ui-dialog__footer button'))
++                    .find((item) => (item.textContent || '').trim() === '解锁');
++                if (!btn) return false;
++                btn.click();
++                return true;
++            })()`);
++
++        await step('wrong password rejected', async () => {
++            await setPassword(WRONG_PASSWORD);
++            await clickUnlock();
++            await cdp.waitFor(`document.body.innerText.includes('密码错误')`, 'wrong password error', 10000);
++            return 'error shown';
++        });
++
++        await step('correct password unlocks privacy mode', async () => {
++            await setPassword(PASSWORD);
++            const value = await cdp.evaluate(
++                `document.querySelector('.ui-dialog input[type="password"]')?.value ?? '<missing>'`
++            );
++            const clicked = await clickUnlock();
++            try {
++                await cdp.waitFor(`!document.querySelector('.ui-dialog')`, 'dialog closed', 10000);
++            } catch (error) {
++                const diagnostics = await cdp.evaluate(`({
++                    value: document.querySelector('.ui-dialog input[type="password"]')?.value ?? null,
++                    error: document.querySelector('.ui-dialog .ui-field__error')?.textContent ?? null,
++                    buttonDisabled: Array.from(document.querySelectorAll('.ui-dialog__footer button')).map((b) => ({ text: b.textContent.trim(), disabled: b.disabled })),
++                    sidebar: document.querySelector('.app-privacy button')?.textContent ?? null,
++                    title: document.querySelector('.ui-dialog__title')?.textContent ?? null
++                })`);
++                console.error('unlock diagnostics:', JSON.stringify({ value, clicked, ...diagnostics }, null, 2));
++                await cdp.screenshot('ui2-privacy-e2e-failure.png');
++                throw error;
++            }
++            await cdp.waitFor(
++                `(document.querySelector('.app-privacy button')?.textContent || '').includes('退出隐私模式')`,
++                'privacy active label'
++            );
++            return 'unlocked';
++        });
++
++        await step('privacy library is isolated', async () => {
++            await cdp.evaluate(`location.hash = '#/library/movies'; true`);
++            await cdp.waitFor(
++                `document.querySelector('.library-page__title')?.textContent === '隐私库'`,
++                'privacy library title'
++            );
++            await cdp.waitFor(`!!document.querySelector('.ui-empty-state')`, 'privacy empty state');
++            return cdp.evaluate(`document.querySelector('.library-page__count')?.textContent ?? ''`);
++        });
++
++        await step('exit privacy returns home', async () => {
++            await cdp.evaluate(`document.querySelector('.app-privacy button').click(); true`);
++            await cdp.waitFor(`location.hash === '#/home'`, 'redirect to home');
++            await cdp.waitFor(
++                `(document.querySelector('.app-privacy button')?.textContent || '').includes('进入隐私模式')`,
++                'privacy inactive label'
++            );
++            if (await cdp.evaluate(`!!document.querySelector('.ui-dialog')`)) {
++                throw new Error('dialog should be closed after exit');
++            }
++            return cdp.evaluate(`location.hash`);
++        });
++
++        await step('public view has no privacy title', async () => {
++            await cdp.evaluate(`location.hash = '#/library/movies'; true`);
++            await cdp.waitFor(
++                `document.querySelector('.library-page__title')?.textContent === '电影'`,
++                'public library title'
++            );
++            return 'public view restored';
++        });
++
++        report.screenshot = await cdp.screenshot('ui2-privacy-e2e.png');
++        cdp.ws.close();
++        report.ok = report.steps.every((item) => item.ok);
++    } catch (error) {
++        report.ok = false;
++        report.error = error.message;
++    } finally {
++        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
++        if (!process.env.E2E_KEEP_PROFILE) {
++            try {
++                fs.rmSync(profile, { recursive: true, force: true });
++            } catch {
++                /* ignore */
++            }
++        }
++    }
++
++    fs.mkdirSync(TMP, { recursive: true });
++    const resultFile = path.join(TMP, 'privacy-e2e-result.json');
++    fs.writeFileSync(resultFile, JSON.stringify(report, null, 2));
++    console.log(JSON.stringify(report, null, 2));
++    console.log(`RESULT_FILE=${resultFile}`);
++    process.exit(report.ok ? 0 : 1);
++}
++
++main().catch((error) => {
++    fail(error.stack || String(error));
++});
+diff --git a/src/main/handlers/plugins/library.ts b/src/main/handlers/plugins/library.ts
+index f8187f7..3f03f49 100644
+--- a/src/main/handlers/plugins/library.ts
++++ b/src/main/handlers/plugins/library.ts
+@@ -1,6 +1,7 @@
+ import { dialog, IpcMainEvent } from 'electron';
+ import * as fs from 'fs';
+ import { registerHandler } from '../core/ipcHandler';
++import { createSingleFlight } from './scanGuard';
+ import { getMainWindow } from '../../common/mainwin';
+ import * as log from '../../../modules/logger';
+ import * as fnConfig from '../../../modules/fn_config/config';
+@@ -37,7 +38,7 @@ import {
+  * 负责源管理、扫描、条目查询与 TMDB 刮削的 IPC 接口；播放走 play-library-item（media.ts）。
+  */
+ 
+-let scanning = false;
++const scanSingleFlight = createSingleFlight();
+ let scraping = false;
+ let lastScrapeSummary: { scraped: number; failed: number; skipped: number } | null = null;
+ 
+@@ -141,38 +142,36 @@ function listSourcesPayload(privateOnly: boolean): { sources: unknown[] } {
+ }
+ 
+ async function runScan(event: IpcMainEvent, sourceId?: string): Promise<void> {
+-    if (scanning) {
+-        reply(event, 'library:scan-done', { error: '已有扫描任务在进行中' });
+-        return;
+-    }
+-    scanning = true;
+-    try {
+-        const store = getLibraryStore();
+-        const targets = sourceId
+-            ? [sourceId]
+-            : store.listSources().filter((s) => s.type === 'local').map((s) => s.id);
+-        const totals = { added: 0, updated: 0, removed: 0, skipped: 0 };
+-        const removedSourceNames: string[] = [];
+-        for (const id of targets) {
+-            try {
+-                const summary = await scanSource(id);
+-                totals.added += summary.added;
+-                totals.updated += summary.updated;
+-                totals.removed += summary.removed;
+-                totals.skipped += summary.skipped;
+-                if (summary.removedSource && removedSourceNames.length < 5) {
+-                    removedSourceNames.push(summary.removedSource.name);
++    const outcome = await scanSingleFlight.run(async () => {
++        try {
++            const store = getLibraryStore();
++            const targets = sourceId
++                ? [sourceId]
++                : store.listSources().filter((s) => s.type === 'local').map((s) => s.id);
++            const totals = { added: 0, updated: 0, removed: 0, skipped: 0 };
++            const removedSourceNames: string[] = [];
++            for (const id of targets) {
++                try {
++                    const summary = await scanSource(id);
++                    totals.added += summary.added;
++                    totals.updated += summary.updated;
++                    totals.removed += summary.removed;
++                    totals.skipped += summary.skipped;
++                    if (summary.removedSource && removedSourceNames.length < 5) {
++                        removedSourceNames.push(summary.removedSource.name);
++                    }
++                } catch (error) {
++                    log.error('[library] 扫描源失败:', id, error);
+                 }
+-            } catch (error) {
+-                log.error('[library] 扫描源失败:', id, error);
+             }
++            reply(event, 'library:scan-done', { ...totals, removedSources: removedSourceNames.length ? removedSourceNames : undefined });
++        } catch (error) {
++            log.error('[library] 扫描失败:', error);
++            reply(event, 'library:scan-done', { error: error instanceof Error ? error.message : String(error) });
+         }
+-        reply(event, 'library:scan-done', { ...totals, removedSources: removedSourceNames.length ? removedSourceNames : undefined });
+-    } catch (error) {
+-        log.error('[library] 扫描失败:', error);
+-        reply(event, 'library:scan-done', { error: error instanceof Error ? error.message : String(error) });
+-    } finally {
+-        scanning = false;
++    });
++    if (!outcome.started) {
++        reply(event, 'library:scan-done', { error: '已有扫描任务在进行中' });
+     }
+ }
+ 
+diff --git a/src/main/handlers/plugins/scanGuard.ts b/src/main/handlers/plugins/scanGuard.ts
+new file mode 100644
+index 0000000..5c86306
+--- /dev/null
++++ b/src/main/handlers/plugins/scanGuard.ts
+@@ -0,0 +1,23 @@
++/**
++ * 单飞（single-flight）守卫：用于主进程扫描等互斥任务。
++ * 并发触发时第二个调用立即得到 started=false，任务异常也会释放。
++ */
++export type SingleFlightOutcome<T> = { started: true; value: T } | { started: false };
++
++export function createSingleFlight() {
++    let running = false;
++    return {
++        isRunning: () => running,
++        async run<T>(task: () => Promise<T>): Promise<SingleFlightOutcome<T>> {
++            if (running) {
++                return { started: false };
++            }
++            running = true;
++            try {
++                return { started: true, value: await task() };
++            } finally {
++                running = false;
++            }
++        },
++    };
++}
+diff --git a/src/public/constants.ts b/src/public/constants.ts
+index c20859e..81ffd7c 100644
+--- a/src/public/constants.ts
++++ b/src/public/constants.ts
+@@ -2,4 +2,15 @@ import * as fs from 'node:fs';
+ import * as path from 'node:path';
+ import { app } from 'electron';
+ 
+-export const USER_DATA_PATH: string = path.join(app.getPath('home'), '.fntv');
++/**
++ * 开发态可通过 FNTV_USER_DATA_DIR 覆盖数据目录（用于隔离 E2E；打包版忽略）。
++ */
++function resolveUserDataPath(): string {
++    const override = app.isPackaged ? undefined : process.env.FNTV_USER_DATA_DIR;
++    if (override && override.trim().length > 0) {
++        return path.resolve(override.trim());
++    }
++    return path.join(app.getPath('home'), '.fntv');
++}
++
++export const USER_DATA_PATH: string = resolveUserDataPath();
+diff --git a/src/renderer/app/AppShell.tsx b/src/renderer/app/AppShell.tsx
+new file mode 100644
+index 0000000..71cd80c
+--- /dev/null
++++ b/src/renderer/app/AppShell.tsx
+@@ -0,0 +1,76 @@
++import { useEffect, useMemo, useRef, useState } from 'react';
++import { Outlet, useLocation, useNavigate } from 'react-router-dom';
++import { WindowFrame } from '../layout/WindowFrame';
++import { Sidebar } from '../layout/Sidebar';
++import { MainRegion } from '../layout/MainRegion';
++import { PageHeader } from '../layout/PageHeader';
++import { Dialog } from '../components/ui/Dialog';
++import { SearchPanel } from '../pages/search/SearchPanel';
++import { usePrivacyState } from './PrivacyStateProvider';
++import { CATEGORY_META, ROUTES, resolveCategoryFromSegment } from './routes';
++
++function titleForPath(pathname: string): string {
++    if (pathname === '/home' || pathname === '/') {
++        return '首页';
++    }
++    if (pathname.startsWith('/library/')) {
++        const segment = pathname.split('/')[2];
++        const category = resolveCategoryFromSegment(segment);
++        return category ? CATEGORY_META[category].label : '媒体库';
++    }
++    if (pathname.startsWith('/media/')) {
++        return '媒体详情';
++    }
++    if (pathname === '/sources') {
++        return '媒体源';
++    }
++    if (pathname === '/tasks') {
++        return '任务状态';
++    }
++    return '媒体库';
++}
++
++export function AppShell() {
++    const location = useLocation();
++    const navigate = useNavigate();
++    const privacy = usePrivacyState();
++    const [searchOpen, setSearchOpen] = useState(false);
++    const title = useMemo(() => titleForPath(location.pathname), [location.pathname]);
++    const prevPrivacyActive = useRef(privacy.active);
++
++    useEffect(() => {
++        if (prevPrivacyActive.current && !privacy.active) {
++            setSearchOpen(false);
++            navigate(ROUTES.home, { replace: true });
++        }
++        prevPrivacyActive.current = privacy.active;
++    }, [privacy.active, navigate]);
++
++    useEffect(() => {
++        const onKeyDown = (event: KeyboardEvent) => {
++            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
++                event.preventDefault();
++                setSearchOpen(true);
++            }
++        };
++        window.addEventListener('keydown', onKeyDown);
++        return () => window.removeEventListener('keydown', onKeyDown);
++    }, []);
++
++    return (
++        <div className="app-shell-root">
++            <WindowFrame>
++                <Sidebar />
++                <MainRegion>
++                    <PageHeader title={title} onSearchOpen={() => setSearchOpen(true)} />
++                    <div className="app-main__scroll">
++                        <Outlet />
++                    </div>
++                </MainRegion>
++            </WindowFrame>
++            <Dialog open={searchOpen} title="全局搜索" onClose={() => setSearchOpen(false)}>
++                <SearchPanel onNavigate={() => setSearchOpen(false)} />
++            </Dialog>
++        </div>
++    );
++}
+diff --git a/src/renderer/app/PrivacyStateProvider.tsx b/src/renderer/app/PrivacyStateProvider.tsx
+new file mode 100644
+index 0000000..3e928c4
+--- /dev/null
++++ b/src/renderer/app/PrivacyStateProvider.tsx
+@@ -0,0 +1,195 @@
++import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
++import type { ReactNode } from 'react';
++import { onceReply, sendChannel } from './bridge';
++import { Dialog } from '../components/ui/Dialog';
++import { Input } from '../components/ui/Input';
++import { Button } from '../components/ui/Button';
++
++type PrivacyState = {
++    available: boolean;
++    hasPassword: boolean;
++    unlocked: boolean;
++};
++
++type PrivacyContextValue = PrivacyState & {
++    /** 是否处于隐私模式（UI 层状态，与 main 解锁态联动） */
++    active: boolean;
++    gateOpen: boolean;
++    busy: boolean;
++    error: string | null;
++    requestActivate: () => void;
++    closeGate: () => void;
++    submitPassword: (password: string) => Promise<void>;
++    deactivate: () => Promise<void>;
++};
++
++const PrivacyContext = createContext<PrivacyContextValue | null>(null);
++
++export function PrivacyStateProvider({ children }: { children: ReactNode }) {
++    const [state, setState] = useState<PrivacyState>({ available: false, hasPassword: false, unlocked: false });
++    const [active, setActive] = useState(false);
++    const [gateOpen, setGateOpen] = useState(false);
++    const [busy, setBusy] = useState(false);
++    const [error, setError] = useState<string | null>(null);
++    const [password, setPassword] = useState('');
++
++    const refresh = useCallback(async () => {
++        if (!sendChannel('library:privacy-begin')) {
++            return;
++        }
++        try {
++            const data = await onceReply<{ hasPassword?: boolean; unlocked?: boolean }>('library:privacy-state');
++            setState({
++                available: true,
++                hasPassword: data?.hasPassword === true,
++                unlocked: data?.unlocked === true,
++            });
++            if (data?.unlocked !== true) {
++                setActive(false);
++            }
++        } catch {
++            setState({ available: false, hasPassword: false, unlocked: false });
++        }
++    }, []);
++
++    useEffect(() => {
++        void refresh();
++    }, [refresh]);
++
++    const requestActivate = useCallback(() => {
++        if (!state.available) {
++            return;
++        }
++        setError(null);
++        setPassword('');
++        if (state.unlocked) {
++            setActive(true);
++            return;
++        }
++        setGateOpen(true);
++    }, [state.available, state.unlocked]);
++
++    const closeGate = useCallback(() => {
++        setGateOpen(false);
++        setError(null);
++        setPassword('');
++    }, []);
++
++    const submitPassword = useCallback(
++        async (value: string) => {
++            if (!state.available || busy) {
++                return;
++            }
++            setBusy(true);
++            setError(null);
++            try {
++                if (!sendChannel('library:privacy-unlock', { password: value })) {
++                    setError('桌面桥接不可用');
++                    return;
++                }
++                const result = await onceReply<{ success?: boolean; unlocked?: boolean; error?: string }>('library:privacy-result');
++                if (result?.success && result.unlocked) {
++                    setState((prev) => ({ ...prev, unlocked: true }));
++                    setGateOpen(false);
++                    setPassword('');
++                    setActive(true);
++                } else {
++                    setError(result?.error || '解锁失败');
++                }
++            } catch {
++                setError('解锁请求超时');
++            } finally {
++                setBusy(false);
++            }
++        },
++        [state.available, busy]
++    );
++
++    const deactivate = useCallback(async () => {
++        if (busy) {
++            return;
++        }
++        setBusy(true);
++        try {
++            if (sendChannel('library:privacy-lock')) {
++                try {
++                    await onceReply('library:privacy-result');
++                } catch {
++                    // 忽略超时；本地状态仍然退出隐私模式
++                }
++            }
++        } finally {
++            setActive(false);
++            setState((prev) => ({ ...prev, unlocked: false }));
++            setBusy(false);
++        }
++    }, [busy]);
++
++    const value = useMemo<PrivacyContextValue>(
++        () => ({
++            ...state,
++            active,
++            gateOpen,
++            busy,
++            error,
++            requestActivate,
++            closeGate,
++            submitPassword,
++            deactivate,
++        }),
++        [state, active, gateOpen, busy, error, requestActivate, closeGate, submitPassword, deactivate]
++    );
++
++    return (
++        <PrivacyContext.Provider value={value}>
++            {children}
++            <Dialog
++                open={gateOpen}
++                title={state.hasPassword ? '进入隐私模式' : '隐私模式未设置密码'}
++                onClose={closeGate}
++                footer={
++                    <>
++                        <Button variant="ghost" onClick={closeGate}>
++                            取消
++                        </Button>
++                        <Button
++                            variant="primary"
++                            loading={busy}
++                            disabled={!state.hasPassword || password.length === 0}
++                            onClick={() => void submitPassword(password)}
++                        >
++                            解锁
++                        </Button>
++                    </>
++                }
++            >
++                {state.hasPassword ? (
++                    <Input
++                        label="密码"
++                        type="password"
++                        autoComplete="current-password"
++                        data-autofocus
++                        value={password}
++                        error={error ?? undefined}
++                        onChange={(event) => setPassword(event.target.value)}
++                        onKeyDown={(event) => {
++                            if (event.key === 'Enter') {
++                                void submitPassword(password);
++                            }
++                        }}
++                    />
++                ) : (
++                    <p>尚未设置隐私密码，请先在设置中创建隐私密码后再进入。</p>
++                )}
++            </Dialog>
++        </PrivacyContext.Provider>
++    );
++}
++
++export function usePrivacyState(): PrivacyContextValue {
++    const value = useContext(PrivacyContext);
++    if (!value) {
++        throw new Error('usePrivacyState 必须在 PrivacyStateProvider 内使用');
++    }
++    return value;
++}
+diff --git a/src/renderer/app/bridge.ts b/src/renderer/app/bridge.ts
+new file mode 100644
+index 0000000..07da003
+--- /dev/null
++++ b/src/renderer/app/bridge.ts
+@@ -0,0 +1,68 @@
++/** 渲染层对 preload 桥接的薄封装（P2-07 将归入 services/desktop） */
++
++export function getBridge() {
++    return window.electronAPI;
++}
++
++export function sendChannel(channel: string, payload?: unknown): boolean {
++    const bridge = getBridge();
++    if (!bridge) {
++        return false;
++    }
++    bridge.send(channel, payload);
++    return true;
++}
++
++export type CancellableReply<T> = {
++    promise: Promise<T>;
++    cancel: () => void;
++};
++
++/** 可取消的一次性回复监听（用于未挂载/离开页面时释放长等待监听） */
++export function onceReplyCancellable<T>(channel: string, timeoutMs = 5000): CancellableReply<T> {
++    const bridge = getBridge();
++    if (!bridge) {
++        const promise = Promise.reject<T>(new Error('BRIDGE_UNAVAILABLE'));
++        promise.catch(() => undefined);
++        return { promise, cancel: () => undefined };
++    }
++    let settled = false;
++    let timer = 0;
++    let resolveFn!: (value: T) => void;
++    let rejectFn!: (error: Error) => void;
++    const listener = (_event: unknown, data: unknown) => {
++        if (settled) {
++            return;
++        }
++        settled = true;
++        window.clearTimeout(timer);
++        resolveFn(data as T);
++    };
++    const promise = new Promise<T>((resolve, reject) => {
++        resolveFn = resolve;
++        rejectFn = reject;
++        timer = window.setTimeout(() => {
++            if (settled) {
++                return;
++            }
++            settled = true;
++            bridge.off?.(channel, listener);
++            reject(new Error('IPC_TIMEOUT'));
++        }, timeoutMs);
++        bridge.once(channel, listener);
++    });
++    const cancel = () => {
++        if (settled) {
++            return;
++        }
++        settled = true;
++        window.clearTimeout(timer);
++        bridge.off?.(channel, listener);
++        rejectFn(new Error('IPC_CANCELLED'));
++    };
++    return { promise, cancel };
++}
++
++export function onceReply<T>(channel: string, timeoutMs = 5000): Promise<T> {
++    return onceReplyCancellable<T>(channel, timeoutMs).promise;
++}
+diff --git a/src/renderer/pages/detail/MediaDetailPage.tsx b/src/renderer/pages/detail/MediaDetailPage.tsx
+new file mode 100644
+index 0000000..1a91ae5
+--- /dev/null
++++ b/src/renderer/pages/detail/MediaDetailPage.tsx
+@@ -0,0 +1,111 @@
++import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
++import { useLocation, useNavigate, useParams } from 'react-router-dom';
++import { parseMediaRoute } from '../../services/library/library.mapper';
++import { fetchItemInfo, fetchShowInfo, playLibraryItem } from '../../services/media/mediaService';
++import { ErrorState } from '../../components/ui/ErrorState';
++import { Skeleton } from '../../components/ui/Skeleton';
++import { ChevronLeftIcon } from '../../components/icons';
++import { DetailHero } from './DetailHero';
++import { OverviewSection } from './OverviewSection';
++import { FileInfoSection } from './FileInfoSection';
++import { mapMovieDetail, mapSeasonDetail } from './detail.mapper';
++import type { MediaDetailModel } from './detail.types';
++
++type LoadState =
++    | { status: 'loading' }
++    | { status: 'error'; message: string }
++    | { status: 'success'; model: MediaDetailModel };
++
++export function MediaDetailPage() {
++    const { id } = useParams();
++    const location = useLocation();
++    const navigate = useNavigate();
++    const parsed = useMemo(() => parseMediaRoute(id ?? '', location.search), [id, location.search]);
++    const [state, setState] = useState<LoadState>({ status: 'loading' });
++    const requestSeqRef = useRef(0);
++
++    const load = useCallback(async () => {
++        if (!id) {
++            setState({ status: 'error', message: '缺少媒体 ID' });
++            return;
++        }
++        const seq = ++requestSeqRef.current;
++        setState({ status: 'loading' });
++        try {
++            if (parsed.kind === 'season') {
++                const result = await fetchShowInfo(parsed.showId, parsed.season);
++                if (requestSeqRef.current === seq) {
++                    setState({
++                        status: 'success',
++                        model: mapSeasonDetail(result.show, parsed.season, result.episodes, result.states),
++                    });
++                }
++            } else {
++                const result = await fetchItemInfo(parsed.itemId);
++                if (requestSeqRef.current === seq) {
++                    setState({ status: 'success', model: mapMovieDetail(result.item) });
++                }
++            }
++        } catch (error) {
++            if (requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
++        }
++    }, [id, parsed]);
++
++    useEffect(() => {
++        void load();
++    }, [load]);
++
++    return (
++        <section className="app-page">
++            <button type="button" className="app-back" onClick={() => navigate(-1)}>
++                <ChevronLeftIcon size={14} />
++                返回
++            </button>
++            {state.status === 'loading' ? (
++                <div className="detail-hero" aria-hidden="true">
++                    <div className="detail-hero__poster">
++                        <Skeleton variant="rect" />
++                    </div>
++                    <div className="detail-hero__body">
++                        <Skeleton variant="text" />
++                        <Skeleton variant="text" />
++                        <Skeleton variant="text" />
++                    </div>
++                </div>
++            ) : null}
++            {state.status === 'error' ? (
++                <ErrorState title="媒体详情加载失败" description={state.message} onRetry={() => void load()} />
++            ) : null}
++            {state.status === 'success' ? (
++                <div className="detail-page">
++                    <DetailHero model={state.model} />
++                    <OverviewSection overview={state.model.overview} />
++                    <FileInfoSection file={state.model.file} />
++                    {state.model.episodes.length > 0 ? (
++                        <section className="detail-section">
++                            <h3 className="detail-section__title">剧集列表</h3>
++                            <div className="detail-episodes">
++                                {state.model.episodes.map((episode) => (
++                                    <button
++                                        key={episode.id}
++                                        type="button"
++                                        className="detail-episode"
++                                        onClick={() => playLibraryItem(episode.id)}
++                                        title="播放该集"
++                                    >
++                                        <span className="detail-episode__num">{episode.label}</span>
++                                        <span className="detail-episode__title">{episode.title}</span>
++                                        <span className="detail-episode__state">{episode.stateText}</span>
++                                    </button>
++                                ))}
++                            </div>
++                        </section>
++                    ) : null}
++                </div>
++            ) : null}
++        </section>
++    );
++}
+diff --git a/src/renderer/pages/home/HomePage.tsx b/src/renderer/pages/home/HomePage.tsx
+new file mode 100644
+index 0000000..de42bb1
+--- /dev/null
++++ b/src/renderer/pages/home/HomePage.tsx
+@@ -0,0 +1,96 @@
++import { useCallback, useEffect, useRef, useState } from 'react';
++import { usePrivacyState } from '../../app/PrivacyStateProvider';
++import { fetchHomeOverview } from '../../services/library/libraryService';
++import type { HomeOverview } from '../../services/library/library.types';
++import { ErrorState } from '../../components/ui/ErrorState';
++import { EmptyState } from '../../components/ui/EmptyState';
++import { LockIcon } from '../../components/icons';
++import { HomeHeader } from './HomeHeader';
++import { LibraryOverview, LibraryOverviewSkeleton } from './LibraryOverview';
++import { RecentlyAddedSection, RecentlyAddedSkeleton } from './RecentlyAddedSection';
++import { CategoryQuickLinks } from './CategoryQuickLinks';
++import { HomeEmptyState } from './HomeEmptyState';
++
++type LoadState =
++    | { status: 'loading' }
++    | { status: 'error'; message: string }
++    | { status: 'success'; data: HomeOverview };
++
++export function HomePage() {
++    const privacy = usePrivacyState();
++    const [state, setState] = useState<LoadState>({ status: 'loading' });
++    const requestSeqRef = useRef(0);
++
++    const load = useCallback(async () => {
++        const seq = ++requestSeqRef.current;
++        setState({ status: 'loading' });
++        try {
++            const data = await fetchHomeOverview();
++            if (requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({ status: 'success', data });
++        } catch (error) {
++            if (requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
++        }
++    }, []);
++
++    useEffect(() => {
++        if (privacy.active) {
++            return;
++        }
++        void load();
++    }, [load, privacy.active]);
++
++    if (privacy.active) {
++        return (
++            <section className="app-page">
++                <EmptyState
++                    icon={<LockIcon size={24} />}
++                    title="隐私模式中"
++                    description="首页不展示隐私媒体与统计。媒体库与详情页将在隐私模式下按可见性规则展示内容。"
++                />
++            </section>
++        );
++    }
++
++    if (state.status === 'loading') {
++        return (
++            <section className="app-page">
++                <HomeHeader />
++                <LibraryOverviewSkeleton />
++                <RecentlyAddedSkeleton />
++            </section>
++        );
++    }
++
++    if (state.status === 'error') {
++        return (
++            <section className="app-page">
++                <ErrorState title="媒体库加载失败" description={state.message} onRetry={() => void load()} />
++            </section>
++        );
++    }
++
++    const totalCount = state.data.categories.reduce((sum, category) => sum + category.count, 0);
++    if (totalCount === 0) {
++        return (
++            <section className="app-page">
++                <HomeHeader />
++                <HomeEmptyState />
++            </section>
++        );
++    }
++
++    return (
++        <section className="app-page">
++            <HomeHeader />
++            <CategoryQuickLinks />
++            <LibraryOverview categories={state.data.categories} />
++            <RecentlyAddedSection items={state.data.recent} />
++        </section>
++    );
++}
+diff --git a/src/renderer/pages/library/LibraryPage.tsx b/src/renderer/pages/library/LibraryPage.tsx
+new file mode 100644
+index 0000000..3bd1de9
+--- /dev/null
++++ b/src/renderer/pages/library/LibraryPage.tsx
+@@ -0,0 +1,108 @@
++import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
++import { Navigate, useParams } from 'react-router-dom';
++import { usePrivacyState } from '../../app/PrivacyStateProvider';
++import { CATEGORY_META, resolveCategoryFromSegment } from '../../app/routes';
++import { queryCatalog } from '../../services/library/libraryService';
++import { mapCatalogEntries } from '../../services/library/library.mapper';
++import type { CatalogEntryDto, MediaCardModel } from '../../services/library/library.types';
++import { LibraryPageHeader } from './LibraryPageHeader';
++import { LibraryToolbar } from './LibraryToolbar';
++import { MediaGrid } from './MediaGrid';
++import { MediaListView } from './MediaListView';
++import { LibraryLoadingState } from './LibraryLoadingState';
++import { LibraryEmptyState } from './LibraryEmptyState';
++import { LibraryErrorState } from './LibraryErrorState';
++import { mapLibraryRows } from './library.mapper';
++import type { FavoriteFilterKey, SortKey, ViewMode, WatchedFilterKey } from './library.types';
++
++const QUERY_LIMIT = 600;
++
++type LoadState =
++    | { status: 'loading' }
++    | { status: 'error'; message: string }
++    | { status: 'success'; entries: CatalogEntryDto[] };
++
++export function LibraryPage() {
++    const { category: segment } = useParams();
++    const category = resolveCategoryFromSegment(segment);
++    const privacy = usePrivacyState();
++
++    const [sort, setSort] = useState<SortKey>('added');
++    const [watched, setWatched] = useState<WatchedFilterKey>('all');
++    const [favorite, setFavorite] = useState<FavoriteFilterKey>('all');
++    const [view, setView] = useState<ViewMode>('grid');
++    const [state, setState] = useState<LoadState>({ status: 'loading' });
++    const requestSeqRef = useRef(0);
++
++    const load = useCallback(async () => {
++        if (!category) {
++            return;
++        }
++        const seq = ++requestSeqRef.current;
++        setState({ status: 'loading' });
++        try {
++            const entries = await queryCatalog({
++                category,
++                sort,
++                watched: watched === 'all' ? undefined : watched === 'watched',
++                favorite: favorite === 'all' ? undefined : favorite === 'fav',
++                limit: QUERY_LIMIT,
++                private: privacy.active,
++            });
++            if (requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({ status: 'success', entries });
++        } catch (error) {
++            if (requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
++        }
++    }, [category, sort, watched, favorite, privacy.active]);
++
++    useEffect(() => {
++        void load();
++    }, [load]);
++
++    if (!category) {
++        return <Navigate to="/home" replace />;
++    }
++
++    const cards: MediaCardModel[] = useMemo(
++        () => (state.status === 'success' ? mapCatalogEntries(state.entries) : []),
++        [state]
++    );
++    const rows = useMemo(
++        () => (state.status === 'success' ? mapLibraryRows(state.entries) : []),
++        [state]
++    );
++    const count = state.status === 'success' ? state.entries.length : 0;
++    const title = privacy.active ? '隐私库' : CATEGORY_META[category].label;
++
++    return (
++        <section className="app-page" aria-label={title}>
++            <LibraryPageHeader title={title} count={count} capped={count >= QUERY_LIMIT} />
++            <LibraryToolbar
++                sort={sort}
++                watched={watched}
++                favorite={favorite}
++                view={view}
++                onSortChange={setSort}
++                onWatchedChange={setWatched}
++                onFavoriteChange={setFavorite}
++                onViewChange={setView}
++            />
++            {state.status === 'loading' ? <LibraryLoadingState /> : null}
++            {state.status === 'error' ? <LibraryErrorState message={state.message} onRetry={() => void load()} /> : null}
++            {state.status === 'success' && state.entries.length === 0 ? (
++                <LibraryEmptyState privacy={privacy.active} />
++            ) : null}
++            {state.status === 'success' && state.entries.length > 0
++                ? view === 'grid'
++                    ? <MediaGrid cards={cards} />
++                    : <MediaListView rows={rows} />
++                : null}
++        </section>
++    );
++}
+diff --git a/src/renderer/pages/search/SearchPanel.tsx b/src/renderer/pages/search/SearchPanel.tsx
+new file mode 100644
+index 0000000..e2e5105
+--- /dev/null
++++ b/src/renderer/pages/search/SearchPanel.tsx
+@@ -0,0 +1,104 @@
++import { useEffect, useState } from 'react';
++import { usePrivacyState } from '../../app/PrivacyStateProvider';
++import { Input } from '../../components/ui/Input';
++import { EmptyState } from '../../components/ui/EmptyState';
++import { ErrorState } from '../../components/ui/ErrorState';
++import { Skeleton } from '../../components/ui/Skeleton';
++import { SearchIcon } from '../../components/icons';
++import { MediaCard } from '../../components/media/MediaCard';
++import { queryCatalog } from '../../services/library/libraryService';
++import { mapCatalogEntries } from '../../services/library/library.mapper';
++import type { MediaCardModel } from '../../services/library/library.types';
++
++const SEARCH_LIMIT = 50;
++const DEBOUNCE_MS = 300;
++
++type SearchState =
++    | { status: 'idle' }
++    | { status: 'loading' }
++    | { status: 'error'; message: string }
++    | { status: 'success'; cards: MediaCardModel[] };
++
++export function SearchPanel({ onNavigate }: { onNavigate: () => void }) {
++    const privacy = usePrivacyState();
++    const [query, setQuery] = useState('');
++    const [state, setState] = useState<SearchState>({ status: 'idle' });
++
++    useEffect(() => {
++        const keyword = query.trim();
++        if (!keyword) {
++            setState({ status: 'idle' });
++            return;
++        }
++        let cancelled = false;
++        setState({ status: 'loading' });
++        const timer = window.setTimeout(() => {
++            queryCatalog({ query: keyword, limit: SEARCH_LIMIT, private: privacy.active })
++                .then((entries) => {
++                    if (!cancelled) {
++                        setState({ status: 'success', cards: mapCatalogEntries(entries) });
++                    }
++                })
++                .catch((error: unknown) => {
++                    if (!cancelled) {
++                        setState({ status: 'error', message: error instanceof Error ? error.message : '搜索失败' });
++                    }
++                });
++        }, DEBOUNCE_MS);
++        return () => {
++            cancelled = true;
++            window.clearTimeout(timer);
++        };
++    }, [query, privacy.active]);
++
++    return (
++        <div className="search-panel">
++            <Input
++                label="搜索"
++                placeholder="搜索电影、剧集、动漫标题"
++                value={query}
++                onChange={(event) => setQuery(event.target.value)}
++                data-autofocus
++            />
++            <p className="search-panel__hint">按标题搜索（含剧集名），不支持按文件名搜索；结果最多 {SEARCH_LIMIT} 条。</p>
++            {state.status === 'idle' ? (
++                <EmptyState
++                    icon={<SearchIcon size={22} />}
++                    title="输入关键词开始搜索"
++                    description="搜索会直接查询本地媒体库目录，输入即搜（300ms 防抖）。"
++                />
++            ) : null}
++            {state.status === 'loading' ? (
++                <div className="search-panel__results" aria-hidden="true">
++                    <Skeleton variant="text" />
++                    <Skeleton variant="text" />
++                    <Skeleton variant="text" />
++                </div>
++            ) : null}
++            {state.status === 'error' ? (
++                <ErrorState title="搜索失败" description={state.message} onRetry={() => setQuery((value) => `${value} `)} />
++            ) : null}
++            {state.status === 'success' && state.cards.length === 0 ? (
++                <EmptyState
++                    icon={<SearchIcon size={22} />}
++                    title="未找到匹配内容"
++                    description="试试更短的关键词，或确认媒体库已完成扫描与收录。"
++                />
++            ) : null}
++            {state.status === 'success' && state.cards.length > 0 ? (
++                <div
++                    className="media-grid search-panel__results"
++                    onClick={(event) => {
++                        if (event.target instanceof Element && event.target.closest('a')) {
++                            onNavigate();
++                        }
++                    }}
++                >
++                    {state.cards.map((card) => (
++                        <MediaCard key={card.key} model={card} />
++                    ))}
++                </div>
++            ) : null}
++        </div>
++    );
++}
+diff --git a/src/renderer/pages/sources/SourcesPage.tsx b/src/renderer/pages/sources/SourcesPage.tsx
+new file mode 100644
+index 0000000..c5694e0
+--- /dev/null
++++ b/src/renderer/pages/sources/SourcesPage.tsx
+@@ -0,0 +1,159 @@
++import { useCallback, useEffect, useRef, useState } from 'react';
++import { usePrivacyState } from '../../app/PrivacyStateProvider';
++import { Button } from '../../components/ui/Button';
++import { EmptyState } from '../../components/ui/EmptyState';
++import { ErrorState } from '../../components/ui/ErrorState';
++import { Skeleton } from '../../components/ui/Skeleton';
++import { FolderIcon, LockIcon } from '../../components/icons';
++import { fetchSources, runLibraryScan } from '../../services/library/sourcesService';
++import { formatScanResult, toSourceRows } from './sources.mapper';
++import type { SourceDto, SourceRowModel } from './sources.mapper';
++
++type LoadState =
++    | { status: 'loading' }
++    | { status: 'error'; message: string }
++    | { status: 'success'; rows: SourceRowModel[]; locked: boolean };
++
++export function SourcesPage() {
++    const privacy = usePrivacyState();
++    const [state, setState] = useState<LoadState>({ status: 'loading' });
++    const [scanningId, setScanningId] = useState<string | null>(null);
++    const [banner, setBanner] = useState('');
++    const aliveRef = useRef(true);
++    const requestSeqRef = useRef(0);
++    const scanAbortRef = useRef<AbortController | null>(null);
++
++    useEffect(() => {
++        aliveRef.current = true;
++        return () => {
++            aliveRef.current = false;
++            scanAbortRef.current?.abort();
++            scanAbortRef.current = null;
++        };
++    }, []);
++
++    const load = useCallback(async () => {
++        const seq = ++requestSeqRef.current;
++        setState({ status: 'loading' });
++        try {
++            const result = await fetchSources(privacy.active);
++            if (!aliveRef.current || requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({
++                status: 'success',
++                rows: toSourceRows(result.sources as SourceDto[], privacy.active),
++                locked: result.locked,
++            });
++        } catch (error) {
++            if (!aliveRef.current || requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
++        }
++    }, [privacy.active]);
++
++    useEffect(() => {
++        void load();
++    }, [load]);
++
++    const rescan = async (sourceId: string) => {
++        if (scanningId) {
++            return;
++        }
++        const controller = new AbortController();
++        scanAbortRef.current = controller;
++        setScanningId(sourceId);
++        setBanner('正在扫描，完成后显示结果…');
++        try {
++            const result = await runLibraryScan(sourceId, controller.signal);
++            if (aliveRef.current && !controller.signal.aborted) {
++                setBanner(formatScanResult(result));
++                await load();
++            }
++        } catch (error) {
++            if (aliveRef.current && !controller.signal.aborted) {
++                setBanner(`扫描失败：${error instanceof Error ? error.message : '未知错误'}`);
++            }
++        } finally {
++            if (scanAbortRef.current === controller) {
++                scanAbortRef.current = null;
++            }
++            if (aliveRef.current && !controller.signal.aborted) {
++                setScanningId(null);
++            }
++        }
++    };
++
++    return (
++        <section className="app-page" aria-label="媒体源">
++            <header className="library-page__header">
++                <div>
++                    <h2 className="library-page__title">媒体源</h2>
++                    <p className="library-page__count">
++                        {state.status === 'success' ? `共 ${state.rows.length} 个源` : '正在加载…'}
++                    </p>
++                </div>
++            </header>
++            {privacy.active ? (
++                <div className="task-banner">
++                    <LockIcon size={13} /> 隐私模式：地址已隐藏，仅显示隐私源。
++                </div>
++            ) : null}
++            {banner ? (
++                <div className="task-banner" role="status">
++                    {banner}
++                </div>
++            ) : null}
++            {state.status === 'loading' ? (
++                <div className="sources-list" aria-hidden="true">
++                    <Skeleton variant="text" />
++                    <Skeleton variant="text" />
++                    <Skeleton variant="text" />
++                </div>
++            ) : null}
++            {state.status === 'error' ? (
++                <ErrorState title="媒体源加载失败" description={state.message} onRetry={() => void load()} />
++            ) : null}
++            {state.status === 'success' && state.rows.length === 0 ? (
++                <EmptyState
++                    icon={<FolderIcon size={22} />}
++                    title={state.locked ? '隐私库未解锁' : '暂无媒体源'}
++                    description={
++                        state.locked
++                            ? '请先在侧边栏解锁隐私库后再查看隐私源。'
++                            : '请在经典界面「设置 → 媒体库」中添加媒体源；此处仅用于查看与重新扫描。'
++                    }
++                />
++            ) : null}
++            {state.status === 'success' && state.rows.length > 0 ? (
++                <div className="sources-list">
++                    {state.rows.map((row) => (
++                        <div className="source-row" key={row.id}>
++                            <div className="source-row__main">
++                                <div className="source-row__name">{row.name}</div>
++                                <div className="source-row__meta">
++                                    {row.typeLabel} · {row.location}
++                                </div>
++                                <div className="source-row__meta">
++                                    上次扫描：{row.lastScanLabel}
++                                </div>
++                            </div>
++                            <div className="source-row__count">{row.itemCount} 个条目</div>
++                            <div className="source-row__actions">
++                                <Button
++                                    variant="secondary"
++                                    size="sm"
++                                    disabled={scanningId !== null}
++                                    onClick={() => void rescan(row.id)}
++                                >
++                                    {scanningId === row.id ? '扫描中…' : '重新扫描'}
++                                </Button>
++                            </div>
++                        </div>
++                    ))}
++                </div>
++            ) : null}
++        </section>
++    );
++}
+diff --git a/src/renderer/pages/tasks/TasksPage.tsx b/src/renderer/pages/tasks/TasksPage.tsx
+new file mode 100644
+index 0000000..18a7290
+--- /dev/null
++++ b/src/renderer/pages/tasks/TasksPage.tsx
+@@ -0,0 +1,233 @@
++import { useCallback, useEffect, useRef, useState } from 'react';
++import { Button } from '../../components/ui/Button';
++import { ErrorState } from '../../components/ui/ErrorState';
++import { Skeleton } from '../../components/ui/Skeleton';
++import { ScanIcon, SparklesIcon } from '../../components/icons';
++import { runLibraryScan } from '../../services/library/sourcesService';
++import { fetchScrapeStatus, onScrapeProgress, startScrape, waitScrapeDone } from '../../services/library/tasksService';
++import { formatScanResult } from '../sources/sources.mapper';
++import { describeScrapeSummary, scrapePercent } from './tasks.mapper';
++import type { ScrapeProgressDto, ScrapeSummaryDto } from './tasks.mapper';
++
++type StatusState =
++    | { status: 'loading' }
++    | { status: 'error'; message: string }
++    | { status: 'success'; running: boolean; lastSummary: ScrapeSummaryDto | null };
++
++export function TasksPage() {
++    const [state, setState] = useState<StatusState>({ status: 'loading' });
++    const [scanPending, setScanPending] = useState(false);
++    const [scrapePending, setScrapePending] = useState(false);
++    const [progress, setProgress] = useState<ScrapeProgressDto | null>(null);
++    const [banner, setBanner] = useState('');
++    const aliveRef = useRef(true);
++    const unsubscribeRef = useRef<(() => void) | null>(null);
++    const requestSeqRef = useRef(0);
++    const scanInFlightRef = useRef(false);
++    const scrapeInFlightRef = useRef(false);
++    const scanAbortRef = useRef<AbortController | null>(null);
++    const scrapeAbortRef = useRef<AbortController | null>(null);
++
++    useEffect(() => {
++        aliveRef.current = true;
++        return () => {
++            aliveRef.current = false;
++            unsubscribeRef.current?.();
++            unsubscribeRef.current = null;
++            scanAbortRef.current?.abort();
++            scrapeAbortRef.current?.abort();
++            scanAbortRef.current = null;
++            scrapeAbortRef.current = null;
++        };
++    }, []);
++
++    const load = useCallback(async () => {
++        const seq = ++requestSeqRef.current;
++        setState({ status: 'loading' });
++        try {
++            const result = await fetchScrapeStatus();
++            if (!aliveRef.current || requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({ status: 'success', running: result.running, lastSummary: result.lastSummary });
++        } catch (error) {
++            if (!aliveRef.current || requestSeqRef.current !== seq) {
++                return;
++            }
++            setState({ status: 'error', message: error instanceof Error ? error.message : '加载失败' });
++        }
++    }, []);
++
++    useEffect(() => {
++        void load();
++    }, [load]);
++
++    const scan = async () => {
++        if (scanInFlightRef.current) {
++            return;
++        }
++        scanInFlightRef.current = true;
++        const controller = new AbortController();
++        scanAbortRef.current = controller;
++        setScanPending(true);
++        setBanner('正在扫描媒体库，完成后显示汇总…');
++        try {
++            const result = await runLibraryScan(undefined, controller.signal);
++            if (aliveRef.current && !controller.signal.aborted) {
++                setBanner(formatScanResult(result));
++            }
++        } catch (error) {
++            if (aliveRef.current && !controller.signal.aborted) {
++                setBanner(`扫描失败：${error instanceof Error ? error.message : '未知错误'}`);
++            }
++        } finally {
++            scanInFlightRef.current = false;
++            if (scanAbortRef.current === controller) {
++                scanAbortRef.current = null;
++            }
++            if (aliveRef.current && !controller.signal.aborted) {
++                setScanPending(false);
++            }
++        }
++    };
++
++    const scrape = async () => {
++        if (scrapeInFlightRef.current) {
++            return;
++        }
++        scrapeInFlightRef.current = true;
++        const controller = new AbortController();
++        scrapeAbortRef.current = controller;
++        setScrapePending(true);
++        setBanner('');
++        setProgress(null);
++        unsubscribeRef.current?.();
++        unsubscribeRef.current = onScrapeProgress((value) => {
++            if (aliveRef.current) {
++                setProgress(value);
++            }
++        });
++        try {
++            const started = await startScrape(controller.signal);
++            if (controller.signal.aborted) {
++                return;
++            }
++            if (!started.started) {
++                if (aliveRef.current) {
++                    setBanner(started.error || '无法开始刮削');
++                }
++                return;
++            }
++            if (aliveRef.current) {
++                setState({ status: 'success', running: true, lastSummary: null });
++            }
++            const done = await waitScrapeDone(controller.signal);
++            if (aliveRef.current && !controller.signal.aborted) {
++                if (done.error) {
++                    setBanner(`刮削失败：${done.error}`);
++                } else {
++                    setBanner(`刮削已完成：成功 ${done.summary?.scraped ?? 0}，失败 ${done.summary?.failed ?? 0}，跳过 ${done.summary?.skipped ?? 0}`);
++                }
++            }
++            if (!controller.signal.aborted) {
++                await load();
++            }
++        } catch (error) {
++            if (aliveRef.current && !controller.signal.aborted) {
++                setBanner(`刮削失败：${error instanceof Error ? error.message : '未知错误'}`);
++            }
++        } finally {
++            scrapeInFlightRef.current = false;
++            if (scrapeAbortRef.current === controller) {
++                scrapeAbortRef.current = null;
++            }
++            unsubscribeRef.current?.();
++            unsubscribeRef.current = null;
++            if (aliveRef.current && !controller.signal.aborted) {
++                setScrapePending(false);
++                setProgress(null);
++            }
++        }
++    };
++
++    const running = state.status === 'success' ? state.running : false;
++    const summaryText = state.status === 'success' ? describeScrapeSummary(state.lastSummary) : null;
++
++    return (
++        <section className="app-page" aria-label="任务状态">
++            <header className="library-page__header">
++                <div>
++                    <h2 className="library-page__title">任务状态</h2>
++                    <p className="library-page__count">扫描与 TMDB 刮削（数据来自既有主进程任务）</p>
++                </div>
++            </header>
++            {progress ? (
++                <div className="task-banner" role="status">
++                    正在刮削：{progress.title || '准备中'}（{progress.done}/{progress.total}）
++                </div>
++            ) : null}
++            {banner ? (
++                <div className="task-banner" role="status">
++                    {banner}
++                </div>
++            ) : null}
++            {state.status === 'loading' ? (
++                <div className="tasks-grid" aria-hidden="true">
++                    <Skeleton variant="text" />
++                    <Skeleton variant="text" />
++                </div>
++            ) : null}
++            {state.status === 'error' ? (
++                <ErrorState title="任务状态加载失败" description={state.message} onRetry={() => void load()} />
++            ) : null}
++            {state.status === 'success' ? (
++                <div className="tasks-grid">
++                    <div className="task-card">
++                        <h3 className="task-card__title">扫描媒体库</h3>
++                        <p className="task-card__desc">
++                            重新扫描所有本地媒体源，添加新文件并清理失效条目。扫描不提供实时进度，完成后显示汇总。
++                        </p>
++                        <div className="task-card__actions">
++                            <Button
++                                variant="primary"
++                                iconLeft={<ScanIcon size={14} />}
++                                disabled={scanPending || running}
++                                onClick={() => void scan()}
++                            >
++                                {scanPending ? '扫描中…' : '开始扫描'}
++                            </Button>
++                        </div>
++                    </div>
++                    <div className="task-card">
++                        <h3 className="task-card__title">TMDB 刮削</h3>
++                        <p className="task-card__desc">
++                            {running
++                                ? '刮削任务正在进行中…'
++                                : summaryText ?? '尚未执行过刮削。刮削需要先在设置中配置 TMDB API Key。'}
++                        </p>
++                        {progress ? (
++                            <div className="task-progress">
++                                <progress value={progress.done} max={Math.max(progress.total, 1)}>
++                                    {scrapePercent(progress)}%
++                                </progress>
++                                <span>
++                                    {progress.title || '准备中'} · {scrapePercent(progress)}%
++                                </span>
++                            </div>
++                        ) : null}
++                        <div className="task-card__actions">
++                            <Button
++                                variant="primary"
++                                iconLeft={<SparklesIcon size={14} />}
++                                disabled={scrapePending || running || scanPending}
++                                onClick={() => void scrape()}
++                            >
++                                {running || scrapePending ? '刮削中…' : '开始刮削'}
++                            </Button>
++                        </div>
++                    </div>
++                </div>
++            ) : null}
++        </section>
++    );
++}
+diff --git a/src/renderer/services/desktop/desktopBridge.ts b/src/renderer/services/desktop/desktopBridge.ts
+new file mode 100644
+index 0000000..d3a9fba
+--- /dev/null
++++ b/src/renderer/services/desktop/desktopBridge.ts
+@@ -0,0 +1,18 @@
++/** 渲染层统一访问 preload 桥接（P2-07 归口；此处为服务层唯一入口） */
++import { getBridge, onceReply, onceReplyCancellable, sendChannel } from '../../app/bridge';
++
++export { getBridge, onceReply, onceReplyCancellable, sendChannel };
++
++/** 发送请求并等待对应回复通道（FIFO 配对；主进程 catalog 等同步 handler 响应有序） */
++export async function invoke<T>(
++    channel: string,
++    payload: unknown,
++    replyChannel: string,
++    timeoutMs = 8000
++): Promise<T> {
++    const wait = onceReply<T>(replyChannel, timeoutMs);
++    if (!sendChannel(channel, payload)) {
++        throw new Error('BRIDGE_UNAVAILABLE');
++    }
++    return wait;
++}
+diff --git a/src/renderer/services/library/sourcesService.ts b/src/renderer/services/library/sourcesService.ts
+new file mode 100644
+index 0000000..2db0875
+--- /dev/null
++++ b/src/renderer/services/library/sourcesService.ts
+@@ -0,0 +1,34 @@
++/** 媒体源查询与扫描动作适配（library:list-sources / library:scan） */
++import { invoke, onceReplyCancellable, sendChannel } from '../desktop/desktopBridge';
++import type { ScanDoneDto, SourceDto } from '../../pages/sources/sources.mapper';
++
++const SCAN_TIMEOUT_MS = 30 * 60 * 1000;
++
++export async function fetchSources(privateActive: boolean): Promise<{ sources: SourceDto[]; locked: boolean }> {
++    const result = await invoke<{ sources?: SourceDto[]; locked?: boolean }>(
++        'library:list-sources',
++        { private: privateActive },
++        'library:sources-info'
++    );
++    return { sources: result?.sources ?? [], locked: result?.locked === true };
++}
++
++/** 触发扫描并等待完成汇总（主进程扫描期间无进度事件，仅完成回包） */
++export async function runLibraryScan(sourceId?: string, signal?: AbortSignal): Promise<ScanDoneDto> {
++    if (signal?.aborted) {
++        throw new Error('IPC_CANCELLED');
++    }
++    const reply = onceReplyCancellable<ScanDoneDto>('library:scan-done', SCAN_TIMEOUT_MS);
++    const onAbort = () => {
++        reply.cancel();
++    };
++    signal?.addEventListener('abort', onAbort, { once: true });
++    try {
++        if (!sendChannel('library:scan', { sourceId })) {
++            throw new Error('BRIDGE_UNAVAILABLE');
++        }
++        return await reply.promise;
++    } finally {
++        signal?.removeEventListener('abort', onAbort);
++    }
++}
+diff --git a/src/renderer/services/library/tasksService.ts b/src/renderer/services/library/tasksService.ts
+new file mode 100644
+index 0000000..7f2add1
+--- /dev/null
++++ b/src/renderer/services/library/tasksService.ts
+@@ -0,0 +1,65 @@
++/** 刮削任务适配（library:scrape / scrape-status / scrape-started / 进度 / done） */
++import { getBridge, invoke, onceReplyCancellable, sendChannel } from '../desktop/desktopBridge';
++import type { ScrapeProgressDto, ScrapeSummaryDto } from '../../pages/tasks/tasks.mapper';
++
++export type ScrapeStatusResult = {
++    running: boolean;
++    lastSummary: ScrapeSummaryDto | null;
++};
++
++const START_TIMEOUT_MS = 8000;
++const DONE_TIMEOUT_MS = 60 * 60 * 1000;
++
++export async function fetchScrapeStatus(): Promise<ScrapeStatusResult> {
++    const result = await invoke<ScrapeStatusResult>('library:scrape-status', undefined, 'library:scrape-status-info');
++    return { running: result?.running === true, lastSummary: result?.lastSummary ?? null };
++}
++
++export function onScrapeProgress(listener: (progress: ScrapeProgressDto) => void): () => void {
++    const bridge = getBridge();
++    if (!bridge) {
++        return () => undefined;
++    }
++    const wrapped = (_event: unknown, data: unknown) => listener(data as ScrapeProgressDto);
++    bridge.on('library-scrape-progress', wrapped);
++    return () => bridge.off?.('library-scrape-progress', wrapped);
++}
++
++/** 返回 started；未启动时含主进程错误（如缺少 TMDB API Key） */
++export async function startScrape(signal?: AbortSignal): Promise<{ started: boolean; error?: string }> {
++    if (signal?.aborted) {
++        throw new Error('IPC_CANCELLED');
++    }
++    const reply = onceReplyCancellable<{ started?: boolean; error?: string }>(
++        'library:scrape-started',
++        START_TIMEOUT_MS
++    );
++    const onAbort = () => {
++        reply.cancel();
++    };
++    signal?.addEventListener('abort', onAbort, { once: true });
++    try {
++        if (!sendChannel('library:scrape', { force: false })) {
++            throw new Error('BRIDGE_UNAVAILABLE');
++        }
++        const result = await reply.promise;
++        return { started: result?.started === true, error: result?.error };
++    } finally {
++        signal?.removeEventListener('abort', onAbort);
++    }
++}
++
++export function waitScrapeDone(signal?: AbortSignal): Promise<{ summary?: ScrapeSummaryDto; error?: string }> {
++    if (signal?.aborted) {
++        return Promise.reject(new Error('IPC_CANCELLED'));
++    }
++    const reply = onceReplyCancellable<{ summary?: ScrapeSummaryDto; error?: string }>(
++        'library-scrape-done',
++        DONE_TIMEOUT_MS
++    );
++    const onAbort = () => {
++        reply.cancel();
++    };
++    signal?.addEventListener('abort', onAbort, { once: true });
++    return reply.promise.finally(() => signal?.removeEventListener('abort', onAbort));
++}
+diff --git a/tests/libraryScanGuard.test.cjs b/tests/libraryScanGuard.test.cjs
+new file mode 100644
+index 0000000..da4ea6e
+--- /dev/null
++++ b/tests/libraryScanGuard.test.cjs
+@@ -0,0 +1,53 @@
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const path = require('node:path');
++
++const { createSingleFlight } = require(
++    path.join(__dirname, '..', 'dest', 'main', 'handlers', 'plugins', 'scanGuard.js')
++);
++
++function deferred() {
++    let resolve;
++    let reject;
++    const promise = new Promise((res, rej) => {
++        resolve = res;
++        reject = rej;
++    });
++    return { promise, resolve, reject };
++}
++
++test('concurrent scan triggers are rejected while first is running', async () => {
++    const guard = createSingleFlight();
++    const gate = deferred();
++    const first = guard.run(async () => {
++        await gate.promise;
++        return 'done';
++    });
++    assert.equal(guard.isRunning(), true);
++    const second = await guard.run(async () => 'should-not-run');
++    assert.deepEqual(second, { started: false });
++    gate.resolve();
++    assert.deepEqual(await first, { started: true, value: 'done' });
++    assert.equal(guard.isRunning(), false);
++});
++
++test('guard releases after completion and allows the next scan', async () => {
++    const guard = createSingleFlight();
++    await guard.run(async () => undefined);
++    const next = await guard.run(async () => 42);
++    assert.deepEqual(next, { started: true, value: 42 });
++    assert.equal(guard.isRunning(), false);
++});
++
++test('guard releases after task failure and next scan proceeds', async () => {
++    const guard = createSingleFlight();
++    await assert.rejects(
++        guard.run(async () => {
++            throw new Error('boom');
++        }),
++        /boom/
++    );
++    assert.equal(guard.isRunning(), false);
++    const retry = await guard.run(async () => 'ok');
++    assert.deepEqual(retry, { started: true, value: 'ok' });
++});
+diff --git a/tests/privacyPassword.test.cjs b/tests/privacyPassword.test.cjs
+new file mode 100644
+index 0000000..5e71466
+--- /dev/null
++++ b/tests/privacyPassword.test.cjs
+@@ -0,0 +1,37 @@
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const path = require('node:path');
++
++const privacy = require(path.join(__dirname, '..', 'dest', 'modules', 'library', 'privacy.js'));
++
++test('privacy password validation enforces trimmed minimum length', () => {
++    assert.equal(privacy.isValidPrivacyPassword('abcd'), true);
++    assert.equal(privacy.isValidPrivacyPassword('   ab'), false);
++    assert.equal(privacy.isValidPrivacyPassword('abc'), false);
++    assert.equal(privacy.isValidPrivacyPassword(1234), false);
++    assert.equal(privacy.PRIVACY_PASSWORD_MIN_LENGTH, 4);
++});
++
++test('scrypt hash verifies only the correct password', () => {
++    const hash = privacy.hashPrivacyPassword('E2E-Pass-123');
++    assert.match(hash, /^scrypt\$\d+\$[^$]+\$[^$]+$/);
++    assert.equal(privacy.verifyPrivacyPassword('E2E-Pass-123', hash), true);
++    assert.equal(privacy.verifyPrivacyPassword('wrong-pass', hash), false);
++    assert.equal(privacy.verifyPrivacyPassword('E2E-Pass-123', null), false);
++    assert.equal(privacy.verifyPrivacyPassword('E2E-Pass-123', 'broken'), false);
++    assert.equal(privacy.verifyPrivacyPassword('E2E-Pass-123', 'scrypt$x$bad$bad'), false);
++});
++
++test('salt makes hashes unique and unlock state is memory-only toggle', () => {
++    const a = privacy.hashPrivacyPassword('same-password');
++    const b = privacy.hashPrivacyPassword('same-password');
++    assert.notEqual(a, b);
++    assert.equal(privacy.verifyPrivacyPassword('same-password', a), true);
++    assert.equal(privacy.verifyPrivacyPassword('same-password', b), true);
++
++    privacy.setPrivacyUnlocked(false);
++    assert.equal(privacy.isPrivacyUnlocked(), false);
++    privacy.setPrivacyUnlocked(true);
++    assert.equal(privacy.isPrivacyUnlocked(), true);
++    privacy.setPrivacyUnlocked(false);
++});
+diff --git a/tests/ui2Bridge.test.cjs b/tests/ui2Bridge.test.cjs
+new file mode 100644
+index 0000000..34fb707
+--- /dev/null
++++ b/tests/ui2Bridge.test.cjs
+@@ -0,0 +1,56 @@
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const path = require('node:path');
++
++function installBridge() {
++    const listeners = new Map();
++    const offs = [];
++    global.window = { setTimeout, clearTimeout };
++    global.window.electronAPI = {
++        once(channel, listener) {
++            listeners.set(channel, listener);
++        },
++        off(channel, listener) {
++            offs.push([channel, listener]);
++            listeners.delete(channel);
++        },
++        send() {},
++        on() {},
++    };
++    return {
++        emit(channel, data) {
++            const listener = listeners.get(channel);
++            listeners.delete(channel);
++            listener?.({}, data);
++        },
++        listeners,
++        offs,
++    };
++}
++
++const bridge = require(path.join(__dirname, '..', 'tmp', 'renderer-test', 'app', 'bridge.js'));
++
++test('onceReplyCancellable resolves and clears timer on reply', async () => {
++    const mock = installBridge();
++    const handle = bridge.onceReplyCancellable('demo-reply', 1000);
++    mock.emit('demo-reply', { value: 42 });
++    assert.deepEqual(await handle.promise, { value: 42 });
++    assert.equal(mock.offs.length, 0);
++});
++
++test('cancel rejects with IPC_CANCELLED and removes listener', async () => {
++    const mock = installBridge();
++    const handle = bridge.onceReplyCancellable('demo-reply', 60_000);
++    const assertion = assert.rejects(handle.promise, /IPC_CANCELLED/);
++    handle.cancel();
++    await assertion;
++    assert.equal(mock.offs.length, 1);
++    assert.equal(mock.offs[0][0], 'demo-reply');
++});
++
++test('timeout rejects with IPC_TIMEOUT and removes listener', async () => {
++    const mock = installBridge();
++    const handle = bridge.onceReplyCancellable('demo-reply', 10);
++    await assert.rejects(handle.promise, /IPC_TIMEOUT/);
++    assert.equal(mock.offs.length, 1);
++});
+diff --git a/tests/ui2Lifecycle.test.cjs b/tests/ui2Lifecycle.test.cjs
+new file mode 100644
+index 0000000..3d04a6f
+--- /dev/null
++++ b/tests/ui2Lifecycle.test.cjs
+@@ -0,0 +1,56 @@
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++
++const read = (relative) => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
++
++test('privacy deactivation returns to home and closes search', () => {
++    const shell = read('src/renderer/app/AppShell.tsx');
++    assert.ok(shell.includes('prevPrivacyActive'));
++    assert.ok(shell.includes('navigate(ROUTES.home'));
++    assert.ok(shell.includes('setSearchOpen(false)'));
++    const provider = read('src/renderer/app/PrivacyStateProvider.tsx');
++    assert.ok(provider.includes('if (busy)'));
++    assert.ok(provider.includes('桌面桥接不可用'));
++});
++
++test('async catalog pages guard against stale responses', () => {
++    for (const file of [
++        'src/renderer/pages/library/LibraryPage.tsx',
++        'src/renderer/pages/home/HomePage.tsx',
++        'src/renderer/pages/detail/MediaDetailPage.tsx',
++        'src/renderer/pages/search/SearchPanel.tsx',
++    ]) {
++        const source = read(file);
++        assert.ok(
++            source.includes('requestSeqRef') || source.includes('cancelled'),
++            `${file} must guard stale async state`
++        );
++    }
++});
++
++test('long-lived task waits are cancellable and listeners are cleaned', () => {
++    const tasksPage = read('src/renderer/pages/tasks/TasksPage.tsx');
++    assert.ok(tasksPage.includes('scanInFlightRef'));
++    assert.ok(tasksPage.includes('scrapeInFlightRef'));
++    assert.ok(tasksPage.includes('scanAbortRef'));
++    assert.ok(tasksPage.includes('scrapeAbortRef'));
++    assert.ok(tasksPage.includes('unsubscribeRef.current?.()'));
++    const sourcesPage = read('src/renderer/pages/sources/SourcesPage.tsx');
++    assert.ok(sourcesPage.includes('scanAbortRef'));
++    assert.ok(sourcesPage.includes('.abort()'));
++    const tasksService = read('src/renderer/services/library/tasksService.ts');
++    assert.ok(tasksService.includes('onceReplyCancellable'));
++    assert.ok(tasksService.includes('IPC_CANCELLED'));
++});
++
++test('main-process scan uses a single-flight guard (duplicate triggers rejected)', () => {
++    const library = read('src/main/handlers/plugins/library.ts');
++    assert.ok(library.includes('scanSingleFlight.run'));
++    assert.ok(library.includes("已有扫描任务在进行中"));
++    assert.ok(!library.includes('let scanning = false;'));
++    const guard = read('src/main/handlers/plugins/scanGuard.ts');
++    assert.ok(guard.includes('started: false'));
++    assert.ok(guard.includes('finally'));
++});
+\ No newline at end of file
+diff --git a/tsconfig.renderer.test.json b/tsconfig.renderer.test.json
+new file mode 100644
+index 0000000..b940da9
+--- /dev/null
++++ b/tsconfig.renderer.test.json
+@@ -0,0 +1,21 @@
++{
++    "compilerOptions": {
++        "target": "ES2022",
++        "lib": ["ES2022", "DOM"],
++        "module": "CommonJS",
++        "moduleResolution": "node",
++        "jsx": "react-jsx",
++        "strict": true,
++        "esModuleInterop": true,
++        "allowSyntheticDefaultImports": true,
++        "forceConsistentCasingInFileNames": true,
++        "skipLibCheck": true,
++        "resolveJsonModule": true,
++        "types": ["vite/client", "node"],
++        "rootDir": "src/renderer",
++        "outDir": "tmp/renderer-test",
++        "noEmit": false,
++        "sourceMap": false
++    },
++    "include": ["src/renderer/services/**/*.ts", "src/renderer/utils/**/*.ts", "src/renderer/pages/library/library.mapper.ts", "src/renderer/pages/library/library.types.ts", "src/renderer/pages/detail/detail.mapper.ts", "src/renderer/pages/detail/detail.types.ts", "src/renderer/pages/sources/sources.mapper.ts", "src/renderer/pages/tasks/tasks.mapper.ts", "src/renderer/app/bridge.ts", "src/renderer/bridge.d.ts"]
++}

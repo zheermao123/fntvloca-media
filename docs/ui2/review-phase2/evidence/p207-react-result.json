@@ -1,0 +1,12 @@
+{
+  "mode": "react",
+  "url": "file:///E:/fntv-electron-release/ui2-renderer/index.html#/home",
+  "isFile": true,
+  "reactRoot": true,
+  "movies": {
+    "cards": 12,
+    "title": "电影"
+  },
+  "screenshot": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\opencode\\ui2-p207-file-library.png",
+  "consoleErrors": 0
+}
