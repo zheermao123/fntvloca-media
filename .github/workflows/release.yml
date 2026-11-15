@@ -21,10 +21,14 @@ on:
           - windows
           - macos
           - linux
-      release_tag:
-        description: Existing prerelease tag to upload binaries to
-        required: false
-        type: string
+      publish:
+        description: 'Create a formal GitHub Release (preview builds MUST keep false)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: read
@@ -296,17 +300,23 @@ jobs:
             echo "No leftover volumes."
             fi
 
+  # 正式 Release 仅在手动 workflow_dispatch + publish=true + platform=all 时执行；
+  # 建议同时在仓库 Settings → Environments 为 release 配置 Required reviewers。
+  # 向 release 分支 push 现在只构建并上传 Actions artifacts，不再自动发布。
   release:
     name: Create Release
     needs: [check-commit, build]
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
     if: >-
       success() &&
       needs.check-commit.outputs.should-skip != 'true' &&
       github.repository == 'zheermao123/fntvloca-media' &&
-      (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all')
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publish == 'true' &&
+      github.event.inputs.platform == 'all'
 
     steps:
       - name: Checkout code
@@ -352,10 +362,9 @@ jobs:
 
             ---
 
-            ### 💻 支持平台
-            - ✅ Windows (x64)
-            - ✅ macOS (Intel & Apple Silicon)
-            - ✅ Linux (x64 & ARM64)
+            ### 💻 构建产物与验证范围
+            - Windows (x64)：安装包已通过 CI 安装/启动冒烟（classic 默认）
+            - macOS / Linux：仅提供构建产物，尚未进行实机运行验证（用户已接受该风险）
             
             ### 📥 下载指南
             | 平台 | 文件类型 | 说明 |

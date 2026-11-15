@@ -1,6 +1,6 @@
 # UI 2.0 Phase 3 — 产品完善与发布就绪实施计划
 
-- 状态：待执行（计划已确认；代码实施尚未开始）
+- 状态：**已完成（2026-11-15）**；发布候选报告：`docs/ui2/phase3/PHASE3_RELEASE_CANDIDATE.md`（未合并 main、未打 tag、未发布）
 - 日期：2026-11-14
 - 目标分支：`docs/ui2-phase3-plan`
 - 计划基线：`feature/ui2-phase2`（Phase 2 已推送、尚未合并 main）

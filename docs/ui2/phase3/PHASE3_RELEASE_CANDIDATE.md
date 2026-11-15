@@ -67,6 +67,14 @@
 | macOS/Linux 运行验证 | 中 | 用户已决定取消实机验证并接受风险（2026-11-15）；建议在对应平台发布时再补充说明 |
 | 隐私真实用户密码 | — | 自动化使用隔离测试密码；真实密码由用户自行手工验收 |
 
+## 7.1 发布门禁修订（2026-11-15）
+
+- 正式 Release 仅允许：workflow_dispatch + `publish=true` + `platform=all`；`release` environment 建议配置 Required reviewers。
+- 向 `release` 分支 push 现在只构建并上传 Actions artifacts，不再自动创建 Release/Tag。
+- 删除未使用的 `release_tag` 输入，避免“预览上传”语义与实际行为不符。
+- Release 描述已改为：Windows 已安装冒烟；macOS/Linux 仅提供构建产物、未实机验证（用户已接受风险）。
+- 预览构建（publish=false）验证 run：<PENDING>。
+
 ## 8. 回滚
 
 - 回退 `feature/ui2-phase3` 提交即可回到 `ui2-integration` 基线；无数据库迁移（B-01 未加索引，B-03 未实施）。

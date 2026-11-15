@@ -10,7 +10,7 @@
 
 | 文件 | 大小 | SHA256 | 内容 |
 |---|---|---|---|
-| FNMedia_3.2.9_win_x64.exe.blockmap | 146655 | `1cf01bfb6169aad9a46e2eba6c6e17daaed6daf492bc4ad31d0170ef85af1baa` | CI 安装包 blockmap（产物元数据） |
+| FNMedia_3.2.9_win_x64.exe.blockmap | 146529 | `882611d02ba39f221fe911e8d1a27c5e59a1208ef4c993b915bf53e6339510cc` | CI 安装包 blockmap（产物元数据） |
 | ci-artifact-sha256.txt | 66 | `1993428b6eed76308a28fe0bbda12d2cc345c39f48357556d995da5701f51245` | CI 安装包 SHA256 |
 | ci-build-info.json | 424 | `2be0f621d3469255699cbf0a23e6fc07cdb1f838e126e9a9ff704cb2ef3171ef` | 最终 CI run、commit、测试数、安装冒烟与 Release 状态 |
 | ci-install-smoke.log | 242 | `2c1520f8a1988fd88bf965f3a2fed6caae17551846158d585d574e416c65bb30` | CI 安装后 classic 默认/回退/卸载日志 |
