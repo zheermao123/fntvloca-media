@@ -601,5 +601,5 @@ B-01 和 B-02 是核心优先级。不得先投入大量时间做装饰性 UI，
   - B-04 搜索：已实施（分类过滤/total/内存最近搜索；文件名不支持）。
   - B-05 首页：已实施（准确计数 + 继续观看）。
   - B-06 媒体源：已实施（测试/编辑/重扫/凭据脱敏）。
-- 批次 C：发布候选报告 `phase3/PHASE3_RELEASE_CANDIDATE.md`；Windows 安装/回退/卸载通过；macOS/Linux 未验证。
+- 批次 C：发布候选报告 `phase3/PHASE3_RELEASE_CANDIDATE.md`；Windows 安装/回退/卸载通过；macOS/Linux 实机验证由用户取消（2026-11-15，接受未验证风险）。
 - **未授权事项保持未执行**：合并 main、Tag、Release、切换默认 UI。
