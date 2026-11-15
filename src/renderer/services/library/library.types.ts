@@ -9,7 +9,16 @@ export type CatalogQuery = {
     query?: string;
     sort?: 'added' | 'title' | 'year' | 'recentPlayed';
     limit?: number;
+    offset?: number;
     private?: boolean;
+};
+
+export type CatalogPage = {
+    entries: CatalogEntryDto[];
+    total: number;
+    limit: number | null;
+    offset: number;
+    hasMore: boolean;
 };
 
 type CatalogItemDto = {
@@ -81,7 +90,27 @@ export type HomeCategorySummary = {
     capped: boolean;
 };
 
+export type ContinueItemDto = {
+    id: string;
+    title: string;
+    kind: 'movie' | 'episode';
+    showId: string | null;
+    season: number | null;
+    episode: number | null;
+    episodeTitle: string | null;
+    posterPath: string | null;
+    year: number | null;
+};
+
+export type ContinueEntryDto = {
+    item: ContinueItemDto;
+    state: { positionTs: number; durationTs: number; watched: boolean };
+    showTitle: string | null;
+    activityAt: number;
+};
+
 export type HomeOverview = {
     categories: HomeCategorySummary[];
     recent: MediaCardModel[];
+    continueWatching: MediaCardModel[];
 };

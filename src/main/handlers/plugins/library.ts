@@ -12,9 +12,9 @@ import { encryptSecret, decryptSecret } from '../../../modules/library/credentia
 import { ingestScanResult } from '../../../modules/library/ingest';
 import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
-import { buildCatalog } from '../../../modules/library/catalog';
+import { buildCatalogPage } from '../../../modules/library/catalog';
 import { categoryOfSource, folderNameFromPath, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
-import { isPrivateSource } from '../../../modules/library/sourceCategory';
+import { isPrivateSource, toRendererSource } from '../../../modules/library/sourceCategory';
 import { testLocalRoot, testWebdavSource } from '../../../modules/library/sourceTest';
 import { planSourceUpdate } from '../../../modules/library/sourceEdit';
 import type { SourceUpdatePatch } from '../../../modules/library/sourceEdit';
@@ -136,7 +136,7 @@ function listSourcesPayload(privateOnly: boolean): { sources: unknown[] } {
         .filter((source) => isPrivateSource(source) === privateOnly)
         .map((source) => {
             const itemCount = store.countItems(source.id);
-            return { ...source, itemCount, category: categoryOfSource(source) };
+            return { ...toRendererSource(source), itemCount, category: categoryOfSource(source) };
         });
     return { sources };
 }
@@ -403,7 +403,7 @@ function init(): void {
                 reply(event, 'library:catalog-info', { entries: [], locked: true });
                 return;
             }
-            const entries = buildCatalog(store, {
+            const page = buildCatalogPage(store, {
                 kind,
                 category: wantsPrivate ? undefined : (normalizeCategory(payload.category) ?? undefined),
                 visibility: wantsPrivate ? 'private' : 'public',
@@ -412,8 +412,15 @@ function init(): void {
                 query: typeof payload.query === 'string' ? payload.query : undefined,
                 sort: sort === 'title' || sort === 'year' || sort === 'recentPlayed' || sort === 'added' ? sort : 'added',
                 limit: typeof payload.limit === 'number' ? payload.limit : undefined,
+                offset: typeof payload.offset === 'number' ? payload.offset : undefined,
             });
-            reply(event, 'library:catalog-info', { entries });
+            reply(event, 'library:catalog-info', {
+                entries: page.entries,
+                total: page.total,
+                limit: page.limit,
+                offset: page.offset,
+                hasMore: page.hasMore,
+            });
         } catch (error) {
             log.error('[library] 目录查询失败:', error);
             reply(event, 'library:catalog-info', { entries: [] });

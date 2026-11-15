@@ -7,7 +7,14 @@ import { runLibraryScan } from '../../services/library/sourcesService';
 import { fetchScrapeStatus, onScrapeProgress, startScrape, waitScrapeDone } from '../../services/library/tasksService';
 import { formatScanResult } from '../sources/sources.mapper';
 import { describeScrapeSummary, scrapePercent } from './tasks.mapper';
-import type { ScrapeProgressDto, ScrapeSummaryDto } from './tasks.mapper';
+import {
+    addSessionTask,
+    finishSessionTask,
+    formatTaskTime,
+    taskKindLabel,
+    taskStatusLabel,
+} from './tasks.mapper';
+import type { ScrapeProgressDto, ScrapeSummaryDto, SessionTask } from './tasks.mapper';
 
 type StatusState =
     | { status: 'loading' }
@@ -20,6 +27,8 @@ export function TasksPage() {
     const [scrapePending, setScrapePending] = useState(false);
     const [progress, setProgress] = useState<ScrapeProgressDto | null>(null);
     const [banner, setBanner] = useState('');
+    const [sessionTasks, setSessionTasks] = useState<SessionTask[]>([]);
+    const taskSeqRef = useRef(0);
     const aliveRef = useRef(true);
     const unsubscribeRef = useRef<(() => void) | null>(null);
     const requestSeqRef = useRef(0);
@@ -71,14 +80,31 @@ export function TasksPage() {
         scanAbortRef.current = controller;
         setScanPending(true);
         setBanner('正在扫描媒体库，完成后显示汇总…');
+        const taskId = `scan-${++taskSeqRef.current}`;
+        setSessionTasks((tasks) =>
+            addSessionTask(tasks, {
+                id: taskId,
+                kind: 'scan',
+                startedAt: Date.now(),
+                finishedAt: null,
+                status: 'running',
+                summary: '正在扫描…',
+            })
+        );
         try {
             const result = await runLibraryScan(undefined, controller.signal);
             if (aliveRef.current && !controller.signal.aborted) {
-                setBanner(formatScanResult(result));
+                const summary = formatScanResult(result);
+                setBanner(summary);
+                setSessionTasks((tasks) =>
+                    finishSessionTask(tasks, taskId, result.error ? 'error' : 'success', summary)
+                );
             }
         } catch (error) {
             if (aliveRef.current && !controller.signal.aborted) {
-                setBanner(`扫描失败：${error instanceof Error ? error.message : '未知错误'}`);
+                const message = `扫描失败：${error instanceof Error ? error.message : '未知错误'}`;
+                setBanner(message);
+                setSessionTasks((tasks) => finishSessionTask(tasks, taskId, 'error', message));
             }
         } finally {
             scanInFlightRef.current = false;
@@ -101,6 +127,17 @@ export function TasksPage() {
         setScrapePending(true);
         setBanner('');
         setProgress(null);
+        const taskId = `scrape-${++taskSeqRef.current}`;
+        setSessionTasks((tasks) =>
+            addSessionTask(tasks, {
+                id: taskId,
+                kind: 'scrape',
+                startedAt: Date.now(),
+                finishedAt: null,
+                status: 'running',
+                summary: '正在刮削…',
+            })
+        );
         unsubscribeRef.current?.();
         unsubscribeRef.current = onScrapeProgress((value) => {
             if (aliveRef.current) {
@@ -113,8 +150,10 @@ export function TasksPage() {
                 return;
             }
             if (!started.started) {
+                const message = started.error || '无法开始刮削';
                 if (aliveRef.current) {
-                    setBanner(started.error || '无法开始刮削');
+                    setBanner(message);
+                    setSessionTasks((tasks) => finishSessionTask(tasks, taskId, 'error', message));
                 }
                 return;
             }
@@ -123,18 +162,22 @@ export function TasksPage() {
             }
             const done = await waitScrapeDone(controller.signal);
             if (aliveRef.current && !controller.signal.aborted) {
-                if (done.error) {
-                    setBanner(`刮削失败：${done.error}`);
-                } else {
-                    setBanner(`刮削已完成：成功 ${done.summary?.scraped ?? 0}，失败 ${done.summary?.failed ?? 0}，跳过 ${done.summary?.skipped ?? 0}`);
-                }
+                const summary = done.error
+                    ? `刮削失败：${done.error}`
+                    : `刮削已完成：成功 ${done.summary?.scraped ?? 0}，失败 ${done.summary?.failed ?? 0}，跳过 ${done.summary?.skipped ?? 0}`;
+                setBanner(summary);
+                setSessionTasks((tasks) =>
+                    finishSessionTask(tasks, taskId, done.error ? 'error' : 'success', summary)
+                );
             }
             if (!controller.signal.aborted) {
                 await load();
             }
         } catch (error) {
             if (aliveRef.current && !controller.signal.aborted) {
-                setBanner(`刮削失败：${error instanceof Error ? error.message : '未知错误'}`);
+                const message = `刮削失败：${error instanceof Error ? error.message : '未知错误'}`;
+                setBanner(message);
+                setSessionTasks((tasks) => finishSessionTask(tasks, taskId, 'error', message));
             }
         } finally {
             scrapeInFlightRef.current = false;
@@ -227,6 +270,42 @@ export function TasksPage() {
                         </div>
                     </div>
                 </div>
+            ) : null}
+            {running ? (
+                <p className="task-note">
+                    主进程刮削正在运行；离开页面后无法恢复百分比，仅能通过状态接口确认“运行中”。
+                </p>
+            ) : null}
+            {state.status === 'success' ? (
+                <section className="task-history" aria-label="本次会话任务">
+                    <h3 className="task-history__title">本次会话任务（不持久化）</h3>
+                    {sessionTasks.length === 0 ? (
+                        <p className="task-history__empty">尚未在本页面触发任务。</p>
+                    ) : (
+                        <ul className="task-history__list">
+                            {sessionTasks.map((task) => (
+                                <li key={task.id} className="task-history__item">
+                                    <span className="task-history__kind">{taskKindLabel(task.kind)}</span>
+                                    <span className="task-history__time">{formatTaskTime(task.startedAt)}</span>
+                                    <span className={`task-history__status task-history__status--${task.status}`}>
+                                        {taskStatusLabel(task.status)}
+                                    </span>
+                                    <span className="task-history__summary">{task.summary}</span>
+                                    {task.status === 'error' ? (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={scanPending || scrapePending || running}
+                                            onClick={() => (task.kind === 'scan' ? void scan() : void scrape())}
+                                        >
+                                            重试
+                                        </Button>
+                                    ) : null}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
             ) : null}
         </section>
     );

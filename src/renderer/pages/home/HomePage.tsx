@@ -8,6 +8,7 @@ import { LockIcon } from '../../components/icons';
 import { HomeHeader } from './HomeHeader';
 import { LibraryOverview, LibraryOverviewSkeleton } from './LibraryOverview';
 import { RecentlyAddedSection, RecentlyAddedSkeleton } from './RecentlyAddedSection';
+import { ContinueWatchingSection } from './ContinueWatchingSection';
 import { CategoryQuickLinks } from './CategoryQuickLinks';
 import { HomeEmptyState } from './HomeEmptyState';
 
@@ -89,6 +90,7 @@ export function HomePage() {
         <section className="app-page">
             <HomeHeader />
             <CategoryQuickLinks />
+            <ContinueWatchingSection items={state.data.continueWatching} />
             <LibraryOverview categories={state.data.categories} />
             <RecentlyAddedSection items={state.data.recent} />
         </section>
