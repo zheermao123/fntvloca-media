@@ -102,4 +102,4 @@ Phase 3 在 Windows 环境达到发布候选质量标准：核心流程、隐私
 
 - 发布环境与负向路径验证结果见 `docs/ui2/release/FORMAL_RELEASE_GATE_REPORT.md`。
 - `release` Environment 已配置 required reviewer 与仅 release 分支策略；正式 Tag/Release 仍未执行。
-- release 分支同步与正向审批验证因旧代码/旧 workflow 不兼容而阻塞，等待用户决定是否同步 Release Candidate。
+- release 分支已同步 RC（56f8c7c）；正向 run 43678693453 在 Environment 审批处等待后被取消，未发布；正式 Tag/Release 待用户授权。
