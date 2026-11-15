@@ -32,4 +32,4 @@
 
 - 未创建正式 Tag/Release；如未来发现发布问题，撤销/删除 Release 需单独授权。
 - CI 预览构建仅上传 Actions Artifact；`--publish never` 与 R3 Release Job 条件防止隐式发布。
-- 正式发布前必须配置 `release` Environment 审批；未配置前不得执行正式发布。
+- `release` Environment 已配置 Required reviewer 与仅 release 分支策略；正式发布仍需用户明确授权，最终候选产物的 Run/SHA256 需在审批前重新记录并核对。
