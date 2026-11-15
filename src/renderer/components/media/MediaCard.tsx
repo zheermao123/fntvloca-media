@@ -1,11 +1,13 @@
 import { memo, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PosterImage } from './PosterImage';
-import { StarIcon } from '../icons';
+import { PlayIcon, StarIcon } from '../icons';
+import { useToast } from '../ui/ToastProvider';
 import { setFavorite } from '../../services/media/mediaService';
 import type { MediaCardModel } from '../../services/library/library.types';
 
 export const MediaCard = memo(function MediaCard({ model }: { model: MediaCardModel }) {
+    const { showToast } = useToast();
     const [favorite, setFavoriteState] = useState(model.favorite === true);
     const [busy, setBusy] = useState(false);
 
@@ -23,8 +25,9 @@ export const MediaCard = memo(function MediaCard({ model }: { model: MediaCardMo
         try {
             await setFavorite(target.type, target.id, next, target.season);
             setFavoriteState(next);
+            showToast(next ? '已加入收藏' : '已取消收藏', 'success');
         } catch {
-            // 失败时保持原状态，刷新目录后可重试
+            showToast('收藏操作失败，请重试', 'error');
         } finally {
             setBusy(false);
         }
@@ -40,6 +43,17 @@ export const MediaCard = memo(function MediaCard({ model }: { model: MediaCardMo
                             {badge}
                         </span>
                     ))}
+                    <span className="media-card__play" aria-hidden="true">
+                        <PlayIcon size={18} />
+                    </span>
+                    {typeof model.progressPct === 'number' && model.progressPct > 0 ? (
+                        <progress
+                            className="media-card__progress"
+                            max={100}
+                            value={Math.min(100, Math.max(0, model.progressPct))}
+                            aria-label={`观看进度 ${model.progressPct}%`}
+                        />
+                    ) : null}
                 </div>
                 <div className="media-card__name">{model.title}</div>
                 <div className="media-card__meta">

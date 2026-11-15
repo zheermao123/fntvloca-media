@@ -1,8 +1,15 @@
 /** 媒体库查询适配（复用既有 library:catalog / library:show / library:item） */
 import { invoke } from '../desktop/desktopBridge';
 import { LIBRARY_CATEGORIES } from '../../app/routes';
-import { mapCatalogEntries, mapContinueEntries, summarizeCategory } from './library.mapper';
-import type { CatalogEntryDto, CatalogPage, CatalogQuery, ContinueEntryDto, HomeOverview } from './library.types';
+import { mapCatalogEntries, mapContinueEntries, mapHistoryEntries, summarizeCategory } from './library.mapper';
+import type {
+    CatalogEntryDto,
+    CatalogPage,
+    CatalogQuery,
+    ContinueEntryDto,
+    HistoryItemDto,
+    HomeOverview,
+} from './library.types';
 
 const RECENT_LIMIT = 12;
 
@@ -14,6 +21,18 @@ export async function fetchContinueWatching(privateActive: boolean): Promise<Con
     );
     if (!result || result.error) {
         throw new Error(result?.error || '继续观看查询失败');
+    }
+    return result.entries ?? [];
+}
+
+export async function fetchHistory(privateActive: boolean, limit = RECENT_LIMIT): Promise<HistoryItemDto[]> {
+    const result = await invoke<{ entries?: HistoryItemDto[]; error?: string }>(
+        'library:history',
+        { private: privateActive, limit },
+        'library:history-info'
+    );
+    if (!result || result.error) {
+        throw new Error(result?.error || '播放历史查询失败');
     }
     return result.entries ?? [];
 }
@@ -47,13 +66,15 @@ export async function fetchHomeOverview(): Promise<HomeOverview> {
         })
     );
     const categories = perCategory.map(({ category, total }) => summarizeCategory(category, total));
-    const [recent, continueEntries] = await Promise.all([
+    const [recent, continueEntries, history] = await Promise.all([
         queryCatalogPage({ sort: 'added', limit: RECENT_LIMIT }),
         fetchContinueWatching(false),
+        fetchHistory(false, RECENT_LIMIT),
     ]);
     return {
         categories,
         recent: mapCatalogEntries(recent.entries),
         continueWatching: mapContinueEntries(continueEntries),
+        recentPlayed: mapHistoryEntries(history),
     };
 }

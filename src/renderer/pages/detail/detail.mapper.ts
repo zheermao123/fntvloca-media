@@ -7,6 +7,7 @@ export type DetailItemDto = {
     title: string;
     year: number | null;
     posterPath: string | null;
+    backdropPath?: string | null;
     overview: string | null;
     rating: number | null;
     runtime: number | null;
@@ -30,6 +31,7 @@ export type DetailShowDto = {
     title: string;
     year: number | null;
     posterPath: string | null;
+    backdropPath?: string | null;
     overview: string | null;
 };
 
@@ -122,6 +124,7 @@ export function mapMovieDetail(item: DetailItemDto, extras: { watched?: boolean;
         kind: 'movie',
         title: item.title,
         poster: item.posterPath,
+        backdrop: item.backdropPath ?? null,
         overview: item.overview,
         meta,
         file: {
@@ -165,6 +168,7 @@ export function mapSeasonDetail(
         kind: 'season',
         title: `${show.title} 第 ${season} 季`,
         poster: show.posterPath,
+        backdrop: show.backdropPath ?? null,
         overview: show.overview,
         meta,
         file: resume

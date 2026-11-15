@@ -8,6 +8,7 @@ import { HomeHeader } from './HomeHeader';
 import { LibraryOverview, LibraryOverviewSkeleton } from './LibraryOverview';
 import { RecentlyAddedSection, RecentlyAddedSkeleton } from './RecentlyAddedSection';
 import { ContinueWatchingSection } from './ContinueWatchingSection';
+import { RecentlyPlayedSection } from './RecentlyPlayedSection';
 import { CategoryQuickLinks } from './CategoryQuickLinks';
 import { HomeEmptyState } from './HomeEmptyState';
 
@@ -82,6 +83,7 @@ export function HomePage() {
             <HomeHeader />
             <CategoryQuickLinks />
             <ContinueWatchingSection items={state.data.continueWatching} />
+            <RecentlyPlayedSection items={state.data.recentPlayed} />
             <LibraryOverview categories={state.data.categories} />
             <RecentlyAddedSection items={state.data.recent} />
         </section>

@@ -1,7 +1,7 @@
 /** 主进程 CatalogEntry DTO → 渲染层 MediaCardModel（纯函数，可单测） */
 import { CATEGORY_META } from '../../app/routes';
 import type { LibraryCategory } from '../../app/routes';
-import type { CatalogEntryDto, ContinueEntryDto, MediaCardModel } from './library.types';
+import type { CatalogEntryDto, ContinueEntryDto, HistoryItemDto, MediaCardModel } from './library.types';
 
 function encodeId(id: string): string {
     return encodeURIComponent(id);
@@ -28,8 +28,21 @@ export function seasonStatusText(watchedCount: number, episodeCount: number, pro
     return '未看';
 }
 
+function resolutionBadge(value: string | null | undefined): string | null {
+    if (!value) {
+        return null;
+    }
+    const match = /^(\d{3,4})p/i.exec(value);
+    if (!match) {
+        return value.toUpperCase();
+    }
+    const height = Number(match[1]);
+    return height >= 2160 ? '4K' : `${height}P`;
+}
+
 export function mapCatalogEntry(entry: CatalogEntryDto): MediaCardModel {
     if (entry.type === 'movie') {
+        const resolution = resolutionBadge(entry.item.resolution);
         return {
             key: `movie:${entry.item.id}`,
             kind: 'movie',
@@ -37,7 +50,7 @@ export function mapCatalogEntry(entry: CatalogEntryDto): MediaCardModel {
             year: entry.item.year,
             poster: entry.item.posterPath,
             subtitle: CATEGORY_META.movie.label,
-            badges: [],
+            badges: resolution ? [resolution] : [],
             statusText: entry.watched ? '已看' : '未看',
             route: movieRoute(entry.item.id),
         };
@@ -48,6 +61,10 @@ export function mapCatalogEntry(entry: CatalogEntryDto): MediaCardModel {
         badges.push(`第 ${entry.season} 季`);
     }
     badges.push(`全 ${entry.episodeCount} 集`);
+    const resolution = resolutionBadge(entry.resolution);
+    if (resolution) {
+        badges.push(resolution);
+    }
     return {
         key: `season:${entry.show.id}:${entry.season}`,
         kind: 'season',
@@ -57,6 +74,7 @@ export function mapCatalogEntry(entry: CatalogEntryDto): MediaCardModel {
         subtitle: null,
         badges,
         statusText: seasonStatusText(entry.watchedCount, entry.episodeCount, entry.progressPct),
+        progressPct: entry.progressPct,
         route: seasonRoute(entry.show.id, entry.season),
         favorite: entry.favorite,
         favoriteTarget: { type: 'season', id: entry.show.id, season: entry.season },
@@ -84,6 +102,30 @@ export function summarizeCategory(category: LibraryCategory, count: number, limi
     return { category, count, capped: limit !== undefined && count >= limit };
 }
 
+export function mapHistoryEntries(entries: readonly HistoryItemDto[]): MediaCardModel[] {
+    return entries.map((entry) => {
+        const isEpisode = entry.kind === 'episode' && entry.showId !== null;
+        const season = entry.season ?? 1;
+        const subtitle = isEpisode
+            ? `S${String(season).padStart(2, '0')}E${String(entry.episode ?? 0).padStart(2, '0')}${
+                  entry.episodeTitle ? ` · ${entry.episodeTitle}` : ''
+              }`
+            : null;
+        return {
+            key: `history:${entry.itemId}`,
+            kind: isEpisode ? 'season' : 'movie',
+            title: entry.title,
+            year: entry.year,
+            poster: entry.posterPath,
+            subtitle,
+            badges: [],
+            statusText: entry.watched ? '已看' : entry.progressPct > 0 ? `观看中 ${entry.progressPct}%` : '未看',
+            progressPct: entry.progressPct,
+            route: isEpisode && entry.showId ? seasonRoute(entry.showId, season) : movieRoute(entry.itemId),
+        };
+    });
+}
+
 export function mapContinueEntries(entries: readonly ContinueEntryDto[]): MediaCardModel[] {
     return entries.map((entry) => {
         const { item, state } = entry;
@@ -105,6 +147,7 @@ export function mapContinueEntries(entries: readonly ContinueEntryDto[]): MediaC
             subtitle,
             badges: [],
             statusText: pct > 0 ? `观看中 ${pct}%` : '继续观看',
+            progressPct: pct,
             route: isEpisode && item.showId ? seasonRoute(item.showId, season) : movieRoute(item.id),
         };
     });

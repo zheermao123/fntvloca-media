@@ -35,7 +35,8 @@ textarea,
     gap: var(--space-1);
     padding: var(--space-3);
     border-right: 1px solid var(--color-border);
-    background: var(--color-surface);
+    background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+    backdrop-filter: blur(28px) saturate(140%);
     overflow-y: auto;
 }
 
@@ -157,7 +158,30 @@ textarea,
     flex: 0 0 auto;
     padding: 0 var(--space-6);
     border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
+    background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+    backdrop-filter: blur(22px) saturate(140%);
+}
+
+.app-theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition:
+        background var(--duration-fast) var(--easing-standard),
+        color var(--duration-fast) var(--easing-standard);
+}
+
+.app-theme-toggle:hover {
+    background: var(--color-surface-muted);
+    color: var(--color-text-primary);
 }
 
 .app-header__breadcrumb {

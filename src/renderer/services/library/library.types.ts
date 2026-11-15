@@ -61,6 +61,7 @@ export type CatalogSeasonEntryDto = {
     watchedCount: number;
     favorite: boolean;
     progressPct: number;
+    resolution?: string | null;
     resumeItemId: string;
     addedAt: number;
     lastPlayedAt: number;
@@ -79,6 +80,7 @@ export type MediaCardModel = {
     subtitle: string | null;
     badges: string[];
     statusText: string;
+    progressPct?: number;
     /** 详情路由（季卡携带 ?season=） */
     route: string;
     favorite?: boolean;
@@ -111,8 +113,26 @@ export type ContinueEntryDto = {
     activityAt: number;
 };
 
+export type HistoryItemDto = {
+    itemId: string;
+    title: string;
+    kind: 'movie' | 'episode';
+    showId: string | null;
+    season: number | null;
+    episode: number | null;
+    episodeTitle: string | null;
+    posterPath: string | null;
+    year: number | null;
+    watched: boolean;
+    positionTs: number;
+    durationTs: number;
+    progressPct: number;
+    lastPlayedAt: number | null;
+};
+
 export type HomeOverview = {
     categories: HomeCategorySummary[];
     recent: MediaCardModel[];
     continueWatching: MediaCardModel[];
+    recentPlayed: MediaCardModel[];
 };

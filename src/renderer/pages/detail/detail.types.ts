@@ -12,6 +12,7 @@ export type MediaDetailModel = {
     kind: 'movie' | 'season';
     title: string;
     poster: string | null;
+    backdrop: string | null;
     overview: string | null;
     meta: MetaItem[];
     file: { name: string; sizeLabel: string; resolution: string | null } | null;
