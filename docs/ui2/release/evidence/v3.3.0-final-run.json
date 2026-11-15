@@ -39,6 +39,7 @@
   ],
   "release": {
     "tag": "v3.3.0",
+    "tag_commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d",
     "url": "https://github.com/zheermao123/fntvloca-media/releases/tag/v3.3.0",
     "merge_commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d",
     "release_job": "success",

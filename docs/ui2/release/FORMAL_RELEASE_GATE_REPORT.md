@@ -89,7 +89,8 @@ macOS/Linux 构建成功仅代表产物可构建，**不代表实机运行验收
 - 要求 last push approval、dismiss stale reviews；
 - 禁止 force push、禁止删除分支、要求会话解决；
 - `enforce_admins` 在本报告提交后启用（文档提交需要一次 admin 直推）。
-- 限制：该仓库为个人仓库，Branch Protection API 不支持 users/teams 推送白名单；无法在 API 层限制“谁可推送”，由 PR 审批 + enforce_admins 约束。
+- 2026-11-15 用户决定取消第二审批人限制，`required_pull_request_reviews` 已移除；保留 required checks、禁 force/删除、enforce_admins。
+- 限制：该仓库为个人仓库，Branch Protection API 不支持 users/teams 推送白名单；无法在 API 层限制“谁可推送”。
 
 ### P1-03 Environment 独立审批（部分完成，待决策）
 
@@ -116,12 +117,11 @@ macOS/Linux 构建成功仅代表产物可构建，**不代表实机运行验收
 
 **结论：** 验收报告中的 62FA… 仅对应集成验收 Run，不是正向预览/最终发布产物；最终候选必须在版本号确定后重新构建，并将同一 Run 的全部平台文件、大小、SHA256 记录到审批材料，审批与发布后再核对。
 
-## 7. 边界确认
+## 7. 交付结果与边界
 
+- 已合并 Phase 3 与版本 PR 到集成分支与 release 分支；
+- 已创建 Tag/Release **v3.3.0** 并上传正式安装包（经用户授权）；
+- 已批准 Environment 部署并核对资产哈希；
 - 未合并 main；
-- 未创建/推送新 Tag；
-- 未创建/修改 GitHub Release 资产；
-- 未批准 Environment 部署；
-- 未上传正式发行包；
-- 未切换 React 默认 UI；
+- 未切换 React 默认 UI（classic 仍为默认）；
 - 临时验证分支已删除。
