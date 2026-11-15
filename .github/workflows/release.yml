@@ -315,6 +315,7 @@ jobs:
       needs.check-commit.outputs.should-skip != 'true' &&
       github.repository == 'zheermao123/fntvloca-media' &&
       github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/release' &&
       github.event.inputs.publish == 'true' &&
       github.event.inputs.platform == 'all'
 
