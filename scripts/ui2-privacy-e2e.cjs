@@ -201,6 +201,7 @@ async function main() {
     const report = { profile, steps: [], ok: true };
     let child = spawnApp(profile);
     let cdp = null;
+    let privateSourceId = '';
 
     const step = async (name, fn) => {
         try {
@@ -259,6 +260,7 @@ async function main() {
             if (!added?.source?.id) {
                 throw new Error('add-source failed: ' + JSON.stringify(added));
             }
+            privateSourceId = added.source.id;
             const scan = await bridgeInvoke(cdp, 'library:scan', 'library:scan-done', {}, 60000);
             if (scan?.error) {
                 throw new Error('scan failed: ' + scan.error);
@@ -295,6 +297,44 @@ async function main() {
                 'privacy active label'
             );
             return 'unlocked';
+        });
+
+        await step('source test and update work on isolated source', async () => {
+            const tested = await bridgeInvoke(
+                cdp,
+                'library:test-source',
+                'library:test-source-result',
+                { sourceId: privateSourceId, requestId: 'e2e-source-test' },
+                20000
+            );
+            if (!tested?.reachable) {
+                throw new Error('source test failed: ' + JSON.stringify(tested));
+            }
+            const updated = await bridgeInvoke(
+                cdp,
+                'library:update-source',
+                'library:source-updated',
+                { id: privateSourceId, name: 'E2E Private Renamed', category: 'movie' },
+                20000
+            );
+            if (!updated?.success) {
+                throw new Error('source update failed: ' + JSON.stringify(updated));
+            }
+            const sources = await bridgeInvoke(
+                cdp,
+                'library:list-sources',
+                'library:sources-info',
+                { private: true },
+                10000
+            );
+            const refreshed = (sources?.sources ?? []).find((item) => item.id === privateSourceId);
+            if (!refreshed || refreshed.name !== 'E2E Private Renamed') {
+                throw new Error('source rename not reflected');
+            }
+            if (refreshed.config && 'passwordEnc' in refreshed.config) {
+                throw new Error('credential ciphertext exposed to renderer');
+            }
+            return { latencyMs: tested.latencyMs, name: refreshed.name };
         });
 
         let privateHref = '';

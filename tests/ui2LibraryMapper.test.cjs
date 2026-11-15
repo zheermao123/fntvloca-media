@@ -109,3 +109,45 @@ test('library rows reuse card mapping with meta segments', () => {
     assert.equal(mapped[0].statusText, '已看 4/10');
     assert.equal(mapped[0].route, '/media/show-1?season=2');
 });
+test('continue entries map to episode/movie routes with progress status', () => {
+    const mapper = require(path.join(__dirname, '..', 'tmp', 'renderer-test', 'services', 'library', 'library.mapper.js'));
+    const models = mapper.mapContinueEntries([
+        {
+            item: {
+                id: 'ep-1',
+                title: 'Show A',
+                kind: 'episode',
+                showId: 'show-1',
+                season: 2,
+                episode: 3,
+                episodeTitle: 'E3',
+                posterPath: null,
+                year: 2020,
+            },
+            state: { positionTs: 500, durationTs: 1000, watched: false },
+            showTitle: 'Show A',
+            activityAt: 5,
+        },
+        {
+            item: {
+                id: 'movie-1',
+                title: 'Movie A',
+                kind: 'movie',
+                showId: null,
+                season: null,
+                episode: null,
+                episodeTitle: null,
+                posterPath: null,
+                year: 2019,
+            },
+            state: { positionTs: 0, durationTs: 0, watched: false },
+            showTitle: null,
+            activityAt: 4,
+        },
+    ]);
+    assert.equal(models[0].route, '/media/show-1?season=2');
+    assert.equal(models[0].statusText, '观看中 50%');
+    assert.equal(models[0].subtitle, 'S02E03 · E3');
+    assert.equal(models[1].route, '/media/movie-1');
+    assert.equal(models[1].statusText, '继续观看');
+});

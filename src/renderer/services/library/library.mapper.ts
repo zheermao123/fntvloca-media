@@ -1,7 +1,7 @@
 /** 主进程 CatalogEntry DTO → 渲染层 MediaCardModel（纯函数，可单测） */
 import { CATEGORY_META } from '../../app/routes';
 import type { LibraryCategory } from '../../app/routes';
-import type { CatalogEntryDto, MediaCardModel } from './library.types';
+import type { CatalogEntryDto, ContinueEntryDto, MediaCardModel } from './library.types';
 
 function encodeId(id: string): string {
     return encodeURIComponent(id);
@@ -80,4 +80,30 @@ export function parseMediaRoute(id: string, search: string): ParsedMediaRoute {
 /** 分类计数（用于首页概览；按真实 catalog 查询结果计数） */
 export function summarizeCategory(category: LibraryCategory, count: number, limit?: number): { category: LibraryCategory; count: number; capped: boolean } {
     return { category, count, capped: limit !== undefined && count >= limit };
+}
+
+export function mapContinueEntries(entries: readonly ContinueEntryDto[]): MediaCardModel[] {
+    return entries.map((entry) => {
+        const { item, state } = entry;
+        const isEpisode = item.kind === 'episode' && item.showId !== null;
+        const season = item.season ?? 1;
+        const pct =
+            state.durationTs > 0 ? Math.min(100, Math.max(0, Math.round((state.positionTs / state.durationTs) * 100))) : 0;
+        const subtitle = isEpisode
+            ? `S${String(season).padStart(2, '0')}E${String(item.episode ?? 0).padStart(2, '0')}${
+                  item.episodeTitle ? ` · ${item.episodeTitle}` : ''
+              }`
+            : null;
+        return {
+            key: `continue:${item.id}`,
+            kind: isEpisode ? 'season' : 'movie',
+            title: isEpisode ? entry.showTitle ?? item.title : item.title,
+            year: item.year,
+            poster: item.posterPath,
+            subtitle,
+            badges: [],
+            statusText: pct > 0 ? `观看中 ${pct}%` : '继续观看',
+            route: isEpisode && item.showId ? seasonRoute(item.showId, season) : movieRoute(item.id),
+        };
+    });
 }

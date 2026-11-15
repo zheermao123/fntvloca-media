@@ -96,3 +96,22 @@ export function formatScanResult(result: ScanDoneDto): string {
         : '';
     return `扫描完成：${parts.join('，')}${cleaned}`;
 }
+
+export function formatSourceTestResult(result: {
+    reachable: boolean;
+    latencyMs: number;
+    reason?: string;
+}): string {
+    if (result.reachable) {
+        return `连接正常（${Math.max(0, Math.round(result.latencyMs))}ms）`;
+    }
+    const labels: Record<string, string> = {
+        auth: '认证失败',
+        not_found: '路径不存在',
+        network: '网络不可达',
+        timeout: '连接超时',
+        unsupported: '暂不支持的源类型',
+        unknown: '连接失败',
+    };
+    return `连接失败：${labels[result.reason ?? 'unknown'] ?? '连接失败'}`;
+}

@@ -8,6 +8,7 @@ import { LockIcon } from '../../components/icons';
 import { HomeHeader } from './HomeHeader';
 import { LibraryOverview, LibraryOverviewSkeleton } from './LibraryOverview';
 import { RecentlyAddedSection, RecentlyAddedSkeleton } from './RecentlyAddedSection';
+import { ContinueWatchingSection } from './ContinueWatchingSection';
 import { CategoryQuickLinks } from './CategoryQuickLinks';
 import { HomeEmptyState } from './HomeEmptyState';
 

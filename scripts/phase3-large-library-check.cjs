@@ -29,8 +29,9 @@ function seedLibrary(profile) {
         name: 'Bench Movies',
         config: { rootPath: 'E:\\bench', category: 'movie' },
     });
+    let firstMovieId = '';
     for (let i = 0; i < MOVIES; i += 1) {
-        store.upsertItem({
+        const inserted = store.upsertItem({
             sourceId: movieSource.id,
             kind: 'movie',
             title: `Bench Movie ${String(i).padStart(5, '0')}`,
@@ -39,6 +40,12 @@ function seedLibrary(profile) {
             fileSize: 1024,
             resolution: '1080p',
         });
+        if (i === 0) {
+            firstMovieId = inserted.item.id;
+        }
+    }
+    if (firstMovieId) {
+        store.recordProgress(firstMovieId, 500, 1000);
     }
     const tvSource = store.addSource({
         type: 'local',
@@ -236,6 +243,7 @@ async function main() {
         if (!String(firstInfo.count).includes('17000')) {
             throw new Error('total count mismatch: ' + firstInfo.count);
         }
+
     } catch (error) {
         report.ok = false;
         report.error = error.message;

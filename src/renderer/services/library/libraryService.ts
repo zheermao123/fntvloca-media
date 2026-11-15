@@ -1,10 +1,22 @@
 /** 媒体库查询适配（复用既有 library:catalog / library:show / library:item） */
 import { invoke } from '../desktop/desktopBridge';
 import { LIBRARY_CATEGORIES } from '../../app/routes';
-import { mapCatalogEntries, summarizeCategory } from './library.mapper';
-import type { CatalogEntryDto, CatalogPage, CatalogQuery, HomeOverview } from './library.types';
+import { mapCatalogEntries, mapContinueEntries, summarizeCategory } from './library.mapper';
+import type { CatalogEntryDto, CatalogPage, CatalogQuery, ContinueEntryDto, HomeOverview } from './library.types';
 
 const RECENT_LIMIT = 12;
+
+export async function fetchContinueWatching(privateActive: boolean): Promise<ContinueEntryDto[]> {
+    const result = await invoke<{ entries?: ContinueEntryDto[]; error?: string }>(
+        'library:continue',
+        { private: privateActive },
+        'library:continue-info'
+    );
+    if (!result || result.error) {
+        throw new Error(result?.error || '继续观看查询失败');
+    }
+    return result.entries ?? [];
+}
 
 export async function queryCatalogPage(params: CatalogQuery): Promise<CatalogPage> {
     const result = await invoke<Partial<CatalogPage> & { error?: string }>(
@@ -35,6 +47,13 @@ export async function fetchHomeOverview(): Promise<HomeOverview> {
         })
     );
     const categories = perCategory.map(({ category, total }) => summarizeCategory(category, total));
-    const recent = await queryCatalogPage({ sort: 'added', limit: RECENT_LIMIT });
-    return { categories, recent: mapCatalogEntries(recent.entries) };
+    const [recent, continueEntries] = await Promise.all([
+        queryCatalogPage({ sort: 'added', limit: RECENT_LIMIT }),
+        fetchContinueWatching(false),
+    ]);
+    return {
+        categories,
+        recent: mapCatalogEntries(recent.entries),
+        continueWatching: mapContinueEntries(continueEntries),
+    };
 }

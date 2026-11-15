@@ -1,5 +1,5 @@
 {
-  "profile": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\fntv-privacy-e2e-fCtb1Y",
+  "profile": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\fntv-privacy-e2e-EQX1Mh",
   "steps": [
     {
       "name": "boot isolated app",
@@ -11,7 +11,7 @@
       "ok": true,
       "detail": {
         "added": 1,
-        "sourceId": "e77c8cf2-22c7-4221-8f62-32bc551d34b2"
+        "sourceId": "958b5ca5-12f2-48c4-8f26-78bc146670b6"
       }
     },
     {
@@ -30,12 +30,20 @@
       "detail": "unlocked"
     },
     {
+      "name": "source test and update work on isolated source",
+      "ok": true,
+      "detail": {
+        "latencyMs": 0,
+        "name": "E2E Private Renamed"
+      }
+    },
+    {
       "name": "privacy library shows private fixture only",
       "ok": true,
       "detail": {
         "count": 1,
         "title": "E2E Private",
-        "href": "#/media/f7e94df6-faba-450f-9433-754d8288fbfc?season=1"
+        "href": "#/media/02a4c252-441b-46ef-9f3f-55e1bb6808da?season=1"
       }
     },
     {
@@ -57,7 +65,7 @@
       "name": "history back cannot restore private content",
       "ok": true,
       "detail": {
-        "hash": "#/media/f7e94df6-faba-450f-9433-754d8288fbfc?season=1",
+        "hash": "#/media/02a4c252-441b-46ef-9f3f-55e1bb6808da?season=1",
         "detailTitle": null
       }
     },

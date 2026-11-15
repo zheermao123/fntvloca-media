@@ -26,3 +26,48 @@ export function scrapePercent(progress: ScrapeProgressDto): number {
     }
     return Math.max(0, Math.min(100, Math.round((progress.done / progress.total) * 100)));
 }
+
+export type SessionTaskKind = 'scan' | 'scrape';
+export type SessionTaskStatus = 'running' | 'success' | 'error';
+
+export type SessionTask = {
+    id: string;
+    kind: SessionTaskKind;
+    startedAt: number;
+    finishedAt: number | null;
+    status: SessionTaskStatus;
+    summary: string;
+};
+
+export function addSessionTask(tasks: SessionTask[], task: SessionTask, max = 20): SessionTask[] {
+    return [task, ...tasks].slice(0, max);
+}
+
+export function finishSessionTask(
+    tasks: SessionTask[],
+    id: string,
+    status: Exclude<SessionTaskStatus, 'running'>,
+    summary: string,
+    finishedAt: number = Date.now()
+): SessionTask[] {
+    return tasks.map((task) =>
+        task.id === id ? { ...task, status, summary, finishedAt } : task
+    );
+}
+
+export function taskKindLabel(kind: SessionTaskKind): string {
+    return kind === 'scan' ? '媒体库扫描' : 'TMDB 刮削';
+}
+
+export function taskStatusLabel(status: SessionTaskStatus): string {
+    if (status === 'running') {
+        return '进行中';
+    }
+    return status === 'success' ? '已完成' : '失败';
+}
+
+export function formatTaskTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}

@@ -123,3 +123,31 @@ test('season entries paginate by show/season cards with totals', () => {
         store.close();
     }
 });
+
+test('category filters partition totals by source content type', () => {
+    const store = newStore('fntv-page-category-');
+    try {
+        const movieSource = store.addSource({ type: 'local', name: 'M', config: { category: 'movie' } });
+        seedMovies(store, movieSource.id, ['M1', 'M2']);
+        const tvSource = store.addSource({ type: 'local', name: 'T', config: { category: 'tv' } });
+        for (let s = 0; s < 2; s += 1) {
+            const { show } = store.upsertShow({ sourceId: tvSource.id, groupKey: `g${s}`, title: `T${s}` });
+            store.upsertItem({
+                sourceId: tvSource.id,
+                kind: 'episode',
+                showId: show.id,
+                title: `T${s}`,
+                season: 1,
+                episode: 1,
+                filePath: `t${s}.mkv`,
+            });
+        }
+
+        assert.equal(buildCatalogPage(store, { category: 'movie' }).total, 2);
+        assert.equal(buildCatalogPage(store, { category: 'tv' }).total, 2);
+        assert.equal(buildCatalogPage(store, { category: 'anime' }).total, 0);
+        assert.equal(buildCatalogPage(store, {}).total, 4);
+    } finally {
+        store.close();
+    }
+});

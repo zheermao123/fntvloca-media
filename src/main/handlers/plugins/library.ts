@@ -14,7 +14,7 @@ import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
 import { buildCatalogPage } from '../../../modules/library/catalog';
 import { categoryOfSource, folderNameFromPath, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
-import { isPrivateSource } from '../../../modules/library/sourceCategory';
+import { isPrivateSource, toRendererSource } from '../../../modules/library/sourceCategory';
 import { testLocalRoot, testWebdavSource } from '../../../modules/library/sourceTest';
 import { planSourceUpdate } from '../../../modules/library/sourceEdit';
 import type { SourceUpdatePatch } from '../../../modules/library/sourceEdit';
@@ -136,7 +136,7 @@ function listSourcesPayload(privateOnly: boolean): { sources: unknown[] } {
         .filter((source) => isPrivateSource(source) === privateOnly)
         .map((source) => {
             const itemCount = store.countItems(source.id);
-            return { ...source, itemCount, category: categoryOfSource(source) };
+            return { ...toRendererSource(source), itemCount, category: categoryOfSource(source) };
         });
     return { sources };
 }
