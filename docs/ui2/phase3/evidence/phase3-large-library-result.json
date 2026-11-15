@@ -1,0 +1,52 @@
+{
+  "fixture": {
+    "movies": 17000,
+    "shows": 500,
+    "episodes": 8
+  },
+  "seedMs": 7454,
+  "steps": [
+    {
+      "name": "first page",
+      "ok": true,
+      "ms": 97.80000000074506,
+      "cards": 120,
+      "count": "17000 部 / 季",
+      "domNodes": 1564,
+      "heapMB": 10,
+      "more": "加载更多（已显示 120 / 17000）"
+    },
+    {
+      "name": "load more",
+      "ok": true,
+      "pages": [
+        {
+          "page": 2,
+          "cards": 240,
+          "ms": 66.5
+        },
+        {
+          "page": 3,
+          "cards": 360,
+          "ms": 70.19999999925494
+        },
+        {
+          "page": 4,
+          "cards": 480,
+          "ms": 76
+        }
+      ]
+    },
+    {
+      "name": "paged result integrity",
+      "ok": true,
+      "cards": 480,
+      "unique": 480,
+      "count": "17000 部 / 季",
+      "domNodes": 5884,
+      "heapMB": 10,
+      "more": "加载更多（已显示 480 / 17000）"
+    }
+  ],
+  "ok": true
+}

@@ -4,6 +4,8 @@ import type {
     FavoriteType,
     LibraryItem,
     ListItemQuery,
+    MovieCatalogPage,
+    MovieCatalogQuery,
     MetadataSource,
     NewItem,
     NewShow,
@@ -537,6 +539,59 @@ export class SqliteLibraryStore implements LibraryStore {
         return rows.map(rowToItem);
     }
 
+    queryMovieCatalog(query: MovieCatalogQuery): MovieCatalogPage {
+        this.assertOpen();
+        const conditions = ["i.kind = 'movie'"];
+        const params: unknown[] = [];
+        if (query.sourceIds.length === 0) {
+            conditions.push('1 = 0');
+        } else {
+            conditions.push('i.source_id IN (' + query.sourceIds.map(() => '?').join(', ') + ')');
+            params.push(...query.sourceIds);
+        }
+        const needle = (query.needle ?? '').trim();
+        if (needle.length > 0) {
+            conditions.push(
+                "(instr(lower(i.title), lower(?)) > 0 OR instr(lower(COALESCE(i.original_title, '')), lower(?)) > 0)"
+            );
+            params.push(needle, needle);
+        }
+        if (query.watched !== undefined) {
+            conditions.push('COALESCE(w.watched, 0) = ?');
+            params.push(query.watched ? 1 : 0);
+        }
+        if (query.favorite !== undefined) {
+            conditions.push(
+                (query.favorite ? '' : 'NOT ') +
+                    "EXISTS (SELECT 1 FROM favorites f WHERE f.target_key = 'movie:' || i.id)"
+            );
+        }
+        const joins = 'LEFT JOIN watch_state w ON w.item_id = i.id';
+        const where = 'WHERE ' + conditions.join(' AND ');
+        const countRow = this.stmt('SELECT COUNT(*) AS c FROM items i ' + joins + ' ' + where).get(
+            ...params
+        ) as { c: number };
+        const limit = query.limit !== undefined ? Math.max(0, Math.floor(query.limit)) : -1;
+        const offset = Math.max(0, Math.floor(query.offset ?? 0));
+        const rows = this.stmt(
+            'SELECT i.* FROM items i ' + joins + ' ' + where + ' ' + this.buildMovieOrderBy(query.sort) + ' LIMIT ? OFFSET ?'
+        ).all(...params, limit, offset) as ItemRow[];
+        return { items: rows.map(rowToItem), total: countRow.c };
+    }
+
+    private buildMovieOrderBy(sort?: ListItemQuery['sort']): string {
+        switch (sort) {
+            case 'title':
+                return 'ORDER BY i.title ASC, i.id ASC';
+            case 'year':
+                return 'ORDER BY i.year DESC, i.title ASC, i.id ASC';
+            case 'recentPlayed':
+                return 'ORDER BY COALESCE(w.last_played_at, 0) DESC, i.id ASC';
+            case 'added':
+            default:
+                return 'ORDER BY i.added_at DESC, i.id ASC';
+        }
+    }
     private buildOrderBy(sort?: ListItemQuery['sort']): string {
         switch (sort) {
             case 'title':
@@ -657,6 +712,12 @@ export class SqliteLibraryStore implements LibraryStore {
         this.assertOpen();
         const row = this.stmt('SELECT * FROM watch_state WHERE item_id = ?').get(itemId) as WatchRow | undefined;
         return row ? rowToWatch(row) : null;
+    }
+
+    listWatchStates(): WatchState[] {
+        this.assertOpen();
+        const rows = this.stmt('SELECT * FROM watch_state').all() as WatchRow[];
+        return rows.map(rowToWatch);
     }
 
     private upsertWatchState(itemId: string, mutate: (state: WatchState) => WatchState): void {

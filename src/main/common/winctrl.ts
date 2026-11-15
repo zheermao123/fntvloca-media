@@ -1,10 +1,12 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import * as log from '../../modules/logger';
 import { readConfig, saveConfig } from '../../modules/fn_config/config';
 import { restoreCookies } from '../../modules/fn_config/cookie';
-import { BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import { AccessCodeVerificationError, establishAccessCodeSession } from './accessCodeSession';
 import { applyVerifiedOriginToFnConnectBaseUrl } from '../handlers/core/fnConnect';
+import { resolveUiShell } from './uiShell';
 
 /**
  * 设置窗口为半屏
@@ -76,12 +78,46 @@ export function setupWindowShowEvents(mainWindow: BrowserWindow): void {
 
 /**
  * 加载本地媒体库页面（统一入口）
+ * 按 uiShell 解析结果选择 classic（resource/library）或 React（ui2-renderer）；
+ * React 资源缺失或加载失败时只回退一次 classic。
  * fnOS 自动登录恢复逻辑保留在 setupFnosAutoLogin 中，供 fnOS 源适配阶段复用。
  * @param {Electron.BrowserWindow} mainWindow - 主窗口实例
  */
 export function loadLibraryPage(mainWindow: BrowserWindow): void {
+    const reactEntryPath = path.join(__dirname, '../../../ui2-renderer/index.html');
+    const resolution = resolveUiShell({
+        isPackaged: app.isPackaged,
+        envShell: process.env.FNTV_UI_SHELL,
+        envDevServerUrl: process.env.FNTV_UI2_DEV_URL,
+        reactEntryExists: fs.existsSync(reactEntryPath),
+    });
+
+    if (resolution.shell === 'react') {
+        if (resolution.devServerUrl) {
+            log.info('加载 UI 2.0 React 开发服务器:', resolution.devServerUrl);
+            mainWindow.loadURL(resolution.devServerUrl).catch((error: unknown) => {
+                fallbackToClassicLibraryPage(mainWindow, error);
+            });
+            return;
+        }
+        log.info('加载 UI 2.0 React 页面:', reactEntryPath);
+        mainWindow.loadFile(reactEntryPath).catch((error: unknown) => {
+            fallbackToClassicLibraryPage(mainWindow, error);
+        });
+        return;
+    }
+
+    loadClassicLibraryPage(mainWindow);
+}
+
+function loadClassicLibraryPage(mainWindow: BrowserWindow): void {
     log.info('加载本地媒体库页面');
     mainWindow.loadFile(path.join(__dirname, '../../../resource/library/index.html'));
+}
+
+function fallbackToClassicLibraryPage(mainWindow: BrowserWindow, error: unknown): void {
+    log.warn('UI 2.0 页面加载失败，回退 classic:', error);
+    loadClassicLibraryPage(mainWindow);
 }
 
 /**

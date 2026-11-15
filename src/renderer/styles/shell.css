@@ -1,0 +1,245 @@
+/* UI 2.0 App Shell 布局（复用 preload 注入标题栏；全部使用 tokens） */
+
+/* 可交互元素一律不参与窗口拖拽（拖拽区由注入的 #custom-titlebar 提供） */
+button,
+a,
+input,
+select,
+textarea,
+[role='button'],
+[role='menuitem'] {
+    -webkit-app-region: no-drag;
+}
+
+.app-shell-root {
+    height: 100%;
+}
+
+.app-window {
+    position: fixed;
+    top: var(--layout-titlebar-height);
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    background: var(--color-bg);
+    overflow: hidden;
+}
+
+/* ---------- Sidebar ---------- */
+.app-sidebar {
+    width: var(--layout-sidebar-width);
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+    overflow-y: auto;
+}
+
+.app-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2) var(--space-3);
+}
+
+.app-brand__logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-sm);
+    background: var(--color-accent);
+    color: #ffffff;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.02em;
+}
+
+.app-brand__name {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+}
+
+.app-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.app-nav__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 32px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-md);
+    text-align: left;
+    width: 100%;
+    transition:
+        background var(--duration-fast) var(--easing-standard),
+        color var(--duration-fast) var(--easing-standard);
+}
+
+.app-nav__item:hover:not(:disabled) {
+    background: var(--color-surface-muted);
+    color: var(--color-text-primary);
+}
+
+.app-nav__item--active {
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+    font-weight: var(--font-weight-medium);
+}
+
+.app-nav__item:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.app-nav__icon {
+    display: inline-flex;
+    width: 16px;
+    justify-content: center;
+}
+
+.app-sidebar__section-title {
+    padding: var(--space-3) var(--space-2) var(--space-1);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    letter-spacing: 0.05em;
+}
+
+.app-sidebar__spacer {
+    flex: 1;
+}
+
+.app-privacy {
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--space-2);
+    margin-top: var(--space-2);
+}
+
+.app-privacy__status {
+    padding: var(--space-1) var(--space-2) 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+}
+
+.app-sidebar__footer {
+    border-top: 1px solid var(--color-border);
+    margin-top: var(--space-2);
+    padding: var(--space-2) var(--space-2) 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    min-height: 20px;
+}
+
+/* ---------- Main ---------- */
+.app-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 52px;
+    flex: 0 0 auto;
+    padding: 0 var(--space-6);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.app-header__breadcrumb {
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-sm);
+}
+
+.app-header__title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+}
+
+.app-header__spacer {
+    flex: 1;
+}
+
+.app-search-trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 30px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-muted);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.app-search-trigger:hover {
+    color: var(--color-text-primary);
+    background: var(--color-surface-hover);
+}
+
+.app-search-trigger kbd {
+    font-family: inherit;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-tertiary);
+}
+
+.app-main__scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-6);
+}
+
+.app-page {
+    max-width: var(--layout-page-max-width);
+    margin: 0 auto;
+}
+
+.app-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: var(--space-4);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.app-back:hover {
+    color: var(--color-text-primary);
+}
+
+.app-search-placeholder {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.app-error-boundary {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-8);
+    text-align: center;
+    color: var(--color-text-primary);
+}

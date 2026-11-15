@@ -142,6 +142,92 @@ function normalizeUrl(value: string): string {
     return value.replace(/\/+$/, '');
 }
 
+export type WebdavProbeReason = 'auth' | 'not_found' | 'network' | 'timeout';
+
+export type WebdavProbeResult =
+    | { ok: true; status: number }
+    | { ok: false; reason: WebdavProbeReason; message: string };
+
+export type WebdavProbeOptions = {
+    /** 单次根探测超时（毫秒），默认 5000（规格 §0.5） */
+    timeoutMs?: number;
+    /** 测试注入点：替换 axios 请求实现，不出真实网络请求 */
+    request?: (config: {
+        url: string;
+        method: string;
+        data: string;
+        headers: Record<string, string>;
+        auth?: { username: string; password: string };
+        timeout: number;
+    }) => Promise<{ status: number }>;
+};
+
+/** 剥离消息中 URL 内嵌的用户名/密码（脱敏） */
+export function sanitizeProbeMessage(message: string): string {
+    return message.replace(/\/\/[^/@\s]+@/g, '//***@');
+}
+
+/**
+ * WebDAV 根目录单次探测（PROPFIND Depth:0，超时 5s，不递归扫描）。
+ * 仅用于媒体源连接测试（B1）；认证信息只在请求内使用，不记录、不回显。
+ */
+export async function probeWebdavRoot(
+    credentials: WebdavCredentials,
+    options?: WebdavProbeOptions
+): Promise<WebdavProbeResult> {
+    const rawBase = credentials.baseUrl.trim();
+    if (!rawBase) {
+        return { ok: false, reason: 'network', message: 'WebDAV 地址为空' };
+    }
+    let parsed: URL;
+    try {
+        parsed = new URL(rawBase);
+    } catch {
+        return { ok: false, reason: 'network', message: 'WebDAV 地址格式无效' };
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return { ok: false, reason: 'network', message: '仅支持 http/https 地址' };
+    }
+    const rootUrl = rawBase.replace(/\/+$/, '') + '/';
+    const timeout = options?.timeoutMs ?? credentials.timeoutMs ?? 5000;
+    const auth = credentials.username !== undefined
+        ? { username: credentials.username, password: credentials.password ?? '' }
+        : undefined;
+    const headers: Record<string, string> = { Depth: '0', 'Content-Type': 'application/xml; charset=utf-8' };
+    try {
+        const response = options?.request
+            ? await options.request({ url: rootUrl, method: 'PROPFIND', data: buildPropfindBody(), headers, auth, timeout })
+            : await axios.create({ timeout, maxRedirects: 5, auth, headers }).request({
+                url: rootUrl,
+                method: 'PROPFIND',
+                data: buildPropfindBody(),
+            });
+        if (response.status === 200 || response.status === 207) {
+            return { ok: true, status: response.status };
+        }
+        if (response.status === 401 || response.status === 403) {
+            return { ok: false, reason: 'auth', message: '认证失败或无权访问' };
+        }
+        if (response.status === 404) {
+            return { ok: false, reason: 'not_found', message: '地址不存在' };
+        }
+        return { ok: false, reason: 'network', message: `服务器返回异常状态 ${response.status}` };
+    } catch (error) {
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        if (status === 401 || status === 403) {
+            return { ok: false, reason: 'auth', message: '认证失败或无权访问' };
+        }
+        if (status === 404) {
+            return { ok: false, reason: 'not_found', message: '地址不存在' };
+        }
+        const code = (error as { code?: string })?.code;
+        if (code === 'ECONNABORTED' || code === 'ETIMEDOUT') {
+            return { ok: false, reason: 'timeout', message: '连接超时' };
+        }
+        const raw = error instanceof Error ? error.message : String(error);
+        return { ok: false, reason: 'network', message: sanitizeProbeMessage(raw).slice(0, 200) };
+    }
+}
 export type WebdavScanOptions = {
     maxDepth?: number;
     maxFiles?: number;

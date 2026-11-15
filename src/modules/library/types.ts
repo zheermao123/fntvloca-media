@@ -77,6 +77,22 @@ export type SeasonInfo = {
 
 export type ListItemSort = 'added' | 'title' | 'year' | 'recentPlayed';
 
+export type MovieCatalogQuery = {
+    /** 已按可见性/分类过滤后的源 ID；空数组表示无匹配源 */
+    sourceIds: string[];
+    needle?: string;
+    watched?: boolean;
+    favorite?: boolean;
+    sort?: ListItemSort;
+    limit?: number;
+    offset?: number;
+};
+
+export type MovieCatalogPage = {
+    items: LibraryItem[];
+    total: number;
+};
+
 export type ListItemQuery = {
     kind?: ItemKind;
     sourceId?: string;

@@ -7,6 +7,8 @@ import type {
     ItemMetadataPatch,
     LibraryItem,
     ListItemQuery,
+    MovieCatalogPage,
+    MovieCatalogQuery,
     NewItem,
     NewShow,
     SeasonInfo,
@@ -18,6 +20,7 @@ import type {
 } from './types';
 import { AUTO_WATCH_THRESHOLD } from './types';
 import type { LibraryStore, ShowMetadataPatch } from './store';
+import { compareCodePoints } from './sort';
 
 const CONTINUE_WATCHING_MAX_RATIO = 0.98;
 const FLUSH_DELAY_MS = 300;
@@ -340,6 +343,57 @@ export class JsonLibraryStore implements LibraryStore {
         return this.data.items.find((i) => i.sourceId === sourceId && i.filePath === filePath) ?? null;
     }
 
+    queryMovieCatalog(query: MovieCatalogQuery): MovieCatalogPage {
+        this.assertOpen();
+        const sourceIds = new Set(query.sourceIds);
+        const needle = (query.needle ?? '').trim().toLowerCase();
+        let movies = this.data.items.filter((item) => item.kind === 'movie' && sourceIds.has(item.sourceId));
+        if (needle.length > 0) {
+            movies = movies.filter(
+                (item) =>
+                    item.title.toLowerCase().includes(needle) ||
+                    (item.originalTitle ?? '').toLowerCase().includes(needle)
+            );
+        }
+        if (query.watched !== undefined) {
+            movies = movies.filter(
+                (item) => (this.data.watchStates[item.id]?.watched ?? false) === query.watched
+            );
+        }
+        if (query.favorite !== undefined) {
+            movies = movies.filter(
+                (item) => Boolean(this.data.favorites['movie:' + item.id]) === query.favorite
+            );
+        }
+        const sort = query.sort ?? 'added';
+        movies.sort((a, b) => {
+            switch (sort) {
+                case 'title':
+                    return (
+                        compareCodePoints(a.title, b.title) || compareCodePoints(a.id, b.id)
+                    );
+                case 'year':
+                    return (
+                        (b.year ?? 0) - (a.year ?? 0) ||
+                        compareCodePoints(a.title, b.title) || compareCodePoints(a.id, b.id)
+                    );
+                case 'recentPlayed':
+                    return (
+                        (this.data.watchStates[b.id]?.lastPlayedAt ?? 0) -
+                            (this.data.watchStates[a.id]?.lastPlayedAt ?? 0) ||
+                        compareCodePoints(a.id, b.id)
+                    );
+                case 'added':
+                default:
+                    return b.addedAt - a.addedAt || compareCodePoints(a.id, b.id);
+            }
+        });
+        const total = movies.length;
+        const offset = Math.max(0, Math.floor(query.offset ?? 0));
+        const limit = query.limit !== undefined ? Math.max(0, Math.floor(query.limit)) : null;
+        const items = limit !== null ? movies.slice(offset, offset + limit) : movies.slice(offset);
+        return { items, total };
+    }
     listItems(query?: ListItemQuery): LibraryItem[] {
         this.assertOpen();
         let result = [...this.data.items];
@@ -472,6 +526,11 @@ export class JsonLibraryStore implements LibraryStore {
     getWatchState(itemId: string): WatchState | null {
         this.assertOpen();
         return this.data.watchStates[itemId] ?? null;
+    }
+
+    listWatchStates(): WatchState[] {
+        this.assertOpen();
+        return Object.values(this.data.watchStates).map((state) => ({ ...state }));
     }
 
     private upsertWatchState(itemId: string, mutate: (state: WatchState) => WatchState): void {
