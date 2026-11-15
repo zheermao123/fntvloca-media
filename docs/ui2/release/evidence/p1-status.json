@@ -1,0 +1,35 @@
+{
+  "p1_01_version": {
+    "status": "released",
+    "version": "3.3.0",
+    "tag": "v3.3.0",
+    "release_url": "https://github.com/zheermao123/fntvloca-media/releases/tag/v3.3.0",
+    "merge_commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d"
+  },
+  "p1_02_branch_protection": {
+    "status": "enabled_without_pr_review_requirement_per_user_decision",
+    "required_pr_reviews": 0,
+    "comment": "2026-11-15 用户决定取消第二审批人限制；保留检查/禁 force/禁删除/enforce_admins。",
+    "required_status_checks": [
+      "build-and-test"
+    ],
+    "strict": true,
+    "force_push": false,
+    "deletions": false,
+    "enforce_admins": true
+  },
+  "p1_03_environment": {
+    "reviewers": [
+      "zheermao123"
+    ],
+    "prevent_self_review": false,
+    "can_admins_bypass": false,
+    "independent_dual_approval": "not_required_per_user_decision_2026-11-15"
+  },
+  "p1_04_artifact_provenance": {
+    "final_run": 43683101178,
+    "final_commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d",
+    "evidence": "docs/ui2/release/evidence/v3.3.0-final-run.json",
+    "release_verified": true
+  }
+}

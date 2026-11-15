@@ -1,0 +1,53 @@
+﻿{
+    "id":  27344273514,
+    "node_id":  "EN_kwDOUY1Lxc8AAAAGXdiAag",
+    "name":  "release",
+    "url":  "https://api.github.com/repos/zheermao123/fntvloca-media/environments/release",
+    "html_url":  "https://github.com/zheermao123/fntvloca-media/deployments/activity_log?environments_filter=release",
+    "created_at":  "2026-11-15T04:42:40Z",
+    "updated_at":  "2026-11-15T04:42:40Z",
+    "can_admins_bypass":  true,
+    "protection_rules":  [
+                             {
+                                 "id":  72554713,
+                                 "node_id":  "GA_kwDOUY1Lxc4EUxjZ",
+                                 "type":  "required_reviewers",
+                                 "prevent_self_review":  false,
+                                 "reviewers":  [
+                                                   {
+                                                       "type":  "User",
+                                                       "reviewer":  {
+                                                                        "login":  "zheermao123",
+                                                                        "id":  55822017,
+                                                                        "node_id":  "MDQ6VXNlcjU1ODIyMDE3",
+                                                                        "avatar_url":  "https://avatars.githubusercontent.com/u/55822017?v=4",
+                                                                        "gravatar_id":  "",
+                                                                        "url":  "https://api.github.com/users/zheermao123",
+                                                                        "html_url":  "https://github.com/zheermao123",
+                                                                        "followers_url":  "https://api.github.com/users/zheermao123/followers",
+                                                                        "following_url":  "https://api.github.com/users/zheermao123/following{/other_user}",
+                                                                        "gists_url":  "https://api.github.com/users/zheermao123/gists{/gist_id}",
+                                                                        "starred_url":  "https://api.github.com/users/zheermao123/starred{/owner}{/repo}",
+                                                                        "subscriptions_url":  "https://api.github.com/users/zheermao123/subscriptions",
+                                                                        "organizations_url":  "https://api.github.com/users/zheermao123/orgs",
+                                                                        "repos_url":  "https://api.github.com/users/zheermao123/repos",
+                                                                        "events_url":  "https://api.github.com/users/zheermao123/events{/privacy}",
+                                                                        "received_events_url":  "https://api.github.com/users/zheermao123/received_events",
+                                                                        "type":  "User",
+                                                                        "user_view_type":  "public",
+                                                                        "site_admin":  false
+                                                                    }
+                                                   }
+                                               ]
+                             },
+                             {
+                                 "id":  72554714,
+                                 "node_id":  "GA_kwDOUY1Lxc4EUxja",
+                                 "type":  "branch_policy"
+                             }
+                         ],
+    "deployment_branch_policy":  {
+                                     "protected_branches":  false,
+                                     "custom_branch_policies":  true
+                                 }
+}

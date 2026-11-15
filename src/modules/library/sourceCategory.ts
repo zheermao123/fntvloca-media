@@ -63,3 +63,9 @@ export function folderNameFromPath(folderPath: string): string {
     const name = segments.length > 0 ? segments[segments.length - 1] : '';
     return name.length > 0 ? name : trimmed;
 }
+
+/** 渲染层安全视图：移除凭据密文（passwordEnc），保留展示所需字段 */
+export function toRendererSource<T extends { config?: Record<string, string> }>(source: T): T & { config: Record<string, string> } {
+    const { passwordEnc: _passwordEnc, ...safeConfig } = source.config ?? {};
+    return { ...source, config: safeConfig };
+}

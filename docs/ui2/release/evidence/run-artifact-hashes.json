@@ -1,0 +1,51 @@
+{
+  "note": "Artifact hashes computed from downloaded CI artifacts. These are NOT final release hashes; final candidate must be rebuilt after the version bump and re-recorded.",
+  "runs": [
+    {
+      "run_id": 43676835518,
+      "ref": "ui2-integration",
+      "commit": "d400139bc67e883036b0fa0f9021ec809b8034b8",
+      "role": "integration acceptance build",
+      "windows": {
+        "file": "FNMedia_3.2.9_win_x64.exe",
+        "bytes": 139653954,
+        "sha256": "62FA6B8DE8584CDEC80AAF8A810B63AD4F5C263DABED688018677DA4AE83F69A"
+      }
+    },
+    {
+      "run_id": 43678693453,
+      "ref": "release",
+      "commit": "56f8c7c8123e8bbea00d9f83a466147c07f10a62",
+      "role": "positive release-path build (cancelled before approval)",
+      "windows": {
+        "file": "FNMedia_3.2.9_win_x64.exe",
+        "bytes": 139653714,
+        "sha256": "8C4D675B8B0390E5EAD33122DC18EE301B719232FD505DD6181B931C0499B78B"
+      },
+      "macos": [
+        {
+          "file": "FNMedia_3.2.9_mac_x64.dmg",
+          "bytes": 144850701,
+          "sha256": "3381B7936ACB93CE4FC0A40D39C22840E09A063CB828CEC1A457AD357F913614"
+        },
+        {
+          "file": "FNMedia_3.2.9_mac_arm64.dmg",
+          "bytes": 139628775,
+          "sha256": "79774CF5814957B5762F2D654314E3B2E2F49DA39D4FCB7E5ACC09C16C04FB4E"
+        }
+      ],
+      "linux": [
+        {
+          "file": "FNMedia_3.2.9_linux_x86_64.AppImage",
+          "bytes": 139398901,
+          "sha256": "1AA4DDE5E60E7D607DE30279D5745012281F45A475CC76A37EBA59D4CA0F99F2"
+        },
+        {
+          "file": "FNMedia_3.2.9_linux_arm64.AppImage",
+          "bytes": 139185420,
+          "sha256": "27A72BC6E6335237C0CC92F72A7E3C22F65645A29B6B0A0C99384C3F1FF741A2"
+        }
+      ]
+    }
+  ]
+}

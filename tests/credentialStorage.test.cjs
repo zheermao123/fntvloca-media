@@ -23,6 +23,7 @@ test('migrates legacy credentials to OS-protected storage without changing retur
         },
         safeStorage: {
             isEncryptionAvailable() { return true; },
+            getSelectedStorageBackend() { return 'gnome_libsecret'; },
             encryptString(value) { return Buffer.from(`protected:${value}`, 'utf8'); },
             decryptString(value) {
                 const decoded = value.toString('utf8');
