@@ -9,7 +9,16 @@ export type CatalogQuery = {
     query?: string;
     sort?: 'added' | 'title' | 'year' | 'recentPlayed';
     limit?: number;
+    offset?: number;
     private?: boolean;
+};
+
+export type CatalogPage = {
+    entries: CatalogEntryDto[];
+    total: number;
+    limit: number | null;
+    offset: number;
+    hasMore: boolean;
 };
 
 type CatalogItemDto = {

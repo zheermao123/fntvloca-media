@@ -260,7 +260,7 @@ npm run renderer:build
 
 ### B-01 媒体库分页、排序、筛选与大库性能（P0，优先开发）
 
-> **B-01 执行状态（2026-11-15）：已停止在 ADR 停点。** 真实库 111 卡（2–16ms）；17k/21k fixture 下 limit=600 仍全量构建（中位 119–143ms，全量 +168.8MB）。现有接口无 offset/total，无法诚实分页。方案 A（扩展 library:catalog + SQL 下推/总数）属 L2，待批准：`docs/ui2/phase3/adr/B-01-catalog-pagination.md`。
+> **B-01 执行状态（2026-11-15）：已实施，等待 P3-B1 确认。** 21k fixture 主进程首屏 40.6–42.1ms（改前 131.7–145.6ms），真实 Electron 首屏 159ms、加载更多 74–126ms、480 卡无重复；计数口径与隐私隔离通过。记录：`docs/ui2/phase3/B-01-library-pagination.md`；ADR：`docs/ui2/phase3/adr/B-01-catalog-pagination.md`。
 
 
 **现状问题**

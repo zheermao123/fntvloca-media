@@ -1,5 +1,5 @@
 {
-  "profile": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\fntv-privacy-e2e-CU99rJ",
+  "profile": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\fntv-privacy-e2e-fCtb1Y",
   "steps": [
     {
       "name": "boot isolated app",
@@ -11,7 +11,7 @@
       "ok": true,
       "detail": {
         "added": 1,
-        "sourceId": "5a0df77c-a8b4-44cf-8bd8-5198ea1e28c6"
+        "sourceId": "e77c8cf2-22c7-4221-8f62-32bc551d34b2"
       }
     },
     {
@@ -35,7 +35,7 @@
       "detail": {
         "count": 1,
         "title": "E2E Private",
-        "href": "#/media/1b94b796-deb3-4471-931b-e0ae1e553121?season=1"
+        "href": "#/media/f7e94df6-faba-450f-9433-754d8288fbfc?season=1"
       }
     },
     {
@@ -57,7 +57,7 @@
       "name": "history back cannot restore private content",
       "ok": true,
       "detail": {
-        "hash": "#/media/1b94b796-deb3-4471-931b-e0ae1e553121?season=1",
+        "hash": "#/media/f7e94df6-faba-450f-9433-754d8288fbfc?season=1",
         "detailTitle": null
       }
     },

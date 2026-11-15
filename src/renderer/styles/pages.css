@@ -767,3 +767,8 @@
     max-height: 56vh;
     overflow: auto;
 }
+.library-page__more {
+    display: flex;
+    justify-content: center;
+    padding: 20px 0 8px;
+}

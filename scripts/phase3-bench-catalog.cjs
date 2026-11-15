@@ -18,7 +18,7 @@ const dbDir = path.join(tmp, 'library');
 fs.mkdirSync(dbDir, { recursive: true });
 
 const { createLibraryStore } = require(path.join(ROOT, 'dest', 'modules', 'library', 'store.js'));
-const { buildCatalog } = require(path.join(ROOT, 'dest', 'modules', 'library', 'catalog.js'));
+const { buildCatalogPage } = require(path.join(ROOT, 'dest', 'modules', 'library', 'catalog.js'));
 
 const store = createLibraryStore(dbDir);
 const movieSource = store.addSource({
@@ -64,18 +64,33 @@ for (let s = 0; s < SHOWS; s += 1) {
     }
 }
 
+function timed(label, fn) {
+    const start = process.hrtime.bigint();
+    const value = fn();
+    console.log(label + ': ' + (Number(process.hrtime.bigint() - start) / 1e6).toFixed(1) + 'ms, rows=' + (Array.isArray(value) ? value.length : '-'));
+    return value;
+}
+
+timed('listItems(movie)', () => store.listItems({ kind: 'movie' }));
+timed('listItems(episode)', () => store.listItems({ kind: 'episode' }));
+timed('listWatchStates', () => store.listWatchStates());
+timed('listShows', () => store.listShows());
+
+
 function bench(label, query, runs = 3) {
     const samples = [];
-    let entries = 0;
+    let page;
     for (let i = 0; i < runs; i += 1) {
         const start = process.hrtime.bigint();
-        entries = buildCatalog(store, query).length;
+        page = buildCatalogPage(store, query);
         samples.push(Number(process.hrtime.bigint() - start) / 1e6);
     }
     samples.sort((a, b) => a - b);
     return {
         label,
-        entries,
+        entries: page.entries.length,
+        total: page.total,
+        hasMore: page.hasMore,
         minMs: Number(samples[0].toFixed(1)),
         medianMs: Number(samples[Math.floor(samples.length / 2)].toFixed(1)),
         maxMs: Number(samples[samples.length - 1].toFixed(1)),
@@ -83,9 +98,10 @@ function bench(label, query, runs = 3) {
 }
 
 const results = [
-    bench('movies limit=600 added', { category: 'movie', limit: 600 }),
-    bench('tv limit=600 added', { category: 'tv', limit: 600 }),
-    bench('all limit=600 added', { limit: 600 }),
+    bench('movies page limit=120 offset=0', { category: 'movie', limit: 120, offset: 0 }),
+    bench('movies page limit=120 offset=16800', { category: 'movie', limit: 120, offset: 16800 }),
+    bench('tv page limit=120 offset=0', { category: 'tv', limit: 120, offset: 0 }),
+    bench('all page limit=120 offset=0', { limit: 120, offset: 0 }),
     bench('all no limit', {}, 1),
 ];
 

@@ -1,6 +1,6 @@
 # ADR B-01：媒体库目录分页、总数与计数口径（L2）
 
-- 状态：**待批准**（未实施）
+- 状态：**已批准并实施（2026-11-15）**；实施记录见 `docs/ui2/phase3/B-01-library-pagination.md`
 - 日期：2026-11-15
 - 分支：`feature/ui2-phase3`
 - 关联计划：`docs/ui2/PHASE3_IMPLEMENTATION_PLAN.md` B-01
@@ -65,9 +65,9 @@
 - 不修改数据库 schema（若批准索引则单独迁移 + 回滚脚本）。
 - Renderer 保留旧 `limit` 调用路径；回滚主进程改动即可恢复全量切片行为。
 
-## 7. 待用户批准
+## 7. 批准与实施结果
 
-1. 是否批准按方案 A 扩展既有 `library:catalog`（offset + total/hasMore）？
-2. 是否批准在实现中视测量结果新增 SQLite 索引（schema 变更）？若否，将仅做 SQL 聚合，不加索引。
-
-未获批准前不修改主进程查询协议或数据库。
+- 方案 A 已批准并实施：`offset` + `total/hasMore`，电影 SQL 下推 + 剧集内存聚合。
+- 未新增 SQLite 索引（测量未显示必要）。
+- 21k fixture：电影首屏 42ms、全部分类首屏 41ms（主进程）；真实 Electron 首屏 159ms、加载更多 74–126ms；480 卡无重复。
+- 深 offset 123ms（前缀成本）与剧集内存聚合列为已知限制。

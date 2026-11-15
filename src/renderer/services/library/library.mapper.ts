@@ -78,6 +78,6 @@ export function parseMediaRoute(id: string, search: string): ParsedMediaRoute {
 }
 
 /** 分类计数（用于首页概览；按真实 catalog 查询结果计数） */
-export function summarizeCategory(category: LibraryCategory, count: number, limit: number): { category: LibraryCategory; count: number; capped: boolean } {
-    return { category, count, capped: count >= limit };
+export function summarizeCategory(category: LibraryCategory, count: number, limit?: number): { category: LibraryCategory; count: number; capped: boolean } {
+    return { category, count, capped: limit !== undefined && count >= limit };
 }
