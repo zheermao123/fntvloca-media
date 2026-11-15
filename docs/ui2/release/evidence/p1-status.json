@@ -31,6 +31,15 @@
     "evidence": "docs/ui2/release/evidence/run-artifact-hashes.json",
     "acceptance_run_windows_sha256": "62FA6B8DE8584CDEC80AAF8A810B63AD4F5C263DABED688018677DA4AE83F69A",
     "positive_run_windows_sha256": "8C4D675B8B0390E5EAD33122DC18EE301B719232FD505DD6181B931C0499B78B",
-    "final_candidate": "pending_version_bump_and_rebuild"
+    "final_candidate": "pending_version_bump_and_rebuild",
+    "candidate_run": {
+      "run_id": 43682151541,
+      "ref": "chore/release-3.3.0",
+      "commit": "63bced3194fab32a7702097d50154650f051b208",
+      "windows_sha256": "568FCCEC400A8B8808DD59097B974CCAAAD9B4DEF31B3BBBD8A2CAD6126DF730",
+      "all_platforms": "success",
+      "release_job": "skipped",
+      "final": "pending_release_merge_rebuild"
+    }
   }
 }

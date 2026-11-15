@@ -122,6 +122,9 @@ macOS/Linux 构建成功仅代表产物可构建，**不代表实机运行验收
 - 已更新：`package.json`、`package-lock.json`（3.3.0）、`CHANGELOG.md` 与发布文档。
 - 待完成：PR 审批合并 → release 分支最终候选构建 → 记录同一 Run 全平台 SHA256 → Environment 审批发布。
 - 分支保护：`release` 需要 PR + 1 approval + `build-and-test`，管理员不可绕过；单人维护者无法自审批，需要第二审批人。
+- 3.3.0 候选预览构建：run `43682151541`（ref `chore/release-3.3.0`，Windows/macOS/Linux 全部构建成功，Release Job skipped）。
+  - Windows EXE：139,653,673 / `568FCCEC400A8B8808DD59097B974CCAAAD9B4DEF31B3BBBD8A2CAD6126DF730`
+  - macOS/Linux 哈希见 `docs/ui2/release/evidence/v3.3.0-candidate-run.json`；该 Run 为合并前候选，最终发布必须从 release 合并后重建并重新记录。
 
 ## 7. 边界确认
 
