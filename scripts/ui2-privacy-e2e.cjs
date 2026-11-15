@@ -337,6 +337,102 @@ async function main() {
             return { latencyMs: tested.latencyMs, name: refreshed.name };
         });
 
+        await step('webdav password edit keeps ciphertext out of renderer', async () => {
+            const added = await bridgeInvoke(
+                cdp,
+                'library:add-source',
+                'library:source-added',
+                {
+                    type: 'webdav',
+                    name: 'E2E WebDAV',
+                    url: 'http://127.0.0.1:59999/dav',
+                    username: 'e2e-user',
+                    password: 'e2e-pass-1',
+                },
+                8000
+            );
+            const id = added?.source?.id;
+            if (!id) {
+                throw new Error('webdav add-source failed: ' + JSON.stringify(added));
+            }
+            const read = async () => {
+                const result = await bridgeInvoke(
+                    cdp,
+                    'library:list-sources',
+                    'library:sources-info',
+                    { private: false },
+                    10000
+                );
+                const source = (result?.sources ?? []).find((item) => item.id === id);
+                if (!source) {
+                    throw new Error('webdav source missing');
+                }
+                if (source.config && 'passwordEnc' in source.config) {
+                    throw new Error('credential ciphertext exposed to renderer');
+                }
+                return source;
+            };
+            const initial = await read();
+            if (initial.config.username !== 'e2e-user') {
+                throw new Error('webdav username missing');
+            }
+            const replaced = await bridgeInvoke(
+                cdp,
+                'library:update-source',
+                'library:source-updated',
+                { id, password: 'e2e-pass-2' },
+                20000
+            );
+            if (!replaced?.success) {
+                throw new Error('webdav password replace failed');
+            }
+            await read();
+            const cleared = await bridgeInvoke(
+                cdp,
+                'library:update-source',
+                'library:source-updated',
+                { id, password: null },
+                20000
+            );
+            if (!cleared?.success) {
+                throw new Error('webdav password clear failed');
+            }
+            await read();
+            return { id, username: initial.config.username };
+        });
+
+        await step('task center scan and scrape failures are honest', async () => {
+            await cdp.evaluate(`location.hash = '#/tasks'; true`);
+            await cdp.waitFor(`document.querySelectorAll('.task-card').length === 2`, 'task cards');
+            await cdp.evaluate(
+                `Array.from(document.querySelectorAll('.task-card button')).find((el) => el.textContent.includes('开始扫描'))?.click(); true`
+            );
+            await cdp.waitFor(`!!document.querySelector('.task-history__item')`, 'scan history item');
+            await cdp.waitFor(
+                `(() => {
+                    const status = document.querySelector('.task-history__status')?.textContent?.trim() ?? '';
+                    return status.length > 0 && status !== '进行中';
+                })()`,
+                'scan finished',
+                60000
+            );
+            const scanStatus = await cdp.evaluate(
+                `document.querySelector('.task-history__status')?.textContent?.trim() ?? ''`
+            );
+            await cdp.evaluate(
+                `Array.from(document.querySelectorAll('.task-card button')).find((el) => el.textContent.includes('开始刮削'))?.click(); true`
+            );
+            await cdp.evaluate(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+            await cdp.waitFor(
+                `Array.from(document.querySelectorAll('.task-history__item')).some((item) =>
+                    (item.querySelector('.task-history__status')?.textContent ?? '').includes('失败')) ||
+                 (document.body.innerText || '').includes('TMDB API Key')`,
+                'scrape error surfaced',
+                20000
+            );
+            return { scanStatus };
+        });
+
         let privateHref = '';
         await step('privacy library shows private fixture only', async () => {
             await cdp.evaluate(`location.hash = '#/library/movies'; true`);

@@ -91,3 +91,10 @@ Phase 3 在 Windows 环境达到发布候选质量标准：核心流程、隐私
 2. 决定是否启用 React 为默认 UI（本阶段未启用）；
 3. 正式发布、Tag 与合并 main 需另行批准；
 4. B-03 多版本按 L2 ADR 单独排期。
+
+## 10. 合并后集成验收（2026-11-15）
+
+- `ui2-integration` @ `d400139`（PR #1 合并提交）完成 Windows 集成验收，详见 `docs/ui2/integration/ACCEPTANCE_REPORT.md`。
+- Windows CI run `43676835518`：274/274、NSIS、安装/回退/卸载冒烟通过；产物 SHA256 `62FA6B8DE8584CDEC80AAF8A810B63AD4F5C263DABED688018677DA4AE83F69A`。
+- 本机升级/卸载/官方 v3.2.9 回滚实测通过；回滚方案见 `docs/ui2/integration/ROLLBACK.md`。
+- 功能冻结；未发现新增集成阻塞问题；React 默认 UI 未切换（单独决策）。
