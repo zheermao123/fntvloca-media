@@ -526,6 +526,20 @@ async function main() {
                 throw new Error('fixture title missing: ' + info.title);
             }
             privateHref = info.href;
+            await cdp.evaluate(`(() => {
+                const trigger = document.querySelector('button[aria-label="排序方式"]');
+                if (!trigger) return false;
+                trigger.click();
+                return true;
+            })()`);
+            await cdp.waitFor(`!!document.querySelector('[role="menu"]')`, 'sort menu');
+            await cdp.evaluate(
+                `Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) => (el.textContent || '').trim() === '标题')?.click(); true`
+            );
+            await cdp.waitFor(
+                `(document.querySelector('button[aria-label="排序方式"]')?.textContent || '').includes('标题')`,
+                'sort title selected'
+            );
             return info;
         });
 
@@ -584,6 +598,21 @@ async function main() {
             );
             spawnSync('taskkill', ['/IM', 'mpv.exe', '/F'], { stdio: 'ignore' });
             return 'play click handled';
+        });
+
+        await step('sort persists after returning from detail', async () => {
+            await cdp.evaluate(`document.querySelector('.app-back')?.click(); true`);
+            await cdp.waitFor(
+                `document.querySelector('.library-page__title')?.textContent === '隐私库'`,
+                'back to privacy library'
+            );
+            const sortLabel = await cdp.evaluate(
+                `document.querySelector('button[aria-label="排序方式"]')?.textContent ?? ''`
+            );
+            if (!sortLabel.includes('标题')) {
+                throw new Error('sort reset after returning from detail: ' + sortLabel);
+            }
+            return sortLabel;
         });
         await step('private search works in privacy mode', async () => {
             await cdp.evaluate(

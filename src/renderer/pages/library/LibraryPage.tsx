@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
+import { useLibraryPreferences } from '../../app/LibraryPreferencesProvider';
 import { CATEGORY_META, resolveCategoryFromSegment } from '../../app/routes';
 import { queryCatalogPage } from '../../services/library/libraryService';
 import { mapCatalogEntries } from '../../services/library/library.mapper';
@@ -14,7 +15,7 @@ import { LibraryEmptyState } from './LibraryEmptyState';
 import { LibraryErrorState } from './LibraryErrorState';
 import { Button } from '../../components/ui/Button';
 import { mapLibraryRows } from './library.mapper';
-import type { FavoriteFilterKey, SortKey, ViewMode, WatchedFilterKey } from './library.types';
+
 
 const PAGE_SIZE = 120;
 
@@ -34,10 +35,7 @@ export function LibraryPage() {
     const category = resolveCategoryFromSegment(segment);
     const privacy = usePrivacyState();
 
-    const [sort, setSort] = useState<SortKey>('added');
-    const [watched, setWatched] = useState<WatchedFilterKey>('all');
-    const [favorite, setFavorite] = useState<FavoriteFilterKey>('all');
-    const [view, setView] = useState<ViewMode>('grid');
+    const { sort, watched, favorite, view, update } = useLibraryPreferences();
     const [state, setState] = useState<LoadState>({ status: 'loading' });
     const requestSeqRef = useRef(0);
     const loadingMoreRef = useRef(false);
@@ -137,10 +135,10 @@ export function LibraryPage() {
                 watched={watched}
                 favorite={favorite}
                 view={view}
-                onSortChange={setSort}
-                onWatchedChange={setWatched}
-                onFavoriteChange={setFavorite}
-                onViewChange={setView}
+                onSortChange={(value) => update({ sort: value })}
+                onWatchedChange={(value) => update({ watched: value })}
+                onFavoriteChange={(value) => update({ favorite: value })}
+                onViewChange={(value) => update({ view: value })}
             />
             {state.status === 'loading' ? <LibraryLoadingState /> : null}
             {state.status === 'error' ? <LibraryErrorState message={state.message} onRetry={() => void load()} /> : null}

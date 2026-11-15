@@ -7,6 +7,7 @@ import { PageHeader } from '../layout/PageHeader';
 import { Dialog } from '../components/ui/Dialog';
 import { SearchPanel } from '../pages/search/SearchPanel';
 import { usePrivacyState } from './PrivacyStateProvider';
+import { LibraryPreferencesProvider } from './LibraryPreferencesProvider';
 import { CATEGORY_META, ROUTES, resolveCategoryFromSegment } from './routes';
 
 function titleForPath(pathname: string): string {
@@ -72,6 +73,7 @@ export function AppShell() {
     }, []);
 
     return (
+        <LibraryPreferencesProvider>
         <div className="app-shell-root">
             <WindowFrame>
                 <Sidebar />
@@ -86,5 +88,6 @@ export function AppShell() {
                 <SearchPanel onNavigate={() => setSearchOpen(false)} />
             </Dialog>
         </div>
+        </LibraryPreferencesProvider>
     );
 }

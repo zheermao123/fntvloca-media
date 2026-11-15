@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
+import { useLibraryPreferences } from '../../app/LibraryPreferencesProvider';
 import { queryCatalogPage, fetchContinueWatching } from '../../services/library/libraryService';
 import { mapCatalogEntries, mapContinueEntries } from '../../services/library/library.mapper';
 import type { CatalogEntryDto, MediaCardModel } from '../../services/library/library.types';
@@ -14,7 +15,7 @@ import { LibraryErrorState } from '../library/LibraryErrorState';
 import { ContinueWatchingSection } from '../home/ContinueWatchingSection';
 import { Button } from '../../components/ui/Button';
 import { mapLibraryRows } from '../library/library.mapper';
-import type { FavoriteFilterKey, SortKey, ViewMode, WatchedFilterKey } from '../library/library.types';
+
 
 const PAGE_SIZE = 120;
 
@@ -31,10 +32,7 @@ type LoadState =
 
 export function PrivacyLibraryPage() {
     const privacy = usePrivacyState();
-    const [sort, setSort] = useState<SortKey>('added');
-    const [watched, setWatched] = useState<WatchedFilterKey>('all');
-    const [favorite, setFavorite] = useState<FavoriteFilterKey>('all');
-    const [view, setView] = useState<ViewMode>('grid');
+    const { sort, watched, favorite, view, update } = useLibraryPreferences();
     const [state, setState] = useState<LoadState>({ status: 'loading' });
     const [continueWatching, setContinueWatching] = useState<MediaCardModel[]>([]);
     const requestSeqRef = useRef(0);
@@ -137,10 +135,10 @@ export function PrivacyLibraryPage() {
                         watched={watched}
                         favorite={favorite}
                         view={view}
-                        onSortChange={setSort}
-                        onWatchedChange={setWatched}
-                        onFavoriteChange={setFavorite}
-                        onViewChange={setView}
+                        onSortChange={(value) => update({ sort: value })}
+                        onWatchedChange={(value) => update({ watched: value })}
+                        onFavoriteChange={(value) => update({ favorite: value })}
+                        onViewChange={(value) => update({ view: value })}
                     />
                     {state.entries.length === 0 ? (
                         <LibraryEmptyState privacy />
