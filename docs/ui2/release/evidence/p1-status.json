@@ -1,1 +1,36 @@
-﻿{ "p1_01_version": { "status": "blocked_decision_required", "current": "3.2.9", "options": ["3.2.10","3.3.0"] }, "p1_02_branch_protection": { "status": "enabled", "required_pr_reviews": 1, "require_last_push_approval": true, "required_status_checks": ["build-and-test"], "strict": true, "force_push": false, "deletions": false, "enforce_admins": true, "restriction_note": "personal repo: users/teams restrictions unsupported by API" }, "p1_03_environment": { "reviewers": ["zheermao123"], "prevent_self_review": false, "can_admins_bypass": false, "independent_dual_approval": "pending_second_reviewer_decision" }, "p1_04_artifact_provenance": { "evidence": "docs/ui2/release/evidence/run-artifact-hashes.json", "acceptance_run_windows_sha256": "62FA6B8DE8584CDEC80AAF8A810B63AD4F5C263DABED688018677DA4AE83F69A", "positive_run_windows_sha256": "8C4D675B8B0390E5EAD33122DC18EE301B719232FD505DD6181B931C0499B78B", "final_candidate": "pending_version_bump_and_rebuild" } }
+{
+  "p1_01_version": {
+    "status": "decided_in_prep_branch",
+    "version": "3.3.0",
+    "branch": "chore/release-3.3.0",
+    "merged_to_release": false,
+    "final_candidate": "pending_release_merge_and_rebuild"
+  },
+  "p1_02_branch_protection": {
+    "status": "enabled",
+    "required_pr_reviews": 1,
+    "require_last_push_approval": true,
+    "required_status_checks": [
+      "build-and-test"
+    ],
+    "strict": true,
+    "force_push": false,
+    "deletions": false,
+    "enforce_admins": true,
+    "restriction_note": "personal repo: users/teams restrictions unsupported by API"
+  },
+  "p1_03_environment": {
+    "reviewers": [
+      "zheermao123"
+    ],
+    "prevent_self_review": false,
+    "can_admins_bypass": false,
+    "independent_dual_approval": "pending_second_reviewer_decision"
+  },
+  "p1_04_artifact_provenance": {
+    "evidence": "docs/ui2/release/evidence/run-artifact-hashes.json",
+    "acceptance_run_windows_sha256": "62FA6B8DE8584CDEC80AAF8A810B63AD4F5C263DABED688018677DA4AE83F69A",
+    "positive_run_windows_sha256": "8C4D675B8B0390E5EAD33122DC18EE301B719232FD505DD6181B931C0499B78B",
+    "final_candidate": "pending_version_bump_and_rebuild"
+  }
+}
