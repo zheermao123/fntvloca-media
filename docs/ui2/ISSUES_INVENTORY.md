@@ -92,11 +92,33 @@
 
 - 批次 A 遗留：U1 三态主题、U3 进度条、U11 暗色走查、U12（minHeight 600）已完成。
 - 批次 B：F2、F3、F7、F9、U7 已完成；U3 横排续看卡形态未单独实现（进度条已覆盖核心诉求）。
-- 批次 C：F5、F6、U10、U11、D3 已完成；F8 已按 B-03 ADR 实现“同源 + 同 TMDB ID”真实版本；F11 已提供独立页（上限 50）；F13 已支持跳转全部媒体。
+- 批次 C：F5、F6、U10、U11、D3 已完成；F8 已按 B-03 ADR 实现"同源 + 同 TMDB ID"真实版本；F11 已提供独立页（上限 50）；F13 已支持跳转全部媒体。
 - D1/D2 已记录于 `CONTRACT_NOTES.md`。
 - 仍按决策不做：任务取消/持久化（D7）、无 TMDB ID/跨源电影自动合并（B-03）。
 - 验证与安装记录见 `BATCH_B_C_IMPLEMENTATION.md`；3.5.0 为测试构建，未发布正式 Release。
 
 ---
 
-**清单结束。** 状态列于 v3.5.0（`a605ee4`）逐项复核刷新；新增问题请按 F/U/D 编号续写并注明发现日期与基线版本。
+## 七、复查记录（2026-11-15，v3.5.0 @ `0e674fe` 之后）
+
+对"六、3.5.0 处置结果"做代码级独立核验，结论：**15 项声明属实，1 项不实（已当场修复）**。
+
+| 核验项 | 结果 |
+|---|---|
+| F2/F3/F6/F11/F13 路由（/library、/favorites、/settings、/continue、/library?q=） | ✅ `routes.ts:15-30` 全部确认 |
+| F7 批量添加 | ✅ `AddSourceDialog.tsx:64` `pickFolder(true)` + 路径去重合并 |
+| F8 多版本 | ✅ `movieVersions.ts` 同源+同 TMDB ID 真实分组、分辨率/大小排序，符合 B-03 ADR 边界（注释明确"绝不标题猜测"） |
+| F9 播放失败反馈 | ✅ 全链路确认：`media.ts:541` 主进程发送 → `preload/index.ts:38` 白名单 → `mediaService.ts:126` renderer 订阅 + Toast |
+| F5 重刮/手动匹配 | ✅ `DetailScrapeActions.tsx`（164 行）存在 |
+| U7 响应式 | ✅ `shell.css:379`（900px 抽屉）、`:411` + `pages.css:1155`（760px） |
+| U10 侧栏 IA | ✅ `tokens.css:75` 246px；`Sidebar.tsx:49/52/57` 媒体库/管理/系统三分组 + `:97-103` 资料卡 |
+| U1 三态 | ✅ `ThemeProvider.tsx:18-30` system 模式 + 设置页外观区 |
+| U12 | ✅ `mainwin.ts:10` `minHeight: 600` |
+| D1/D2 | ✅ `CONTRACT_NOTES.md` 内容准确（titlebar 决策变更理由 + 双策略规则 + 验证测试） |
+| **F14/D3（不实项）** | ❌ `HomeEmptyState.tsx:9` 仍残留"请在经典界面完成"旧文案（批次 B/C 声称 D3 已清理，实际遗漏此一处）→ **复查时已当场修复**，文案改为引导左侧「媒体源」添加 |
+
+U11 暗色走查为视觉验收声明，代码级复查无法核验，以 `BATCH_B_C_IMPLEMENTATION.md` 截图记录为准。
+
+---
+
+**清单结束。** 状态列于 v3.5.0 复核刷新（含复查修正）；新增问题请按 F/U/D 编号续写并注明发现日期与基线版本。
