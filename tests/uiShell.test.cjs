@@ -8,7 +8,7 @@ const {
     UI2_DEV_PORT,
 } = require('../dest/main/common/uiShell.js');
 
-test('resolveUiShell: packaged builds always use classic', () => {
+test('resolveUiShell: packaged builds default to react when entry exists', () => {
     assert.deepEqual(
         resolveUiShell({
             isPackaged: true,
@@ -16,6 +16,14 @@ test('resolveUiShell: packaged builds always use classic', () => {
             envDevServerUrl: `http://${UI2_DEV_HOST}:${UI2_DEV_PORT}/`,
             reactEntryExists: true,
         }),
+        { shell: 'react', devServerUrl: null }
+    );
+    assert.deepEqual(
+        resolveUiShell({ isPackaged: true, envShell: undefined, envDevServerUrl: undefined, reactEntryExists: false }),
+        { shell: 'classic', devServerUrl: null }
+    );
+    assert.deepEqual(
+        resolveUiShell({ isPackaged: true, envShell: 'classic', envDevServerUrl: undefined, reactEntryExists: true }),
         { shell: 'classic', devServerUrl: null }
     );
 });

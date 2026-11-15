@@ -54,7 +54,13 @@ export function normalizeLoopbackDevUrl(raw: string | undefined): string | null 
 
 export function resolveUiShell(options: UiShellOptions): UiShellResolution {
     if (options.isPackaged) {
-        return { shell: 'classic', devServerUrl: null };
+        // 打包版默认使用 React UI 2.0；资源缺失或显式 classic 时回退 classic。
+        if ((options.envShell ?? '').trim().toLowerCase() === 'classic') {
+            return { shell: 'classic', devServerUrl: null };
+        }
+        return options.reactEntryExists
+            ? { shell: 'react', devServerUrl: null }
+            : { shell: 'classic', devServerUrl: null };
     }
     if ((options.envShell ?? '').trim().toLowerCase() !== 'react') {
         return { shell: 'classic', devServerUrl: null };
