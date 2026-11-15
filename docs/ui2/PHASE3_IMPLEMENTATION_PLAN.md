@@ -605,4 +605,4 @@ B-01 和 B-02 是核心优先级。不得先投入大量时间做装饰性 UI，
 - **未授权事项保持未执行**：合并 main、Tag、Release、切换默认 UI。
 - R3 发布门禁收尾：Release 仅限 release 分支 + workflow_dispatch + publish=true + platform=all；elease Environment 尚未配置 Required reviewers（管理员待办），详见 phase3/R3-release-gate.md。
 - 合并后集成验收：ui2-integration @ d400139 通过（docs/ui2/integration/ACCEPTANCE_REPORT.md）；功能冻结。
-- 第四阶段发布门禁：Environment 已配置，负向路径已验证；release 分支同步/正向审批待用户决策（docs/ui2/release/FORMAL_RELEASE_GATE_REPORT.md）。
+- 第四阶段发布门禁：Environment 已配置；release 分支已同步 RC；正向审批 run 在等待处取消，负向路径通过；正式发布待用户授权（docs/ui2/release/FORMAL_RELEASE_GATE_REPORT.md）。
