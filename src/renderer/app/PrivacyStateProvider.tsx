@@ -20,6 +20,8 @@ type PrivacyContextValue = PrivacyState & {
     requestActivate: () => void;
     closeGate: () => void;
     submitPassword: (password: string) => Promise<void>;
+    setPrivacyPassword: (password: string) => Promise<{ success: boolean; error?: string }>;
+    resetPassword: () => Promise<{ success: boolean; error?: string }>;
     deactivate: () => Promise<void>;
 };
 
@@ -105,6 +107,54 @@ export function PrivacyStateProvider({ children }: { children: ReactNode }) {
         [state.available, busy]
     );
 
+    const setPrivacyPassword = useCallback(
+        async (value: string): Promise<{ success: boolean; error?: string }> => {
+            if (busy) {
+                return { success: false, error: '操作进行中' };
+            }
+            setBusy(true);
+            try {
+                if (!sendChannel('library:privacy-set-password', { password: value })) {
+                    return { success: false, error: '桌面桥接不可用' };
+                }
+                const result = await onceReply<{ success?: boolean; error?: string }>('library:privacy-result', 15000);
+                if (!result?.success) {
+                    return { success: false, error: result?.error || '设置隐私密码失败' };
+                }
+                setState((prev) => ({ ...prev, hasPassword: true, unlocked: true }));
+                return { success: true };
+            } catch {
+                return { success: false, error: '设置隐私密码超时' };
+            } finally {
+                setBusy(false);
+            }
+        },
+        [busy]
+    );
+
+    const resetPassword = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+        if (busy) {
+            return { success: false, error: '操作进行中' };
+        }
+        setBusy(true);
+        try {
+            if (!sendChannel('library:privacy-reset')) {
+                return { success: false, error: '桌面桥接不可用' };
+            }
+            const result = await onceReply<{ success?: boolean; error?: string }>('library:privacy-result', 15000);
+            if (!result?.success) {
+                return { success: false, error: result?.error || '重置隐私密码失败' };
+            }
+            setActive(false);
+            setState((prev) => ({ ...prev, hasPassword: false, unlocked: false }));
+            return { success: true };
+        } catch {
+            return { success: false, error: '重置隐私密码超时' };
+        } finally {
+            setBusy(false);
+        }
+    }, [busy]);
+
     const deactivate = useCallback(async () => {
         if (busy) {
             return;
@@ -135,9 +185,11 @@ export function PrivacyStateProvider({ children }: { children: ReactNode }) {
             requestActivate,
             closeGate,
             submitPassword,
+            setPrivacyPassword,
+            resetPassword,
             deactivate,
         }),
-        [state, active, gateOpen, busy, error, requestActivate, closeGate, submitPassword, deactivate]
+        [state, active, gateOpen, busy, error, requestActivate, closeGate, submitPassword, setPrivacyPassword, resetPassword, deactivate]
     );
 
     return (

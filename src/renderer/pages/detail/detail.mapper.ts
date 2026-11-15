@@ -1,5 +1,5 @@
 /** library:item / library:show 回复 → MediaDetailModel（纯函数，可单测） */
-import type { EpisodeRowModel, MediaDetailModel, MetaItem } from './detail.types';
+import type { EpisodeRowModel, MediaDetailModel, MetaItem, MovieVersionModel } from './detail.types';
 
 export type DetailItemDto = {
     id: string;
@@ -55,6 +55,15 @@ export function basenameOf(filePath: string): string {
     return parts.length > 0 ? parts[parts.length - 1] : filePath;
 }
 
+export function mapMovieVersions(items: readonly DetailItemDto[]): MovieVersionModel[] {
+    return items.map((item) => ({
+        id: item.id,
+        fileName: basenameOf(item.filePath),
+        sizeLabel: formatFileSize(item.fileSize),
+        resolution: item.resolution,
+    }));
+}
+
 export function progressPercent(state: DetailStateDto | undefined): number {
     if (!state || state.durationTs <= 0 || state.positionTs <= 0) {
         return 0;
@@ -105,7 +114,10 @@ export function toEpisodeRows(
     });
 }
 
-export function mapMovieDetail(item: DetailItemDto, extras: { watched?: boolean; favorite?: boolean } = {}): MediaDetailModel {
+export function mapMovieDetail(
+    item: DetailItemDto,
+    extras: { watched?: boolean; favorite?: boolean; versions?: readonly DetailItemDto[] } = {}
+): MediaDetailModel {
     const meta: MetaItem[] = [];
     if (item.year) {
         meta.push({ label: '年份', value: String(item.year) });
@@ -133,6 +145,7 @@ export function mapMovieDetail(item: DetailItemDto, extras: { watched?: boolean;
             resolution: item.resolution,
         },
         episodes: [],
+        versions: mapMovieVersions(extras.versions ?? []),
         playTargetId: item.id,
         playLabel: '播放',
         favorite: extras.favorite === true,
@@ -179,6 +192,7 @@ export function mapSeasonDetail(
               }
             : null,
         episodes: toEpisodeRows(sorted, states),
+        versions: [],
         playTargetId: resume ? resume.id : null,
         playLabel: resumePct > 0 ? '继续播放' : '播放',
         favorite: extras.favorite === true,

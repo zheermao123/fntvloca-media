@@ -13,10 +13,10 @@ import type {
 
 const RECENT_LIMIT = 12;
 
-export async function fetchContinueWatching(privateActive: boolean): Promise<ContinueEntryDto[]> {
+export async function fetchContinueWatching(privateActive: boolean, limit?: number): Promise<ContinueEntryDto[]> {
     const result = await invoke<{ entries?: ContinueEntryDto[]; error?: string }>(
         'library:continue',
-        { private: privateActive },
+        { private: privateActive, limit },
         'library:continue-info'
     );
     if (!result || result.error) {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
 import { useLibraryPreferences } from '../../app/LibraryPreferencesProvider';
 import { CATEGORY_META, resolveCategoryFromSegment } from '../../app/routes';
@@ -33,6 +33,8 @@ type LoadState =
 export function LibraryPage() {
     const { category: segment } = useParams();
     const category = resolveCategoryFromSegment(segment);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const queryText = (searchParams.get('q') ?? '').trim();
     const privacy = usePrivacyState();
 
     const { sort, watched, favorite, view, update } = useLibraryPreferences();
@@ -43,18 +45,16 @@ export function LibraryPage() {
     const queryBase = useMemo(
         () => ({
             category: category ?? undefined,
+            query: queryText || undefined,
             sort,
             watched: watched === 'all' ? undefined : watched === 'watched',
             favorite: favorite === 'all' ? undefined : favorite === 'fav',
             private: privacy.active,
         }),
-        [category, sort, watched, favorite, privacy.active]
+        [category, queryText, sort, watched, favorite, privacy.active]
     );
 
     const load = useCallback(async () => {
-        if (!category) {
-            return;
-        }
         const seq = ++requestSeqRef.current;
         loadingMoreRef.current = false;
         setState({ status: 'loading' });
@@ -112,10 +112,6 @@ export function LibraryPage() {
         }
     }, [state, queryBase]);
 
-    if (!category) {
-        return <Navigate to="/home" replace />;
-    }
-
     const cards: MediaCardModel[] = useMemo(
         () => (state.status === 'success' ? mapCatalogEntries(state.entries) : []),
         [state]
@@ -125,11 +121,31 @@ export function LibraryPage() {
         [state]
     );
     const count = state.status === 'success' ? state.total : 0;
-    const title = privacy.active ? '隐私库' : CATEGORY_META[category].label;
+    const title = privacy.active ? '隐私库' : category ? CATEGORY_META[category].label : '全部媒体';
+
+    if (segment && !category) {
+        return <Navigate to="/home" replace />;
+    }
 
     return (
         <section className="app-page" aria-label={title}>
             <LibraryPageHeader title={title} count={count} capped={false} />
+            {queryText ? (
+                <div className="library-search-note">
+                    <span>搜索“{queryText}”</span>
+                    <button
+                        type="button"
+                        className="library-search-note__clear"
+                        onClick={() => {
+                            const next = new URLSearchParams(searchParams);
+                            next.delete('q');
+                            setSearchParams(next, { replace: true });
+                        }}
+                    >
+                        清除
+                    </button>
+                </div>
+            ) : null}
             <LibraryToolbar
                 sort={sort}
                 watched={watched}

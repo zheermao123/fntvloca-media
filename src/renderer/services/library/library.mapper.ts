@@ -53,6 +53,8 @@ export function mapCatalogEntry(entry: CatalogEntryDto): MediaCardModel {
             badges: resolution ? [resolution] : [],
             statusText: entry.watched ? '已看' : '未看',
             route: movieRoute(entry.item.id),
+            favorite: entry.favorite,
+            favoriteTarget: { type: 'movie', id: entry.item.id },
         };
     }
     const showSeasonLabel = entry.seasonCount > 1 || entry.season !== 1;

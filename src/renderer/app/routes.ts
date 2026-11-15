@@ -12,11 +12,22 @@ export const LIBRARY_CATEGORIES: readonly LibraryCategory[] = ['movie', 'tv', 'a
 
 export const ROUTES = {
     home: '/home',
+    allLibrary: '/library',
     library: (category: LibraryCategory) => `/library/${CATEGORY_META[category].segment}`,
+    librarySearch: (query: string, category?: LibraryCategory) => {
+        const params = new URLSearchParams({ q: query });
+        if (category) {
+            params.set('category', CATEGORY_META[category].segment);
+        }
+        return `/library?${params.toString()}`;
+    },
+    favorites: '/favorites',
+    continueWatching: '/continue',
     media: (id: string) => `/media/${encodeURIComponent(id)}`,
     privacy: '/privacy',
     sources: '/sources',
     tasks: '/tasks',
+    settings: '/settings',
 } as const;
 
 export function resolveCategoryFromSegment(segment: string | undefined): LibraryCategory | null {

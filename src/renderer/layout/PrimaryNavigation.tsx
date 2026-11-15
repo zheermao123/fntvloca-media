@@ -7,8 +7,10 @@ import {
     HomeIcon,
     LockIcon,
     MoreHorizontalIcon,
+    PlayIcon,
     ScanIcon,
     SparklesIcon,
+    StarIcon,
     TvIcon,
 } from '../components/icons';
 import type { ReactNode } from 'react';
@@ -70,6 +72,24 @@ export function PrimaryNavigation({
                     <HomeIcon size={15} />
                 </span>
                 <span>首页</span>
+            </NavLink>
+            <NavLink to={ROUTES.allLibrary} className={itemClass} end>
+                <span className="app-nav__icon" aria-hidden="true">
+                    <FilmIcon size={15} />
+                </span>
+                <span>全部媒体</span>
+            </NavLink>
+            <NavLink to={ROUTES.continueWatching} className={itemClass}>
+                <span className="app-nav__icon" aria-hidden="true">
+                    <PlayIcon size={15} />
+                </span>
+                <span>继续观看</span>
+            </NavLink>
+            <NavLink to={ROUTES.favorites} className={itemClass}>
+                <span className="app-nav__icon" aria-hidden="true">
+                    <StarIcon size={15} />
+                </span>
+                <span>收藏</span>
             </NavLink>
             {LIBRARY_CATEGORIES.map((category) => (
                 <NavLink key={category} to={ROUTES.library(category)} className={itemClass}>

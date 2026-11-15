@@ -5,7 +5,9 @@ import { Sidebar } from '../layout/Sidebar';
 import { MainRegion } from '../layout/MainRegion';
 import { PageHeader } from '../layout/PageHeader';
 import { Dialog } from '../components/ui/Dialog';
+import { useToast } from '../components/ui/ToastProvider';
 import { SearchPanel } from '../pages/search/SearchPanel';
+import { onPlaybackResult } from '../services/media/mediaService';
 import { usePrivacyState } from './PrivacyStateProvider';
 import { LibraryPreferencesProvider } from './LibraryPreferencesProvider';
 import { CATEGORY_META, ROUTES, resolveCategoryFromSegment } from './routes';
@@ -17,10 +19,19 @@ function titleForPath(pathname: string): string {
     if (pathname === '/privacy') {
         return '隐私库';
     }
+    if (pathname === '/library') {
+        return '全部媒体';
+    }
     if (pathname.startsWith('/library/')) {
         const segment = pathname.split('/')[2];
         const category = resolveCategoryFromSegment(segment);
         return category ? CATEGORY_META[category].label : '媒体库';
+    }
+    if (pathname === '/favorites') {
+        return '收藏';
+    }
+    if (pathname === '/continue') {
+        return '继续观看';
     }
     if (pathname.startsWith('/media/')) {
         return '媒体详情';
@@ -31,6 +42,9 @@ function titleForPath(pathname: string): string {
     if (pathname === '/tasks') {
         return '任务状态';
     }
+    if (pathname === '/settings') {
+        return '设置';
+    }
     return '媒体库';
 }
 
@@ -38,7 +52,9 @@ export function AppShell() {
     const location = useLocation();
     const navigate = useNavigate();
     const privacy = usePrivacyState();
+    const { showToast } = useToast();
     const [searchOpen, setSearchOpen] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const title = useMemo(() => titleForPath(location.pathname), [location.pathname]);
     const prevPrivacyActive = useRef(privacy.active);
 
@@ -54,12 +70,32 @@ export function AppShell() {
     }, [privacy.active, navigate]);
 
     useEffect(() => {
-        if (privacy.active && (location.pathname === ROUTES.home || location.pathname.startsWith('/library/'))) {
+        if (
+            privacy.active &&
+            (location.pathname === ROUTES.home ||
+                location.pathname === ROUTES.allLibrary ||
+                location.pathname.startsWith('/library/') ||
+                location.pathname === ROUTES.favorites ||
+                location.pathname === ROUTES.continueWatching ||
+                location.pathname === ROUTES.settings)
+        ) {
             navigate(ROUTES.privacy, { replace: true });
         } else if (!privacy.active && location.pathname === ROUTES.privacy) {
             navigate(ROUTES.home, { replace: true });
         }
     }, [privacy.active, location.pathname, navigate]);
+
+    useEffect(() => {
+        setSidebarOpen(false);
+    }, [location.pathname]);
+
+    useEffect(() => {
+        return onPlaybackResult((result) => {
+            if (!result.ok) {
+                showToast(result.error || '播放启动失败', 'error');
+            }
+        });
+    }, [showToast]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -76,9 +112,21 @@ export function AppShell() {
         <LibraryPreferencesProvider>
         <div className="app-shell-root">
             <WindowFrame>
-                <Sidebar />
+                <Sidebar open={sidebarOpen} />
+                {sidebarOpen ? (
+                    <button
+                        type="button"
+                        className="app-sidebar-overlay"
+                        aria-label="关闭导航菜单"
+                        onClick={() => setSidebarOpen(false)}
+                    />
+                ) : null}
                 <MainRegion>
-                    <PageHeader title={title} onSearchOpen={() => setSearchOpen(true)} />
+                    <PageHeader
+                        title={title}
+                        onSearchOpen={() => setSearchOpen(true)}
+                        onMenuOpen={() => setSidebarOpen(true)}
+                    />
                     <div className="app-main__scroll">
                         <Outlet />
                     </div>

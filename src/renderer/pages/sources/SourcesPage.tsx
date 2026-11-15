@@ -409,12 +409,14 @@ export function SourcesPage() {
                 open={addOpen}
                 privateMode={privacy.active}
                 onClose={() => setAddOpen(false)}
-                onAdded={(sourceId) => {
+                onAdded={(sourceIds) => {
                     setAddOpen(false);
                     setBanner('媒体源已添加，正在扫描…');
                     void (async () => {
                         await load();
-                        await rescan(sourceId);
+                        for (const sourceId of sourceIds) {
+                            await rescan(sourceId);
+                        }
                     })();
                 }}
             />

@@ -1,4 +1,4 @@
-import { MoonIcon, SearchIcon, SunIcon } from '../components/icons';
+import { MenuIcon, MoonIcon, SearchIcon, SunIcon } from '../components/icons';
 import { useTheme } from '../theme/ThemeProvider';
 
 function isMacPlatform(): boolean {
@@ -12,14 +12,25 @@ export interface PageHeaderProps {
     title: string;
     breadcrumb?: string;
     onSearchOpen: () => void;
+    onMenuOpen?: () => void;
 }
 
-export function PageHeader({ title, breadcrumb, onSearchOpen }: PageHeaderProps) {
+export function PageHeader({ title, breadcrumb, onSearchOpen, onMenuOpen }: PageHeaderProps) {
     const theme = useTheme();
     const shortcut = isMacPlatform() ? '⌘ K' : 'Ctrl K';
     const dark = theme.resolved === 'dark';
     return (
         <header className="app-header">
+            {onMenuOpen ? (
+                <button
+                    type="button"
+                    className="app-mobile-menu"
+                    onClick={onMenuOpen}
+                    aria-label="打开导航菜单"
+                >
+                    <MenuIcon size={16} />
+                </button>
+            ) : null}
             {breadcrumb ? <span className="app-header__breadcrumb">{breadcrumb} /</span> : null}
             <h1 className="app-header__title">{title}</h1>
             <div className="app-header__spacer" />

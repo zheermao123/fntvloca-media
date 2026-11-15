@@ -5,19 +5,23 @@ import { fetchItemInfo, fetchShowInfo, playLibraryItem } from '../../services/me
 import { ErrorState } from '../../components/ui/ErrorState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ChevronLeftIcon } from '../../components/icons';
+import { usePrivacyState } from '../../app/PrivacyStateProvider';
 import { DetailHero } from './DetailHero';
+import type { ScrapeTarget } from './DetailHero';
 import { OverviewSection } from './OverviewSection';
 import { FileInfoSection } from './FileInfoSection';
+import { VersionSection } from './VersionSection';
 import { mapMovieDetail, mapSeasonDetail } from './detail.mapper';
 import type { MediaDetailModel } from './detail.types';
 
 type LoadState =
     | { status: 'loading' }
     | { status: 'error'; message: string }
-    | { status: 'success'; model: MediaDetailModel };
+    | { status: 'success'; model: MediaDetailModel; scrapeTarget: ScrapeTarget | null };
 
 export function MediaDetailPage() {
     const { id } = useParams();
+    const privacy = usePrivacyState();
     const location = useLocation();
     const navigate = useNavigate();
     const parsed = useMemo(() => parseMediaRoute(id ?? '', location.search), [id, location.search]);
@@ -35,15 +39,31 @@ export function MediaDetailPage() {
             if (parsed.kind === 'season') {
                 const result = await fetchShowInfo(parsed.showId, parsed.season);
                 if (requestSeqRef.current === seq) {
+                    const scrapeEpisode = result.episodes[0] ?? null;
                     setState({
                         status: 'success',
                         model: mapSeasonDetail(result.show, parsed.season, result.episodes, result.states, { favorite: result.favorite }),
+                        scrapeTarget: scrapeEpisode
+                            ? { itemId: scrapeEpisode.id, title: result.show.title, year: result.show.year }
+                            : null,
                     });
                 }
             } else {
                 const result = await fetchItemInfo(parsed.itemId);
                 if (requestSeqRef.current === seq) {
-                    setState({ status: 'success', model: mapMovieDetail(result.item, { watched: result.watchState?.watched, favorite: result.favorite }) });
+                    setState({
+                        status: 'success',
+                        model: mapMovieDetail(result.item, {
+                            watched: result.watchState?.watched,
+                            favorite: result.favorite,
+                            versions: result.versions,
+                        }),
+                        scrapeTarget: {
+                            itemId: result.item.id,
+                            title: result.item.title,
+                            year: result.item.year,
+                        },
+                    });
                 }
             }
         } catch (error) {
@@ -81,8 +101,13 @@ export function MediaDetailPage() {
             ) : null}
             {state.status === 'success' ? (
                 <div className="detail-page">
-                    <DetailHero model={state.model} onChanged={() => void load()} />
+                    <DetailHero
+                        model={state.model}
+                        onChanged={() => void load()}
+                        scrapeTarget={privacy.active ? null : state.scrapeTarget}
+                    />
                     <OverviewSection overview={state.model.overview} />
+                    <VersionSection versions={state.model.versions} />
                     <FileInfoSection file={state.model.file} />
                     {state.model.episodes.length > 0 ? (
                         <section className="detail-section">

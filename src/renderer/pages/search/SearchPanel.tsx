@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
-import { CATEGORY_META, LIBRARY_CATEGORIES } from '../../app/routes';
+import { CATEGORY_META, LIBRARY_CATEGORIES, ROUTES } from '../../app/routes';
 import type { LibraryCategory } from '../../app/routes';
 import { Input } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -31,6 +32,7 @@ export function SearchPanel({ onNavigate }: { onNavigate: () => void }) {
     const [recent, setRecent] = useState<string[]>([]);
     const [retryKey, setRetryKey] = useState(0);
     const [state, setState] = useState<SearchState>({ status: 'idle' });
+    const keyword = query.trim();
 
     useEffect(() => {
         setCategory('all');
@@ -159,6 +161,15 @@ export function SearchPanel({ onNavigate }: { onNavigate: () => void }) {
                         {state.cards.map((card) => (
                             <MediaCard key={card.key} model={card} />
                         ))}
+                    </div>
+                    <div className="search-panel__more">
+                        <Link
+                            to={ROUTES.librarySearch(keyword)}
+                            className="search-panel__more-link"
+                            onClick={onNavigate}
+                        >
+                            在全部媒体中查看“{keyword}”
+                        </Link>
                     </div>
                 </>
             ) : null}

@@ -331,3 +331,87 @@ html,
 body {
     overflow: hidden;
 }
+
+/* ---------- Sidebar profile / mobile ---------- */
+.app-profile {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    margin-top: var(--space-2);
+    border-top: 1px solid var(--color-border);
+}
+
+.app-profile__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+}
+
+.app-profile__body { display: flex; flex-direction: column; min-width: 0; }
+.app-profile__name { font-size: var(--font-size-sm); color: var(--color-text-primary); }
+.app-profile__meta { font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
+
+.app-mobile-menu {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.app-sidebar-overlay { display: none; }
+
+@media (max-width: 900px) {
+    .app-mobile-menu { display: inline-flex; }
+
+    .app-sidebar {
+        position: fixed;
+        top: var(--layout-titlebar-height);
+        bottom: 0;
+        left: 0;
+        z-index: 120;
+        transform: translateX(-100%);
+        transition: transform var(--duration-medium) var(--easing-standard);
+        box-shadow: var(--shadow-3);
+    }
+
+    .app-sidebar--open { transform: translateX(0); }
+
+    .app-sidebar-overlay {
+        display: block;
+        position: fixed;
+        top: var(--layout-titlebar-height);
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 110;
+        border: 0;
+        background: rgba(0, 0, 0, 0.28);
+    }
+
+    .app-header { padding: 0 var(--space-4); }
+    .app-main__scroll { padding: var(--space-4); }
+}
+
+@media (max-width: 760px) {
+    .app-header { gap: var(--space-1); }
+    .app-header__breadcrumb { display: none; }
+    .app-search-trigger span, .app-search-trigger kbd { display: none; }
+    .media-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: var(--space-4) var(--space-3); }
+    .home-header__greeting { font-size: var(--font-size-2xl); }
+}

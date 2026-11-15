@@ -5,6 +5,11 @@ import { Input } from '../../components/ui/Input';
 import { addSource, pickFolder } from '../../services/library/sourcesService';
 import type { AddSourceInput } from '../../services/library/sourcesService';
 
+function folderName(path: string): string {
+    const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+    return parts[parts.length - 1] ?? path;
+}
+
 const CATEGORY_OPTIONS = [
     { value: '', label: '自动识别' },
     { value: 'movie', label: '电影' },
@@ -22,11 +27,12 @@ export function AddSourceDialog({
     open: boolean;
     privateMode: boolean;
     onClose: () => void;
-    onAdded: (sourceId: string) => void;
+    onAdded: (sourceIds: string[]) => void;
 }) {
     const [type, setType] = useState<'local' | 'webdav'>('local');
     const [name, setName] = useState('');
     const [rootPath, setRootPath] = useState('');
+    const [rootPaths, setRootPaths] = useState<string[]>([]);
     const [url, setUrl] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -40,6 +46,7 @@ export function AddSourceDialog({
             setType('local');
             setName('');
             setRootPath('');
+            setRootPaths([]);
             setUrl('');
             setUsername('');
             setPassword('');
@@ -54,9 +61,9 @@ export function AddSourceDialog({
         setPicking(true);
         setError('');
         try {
-            const paths = await pickFolder(false);
+            const paths = await pickFolder(true);
             if (paths.length > 0) {
-                setRootPath(paths[0]);
+                setRootPaths((current) => Array.from(new Set([...current, ...paths])));
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : '选择文件夹失败');
@@ -76,12 +83,15 @@ export function AddSourceDialog({
             private: privateMode,
             category: privateMode ? undefined : category || undefined,
         };
+        const localPaths =
+            type === 'local'
+                ? Array.from(new Set([...rootPaths, rootPath.trim()].filter((value) => value.length > 0)))
+                : [];
         if (type === 'local') {
-            if (!rootPath.trim()) {
+            if (localPaths.length === 0) {
                 setError('请选择扫描目录');
                 return;
             }
-            input.rootPath = rootPath.trim();
         } else {
             if (!url.trim()) {
                 setError('请填写 WebDAV 地址');
@@ -93,8 +103,25 @@ export function AddSourceDialog({
         }
         setBusy(true);
         try {
-            const source = await addSource(input);
-            onAdded(source.id);
+            if (type === 'local') {
+                const ids: string[] = [];
+                for (const [index, path] of localPaths.entries()) {
+                    const source = await addSource({
+                        ...input,
+                        rootPath: path,
+                        name: name.trim()
+                            ? localPaths.length > 1
+                                ? `${name.trim()} ${index + 1}`
+                                : name.trim()
+                            : folderName(path),
+                    });
+                    ids.push(source.id);
+                }
+                onAdded(ids);
+            } else {
+                const source = await addSource(input);
+                onAdded([source.id]);
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : '添加媒体源失败');
         } finally {
@@ -147,11 +174,30 @@ export function AddSourceDialog({
                     <>
                         <div className="source-row__actions">
                             <Button variant="secondary" loading={picking} onClick={() => void pick()}>
-                                选择文件夹…
+                                选择文件夹（可多选）…
                             </Button>
                         </div>
+                        {rootPaths.length > 0 ? (
+                            <ul className="source-path-list">
+                                {rootPaths.map((path) => (
+                                    <li key={path} className="source-path-list__item">
+                                        <span>{path}</span>
+                                        <button
+                                            type="button"
+                                            className="source-path-list__remove"
+                                            aria-label={`移除 ${path}`}
+                                            onClick={() =>
+                                                setRootPaths((current) => current.filter((item) => item !== path))
+                                            }
+                                        >
+                                            ×
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : null}
                         <Input
-                            label="扫描目录"
+                            label="手动输入目录（可选）"
                             value={rootPath}
                             onChange={(event) => setRootPath(event.target.value)}
                         />
