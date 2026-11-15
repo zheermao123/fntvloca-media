@@ -21,6 +21,7 @@
 | phase3-large-library-result.json | 1002 | `80dd4169c3308d467df0d7f06f1cc2c27d4267d21f9a0f7fcf9516bc015d5120` | 17k 电影真实 Electron 分页结果（首屏/加载更多/DOM/heap/唯一性） |
 | privacy-e2e-result.json | 3481 | `3ae10d04eeff657e2dbd98b8c69539134bd610d60cb60a8ab391d5cc636f97c1` | 隐私 E2E 16 步（含私有源测试/编辑、锁定回退、重启） |
 | privacy-e2e.log | 6664 | `8ef6fa9149f50026f1fb7cd43a3328fa104ccf616f21b40fdf7e8f27606aebaa` | 隐私 E2E 完整日志 |
+| release-gate-runs.json | 738 | `71f0ea55216a9835c90234d8aed7e748db2788e1e44a94e07ea57d56e196eeb0` | R3 门禁负向/预览 run、环境状态与 Tag/Release 未变更记录 |
 | test-suite-summary.txt | 247 | `7c15aa5150efcd0a1b2e6af217125ddc71e845eacbcb569399f49929e752c227` | 本地完整测试摘要（271/271） |
 | ui2-p207-classic.png | 996030 | `83f48e0bf4240cc0b542c12b7adfebdc546317f3edb356c61b6810750a6fda5e` | classic 默认界面 |
 | ui2-p207-detail.png | 205933 | `2e11ebea9f131ca268fbb791e06e8882b6c89cf89fd24d114ac6357258316899` | 真实库电影详情 |

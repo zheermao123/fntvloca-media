@@ -603,3 +603,4 @@ B-01 和 B-02 是核心优先级。不得先投入大量时间做装饰性 UI，
   - B-06 媒体源：已实施（测试/编辑/重扫/凭据脱敏）。
 - 批次 C：发布候选报告 `phase3/PHASE3_RELEASE_CANDIDATE.md`；Windows 安装/回退/卸载通过；macOS/Linux 实机验证由用户取消（2026-11-15，接受未验证风险）。
 - **未授权事项保持未执行**：合并 main、Tag、Release、切换默认 UI。
+- R3 发布门禁收尾：Release 仅限 release 分支 + workflow_dispatch + publish=true + platform=all；elease Environment 尚未配置 Required reviewers（管理员待办），详见 phase3/R3-release-gate.md。

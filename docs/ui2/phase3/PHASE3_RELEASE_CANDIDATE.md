@@ -69,11 +69,14 @@
 
 ## 7.1 发布门禁修订（2026-11-15）
 
-- 正式 Release 仅允许：workflow_dispatch + `publish=true` + `platform=all`；`release` environment 建议配置 Required reviewers。
+- 正式 Release 仅允许：workflow_dispatch + **ref=refs/heads/release** + `publish=true` + `platform=all`；`release` environment 必须配置 Required reviewers（当前未配置，管理员待办）。
+- R3 代码门禁已完成，人工审批配置待确认；详见 `R3-release-gate.md`。
 - 向 `release` 分支 push 现在只构建并上传 Actions artifacts，不再自动创建 Release/Tag。
 - 删除未使用的 `release_tag` 输入，避免“预览上传”语义与实际行为不符。
 - Release 描述已改为：Windows 已安装冒烟；macOS/Linux 仅提供构建产物、未实机验证（用户已接受风险）。
-- 预览构建（publish=false）验证 run：`43670765660`（Windows）；构建/安装冒烟成功，Create Release Job 为 skipped。
+- 预览构建（publish=false）验证 run：`43672093244`（Windows）；构建/Artifact 成功，Create Release Job 为 skipped。
+- 负向验证 run：`43671797192`（非 release 分支 + publish=true/platform=all）；Release Job skipped，未创建 Tag/Release（Linux 构建失败为独立问题）。
+- 从 release 分支的正向预览未执行：origin/release 仍为旧 workflow，需先同步后再补测。
 
 ## 8. 回滚
 
