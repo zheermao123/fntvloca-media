@@ -23,7 +23,7 @@
 |---|---|
 | `npm test` | **271 / 271 通过** |
 | `npm run compile` / `renderer:typecheck` / `renderer:build` | exit 0 |
-| CI Windows run | `<PENDING>`（clean install、测试、NSIS、安装/回退/卸载冒烟） |
+| CI Windows run | `43669168400`（clean install、271 测试、NSIS、安装/回退/卸载冒烟全部通过） |
 
 ## 3. C-01 完整业务流程回归
 
@@ -49,7 +49,7 @@
 
 | 平台 | 结果 |
 |---|---|
-| Windows x64 | CI 静默安装、classic 默认、打包回退 classic、静默卸载通过（见 A-04 / CI run） |
+| Windows x64 | run `43669168400`：CI 静默安装、classic 默认、打包回退 classic、静默卸载通过；产物 `FNMedia_3.2.9_win_x64.exe`（139653889 字节，SHA256 `8C7D53606D1650779C31B22F5A50F490EB1C64A5F8E14617D91D797841A2EFE2`） |
 | macOS x64/arm64 | **未验证**（无设备；本阶段未执行 mac 构建/运行） |
 | Linux x64/arm64 | **未验证**（无设备；本阶段未执行 Linux 构建/运行） |
 
