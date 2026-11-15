@@ -72,3 +72,9 @@ UI 2.0 重写后，隐私模式入口与后端门禁保留，但旧 classic UI �
 - 根因：preload 的 classic 播放按钮接管插件在 React 页面同样生效，拦截并阻止了 React 播放按钮 click，改用旧 `play-movie`，导致点击无反应。
 - 修复：`playButton`/`playMaskButton` 在 React UI 页面（file:// ui2-renderer 或 dev 5273）禁用；classic 保持原行为。
 - 验证：隔离 E2E 点击播放进入 React 处理器（按钮显示“已发起播放”）；开发日志确认走 `Library play event received itemId`，不再出现 `Play movie event received`。
+## 3.4.2 安装与播放验证（2026-11-15）
+
+- 版本：`3.4.2` 测试构建；CI run `43690561903`；产物 SHA256 `715C4C43DD343770F6A80C01517EB89D89BE24D0357B37D49A7CFBECA9EA5D2A`
+- 打包版点击播放验证：React 详情页按钮显示“已发起播放…”，主进程走 `play-library-item`（短暂启动 MPV 后测试关闭）。
+- 数据核对：源/剧/条目/观看状态/收藏/季 与升级前一致；隐私密码与 TMDB 配置保留。
+- 安装前备份：`C:\Users\Administrator\.fntv-backup-20261115-153854-pre342`
