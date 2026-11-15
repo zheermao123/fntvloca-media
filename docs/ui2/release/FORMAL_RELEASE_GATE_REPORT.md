@@ -1,8 +1,8 @@
 # 正式发布门禁执行报告
 
 日期：2026-11-15
-集成分支：`ui2-integration` @ `2385590`
-发布分支：`release` @ `56f8c7c`（UI 2.0 RC 同步）
+集成分支：`ui2-integration` @ `37d09c9`（本报告修订后可能前进，以当时 git HEAD 为准）
+发布分支：`release` @ `5ed6d1e`（RC + 文档同步；本报告提交后 release 会再前进一次文档提交）
 目标：完成第四阶段正式发布门禁五项工作，不执行 Tag/Release/正式发布。
 
 ## 1. 工作项状态
@@ -70,6 +70,51 @@ macOS/Linux 构建成功仅代表产物可构建，**不代表实机运行验收
 1. 选择要发布的版本号/Tag（当前 package 版本仍为 3.2.9，建议先决定是否递增版本）。
 2. 明确批准正式发布后，由维护者在 `release` Environment 审批正向 run，或重新触发 `publish=true/platform=all` 并批准。
 3. React 默认 UI 切换仍为独立决策，本次未切换。
+
+## 6.1 P1 审查问题处理状态（2026-11-15）
+
+### P1-01 版本号仍为 v3.2.9（阻塞正式发布）
+
+- 当前 `package.json`/`package-lock.json` 仍为 **3.2.9**；GitHub Release `v3.2.9` 已存在。
+- **未擅自改版本号**。需产品决策：3.2.10（补丁）或 3.3.0（功能版本）。
+- 决策后需同步：`package.json`、`package-lock.json`、CHANGELOG、发布说明、最终候选构建与哈希记录。
+- 在此之前不得批准正式 Release。
+
+### P1-02 release 分支保护（已启用）
+
+已通过 Branch Protection API 启用（个人仓库限制除外）：
+
+- 必须通过 PR；至少 1 个 approving review；
+- 需要 `build-and-test` 检查（strict）；
+- 要求 last push approval、dismiss stale reviews；
+- 禁止 force push、禁止删除分支、要求会话解决；
+- `enforce_admins` 在本报告提交后启用（文档提交需要一次 admin 直推）。
+- 限制：该仓库为个人仓库，Branch Protection API 不支持 users/teams 推送白名单；无法在 API 层限制“谁可推送”，由 PR 审批 + enforce_admins 约束。
+
+### P1-03 Environment 独立审批（部分完成，待决策）
+
+- Required reviewer：`zheermao123`（唯一）。
+- `prevent_self_review = false`：发起人可审批自己的运行。
+- `can_admins_bypass = false`：已关闭管理员绕过。
+- 若要求独立双人审批：需增加第二维护者/团队，并启用 `prevent_self_review=true`；当前未启用，避免无人可审批。
+
+### P1-04 产物哈希追溯（已记录，最终哈希待新版本 Run）
+
+| Run | Ref / Commit | 文件 | 大小 | SHA256 |
+|---|---|---|---|---|
+| `43676835518` | `ui2-integration` / `d400139` | Windows EXE | 139,653,954 | `62FA6B8DE8584CDEC80AAF8A810B63AD4F5C263DABED688018677DA4AE83F69A` |
+| `43678693453` | `release` / `56f8c7c` | Windows EXE | 139,653,714 | `8C4D675B8B0390E5EAD33122DC18EE301B719232FD505DD6181B931C0499B78B` |
+
+正向 Run 其他平台（同一 Run）：
+
+- macOS x64 DMG：144,850,701 / `3381B7936ACB93CE4FC0A40D39C22840E09A063CB828CEC1A457AD357F913614`
+- macOS arm64 DMG：139,628,775 / `79774CF5814957B5762F2D654314E3B2E2F49DA39D4FCB7E5ACC09C16C04FB4E`
+- Linux x86_64 AppImage：139,398,901 / `1AA4DDE5E60E7D607DE30279D5745012281F45A475CC76A37EBA59D4CA0F99F2`
+- Linux arm64 AppImage：139,185,420 / `27A72BC6E6335237C0CC92F72A7E3C22F65645A29B6B0A0C99384C3F1FF741A2`
+
+证据：`docs/ui2/release/evidence/run-artifact-hashes.json`、`p1-status.json`。
+
+**结论：** 验收报告中的 62FA… 仅对应集成验收 Run，不是正向预览/最终发布产物；最终候选必须在版本号确定后重新构建，并将同一 Run 的全部平台文件、大小、SHA256 记录到审批材料，审批与发布后再核对。
 
 ## 7. 边界确认
 
