@@ -1,0 +1,39 @@
+﻿{
+    "commit":  "63bced3194fab32a7702097d50154650f051b208",
+    "version":  "3.3.0",
+    "note":  "Candidate build before PR merge; final release hashes must be rebuilt from release after merge",
+    "artifacts":  [
+                      {
+                          "file":  "FNMedia_3.3.0_linux_arm64.AppImage",
+                          "bytes":  139185385,
+                          "sha256":  "AA81352D80B6BE6F7C820634C2A9AA0C119058592B5051ABC7B06B132FE2640F",
+                          "platform":  "linux-build"
+                      },
+                      {
+                          "file":  "FNMedia_3.3.0_linux_x86_64.AppImage",
+                          "bytes":  139398860,
+                          "sha256":  "28469FA7CC67C4A17E8121C272E1D9EAEA745E5486239309D75ADC8F45E04190",
+                          "platform":  "linux-build"
+                      },
+                      {
+                          "file":  "FNMedia_3.3.0_mac_arm64.dmg",
+                          "bytes":  139628633,
+                          "sha256":  "D11C3F78BE9F013F11D97C50FA7D51C049085E4ED1A6F0C6193FAF87A4B62792",
+                          "platform":  "macos-build"
+                      },
+                      {
+                          "file":  "FNMedia_3.3.0_mac_x64.dmg",
+                          "bytes":  144850523,
+                          "sha256":  "AAE62F89E5EFFCBDE6FA0AC241C2965AFF928BA795EDE85EA572BF3DDF242C34",
+                          "platform":  "macos-build"
+                      },
+                      {
+                          "file":  "FNMedia_3.3.0_win_x64.exe",
+                          "bytes":  139653673,
+                          "sha256":  "568FCCEC400A8B8808DD59097B974CCAAAD9B4DEF31B3BBBD8A2CAD6126DF730",
+                          "platform":  "windows-build"
+                      }
+                  ],
+    "ref":  "chore/release-3.3.0",
+    "run_id":  43682151541
+}
