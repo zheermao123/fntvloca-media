@@ -57,3 +57,13 @@ UI 2.0 重写后，隐私模式入口与后端门禁保留，但旧 classic UI �
 
 - 无数据库迁移、无新 IPC、无 preload 白名单变更。
 - 安装前备份 `~/.fntv`；升级后核对源/条目/观看/收藏/隐私配置计数。
+
+## 测试构建与安装验证（2026-11-15）
+
+- 版本：`3.4.1`（React 默认 UI，测试构建，未改变官方 v3.3.0 Release）
+- CI run：`43688541023`（Windows，`publish=false`）；shell smoke 验证 React 默认 + `FNTV_UI_SHELL=classic` 回退
+- 产物：`FNMedia_3.4.1_win_x64.exe`，139,657,124 字节，SHA256 `1AA9052EB1902C711C15B3EF16B99E33D5984E6E394076AC62894D48D5C208CB`
+- 已安装并在本机启动：版本 3.4.1；打包版回归（p207 12 步）通过，console errors 0
+- 数据核对：`DATA_MATCH=true`（76 源 / 345 剧 / 11,598 条目 / 341 观看状态 / 7 收藏 / 64 季；隐私密码与 TMDB 配置保留）
+- 安装前备份：`C:\Users\Administrator\.fntv-backup-20261115-151115-pre341`
+- 说明：真实隐私密码解锁由用户本机输入；自动化隐私 E2E 使用隔离数据目录，不包含真实密码。
