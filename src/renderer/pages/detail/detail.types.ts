@@ -18,4 +18,8 @@ export type MediaDetailModel = {
     episodes: EpisodeRowModel[];
     playTargetId: string | null;
     playLabel: string;
+    favorite: boolean;
+    watched: boolean;
+    watchedItemId: string | null;
+    favoriteTarget: { type: 'movie' | 'season'; id: string; season?: number } | null;
 };

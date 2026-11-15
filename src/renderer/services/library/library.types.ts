@@ -81,6 +81,8 @@ export type MediaCardModel = {
     statusText: string;
     /** 详情路由（季卡携带 ?season=） */
     route: string;
+    favorite?: boolean;
+    favoriteTarget?: { type: 'movie' | 'season'; id: string; season?: number };
 };
 
 export type HomeCategorySummary = {

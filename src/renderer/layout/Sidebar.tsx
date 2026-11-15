@@ -44,7 +44,7 @@ export function Sidebar() {
                 <span className="app-brand__name">飞牛影视</span>
             </div>
 
-            <PrimaryNavigation />
+            <PrimaryNavigation privacyActive={privacy.active} />
 
             <div className="app-sidebar__section-title">管理</div>
             <PrimaryNavigation variant="secondary" />

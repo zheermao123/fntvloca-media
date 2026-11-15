@@ -103,7 +103,7 @@ export function toEpisodeRows(
     });
 }
 
-export function mapMovieDetail(item: DetailItemDto): MediaDetailModel {
+export function mapMovieDetail(item: DetailItemDto, extras: { watched?: boolean; favorite?: boolean } = {}): MediaDetailModel {
     const meta: MetaItem[] = [];
     if (item.year) {
         meta.push({ label: '年份', value: String(item.year) });
@@ -132,6 +132,10 @@ export function mapMovieDetail(item: DetailItemDto): MediaDetailModel {
         episodes: [],
         playTargetId: item.id,
         playLabel: '播放',
+        favorite: extras.favorite === true,
+        watched: extras.watched === true,
+        watchedItemId: item.id,
+        favoriteTarget: { type: 'movie', id: item.id },
     };
 }
 
@@ -139,7 +143,8 @@ export function mapSeasonDetail(
     show: DetailShowDto,
     season: number,
     episodes: readonly DetailItemDto[],
-    states: Readonly<Record<string, DetailStateDto>>
+    states: Readonly<Record<string, DetailStateDto>>,
+    extras: { favorite?: boolean } = {}
 ): MediaDetailModel {
     const sorted = [...episodes].sort(
         (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
@@ -172,5 +177,9 @@ export function mapSeasonDetail(
         episodes: toEpisodeRows(sorted, states),
         playTargetId: resume ? resume.id : null,
         playLabel: resumePct > 0 ? '继续播放' : '播放',
+        favorite: extras.favorite === true,
+        watched: resume ? states[resume.id]?.watched === true : false,
+        watchedItemId: resume ? resume.id : null,
+        favoriteTarget: { type: 'season', id: show.id, season },
     };
 }

@@ -3,6 +3,7 @@ import { AppShell } from './AppShell';
 import { ROUTES } from './routes';
 import { HomePage } from '../pages/home/HomePage';
 import { LibraryPage } from '../pages/library/LibraryPage';
+import { PrivacyLibraryPage } from '../pages/privacy/PrivacyLibraryPage';
 import { MediaDetailPage } from '../pages/detail/MediaDetailPage';
 import { SourcesPage } from '../pages/sources/SourcesPage';
 import { TasksPage } from '../pages/tasks/TasksPage';
@@ -15,7 +16,7 @@ export function AppRouter() {
                 <Route element={<AppShell />}>
                     <Route index element={<Navigate to={ROUTES.home} replace />} />
                     <Route path="/home" element={<HomePage />} />
-                    <Route path="/library/:category" element={<LibraryPage />} />
+                    <Route path="/library/:category" element={<LibraryPage />} />`r`n                    <Route path="/privacy" element={<PrivacyLibraryPage />} />
                     <Route path="/media/:id" element={<MediaDetailPage />} />
                     <Route path="/sources" element={<SourcesPage />} />
                     <Route path="/tasks" element={<TasksPage />} />

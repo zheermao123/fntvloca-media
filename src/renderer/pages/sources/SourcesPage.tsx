@@ -7,7 +7,8 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { Input } from '../../components/ui/Input';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { FolderIcon, LockIcon } from '../../components/icons';
-import { fetchSources, runLibraryScan, testSource, updateSource } from '../../services/library/sourcesService';
+import { fetchSources, removeSource, runLibraryScan, testSource, updateSource } from '../../services/library/sourcesService';
+import { AddSourceDialog } from './AddSourceDialog';
 import { formatScanResult, formatSourceTestResult, toSourceRows } from './sources.mapper';
 import type { SourceDto, SourceRowModel } from './sources.mapper';
 
@@ -52,6 +53,9 @@ export function SourcesPage() {
     });
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [addOpen, setAddOpen] = useState(false);
+    const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
+    const [removing, setRemoving] = useState(false);
     const aliveRef = useRef(true);
     const requestSeqRef = useRef(0);
     const scanAbortRef = useRef<AbortController | null>(null);
@@ -226,6 +230,9 @@ export function SourcesPage() {
                         {state.status === 'success' ? `共 ${state.rows.length} 个源` : '正在加载…'}
                     </p>
                 </div>
+                <Button variant="primary" onClick={() => setAddOpen(true)}>
+                    添加媒体源
+                </Button>
             </header>
             {privacy.active ? (
                 <div className="task-banner">
@@ -294,6 +301,14 @@ export function SourcesPage() {
                                     onClick={() => void rescan(row.id)}
                                 >
                                     {scanningId === row.id ? '扫描中…' : '重新扫描'}
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={scanningId !== null || removing}
+                                    onClick={() => setRemoveTarget({ id: row.id, name: row.name })}
+                                >
+                                    移除
                                 </Button>
                             </div>
                         </div>
@@ -389,6 +404,63 @@ export function SourcesPage() {
                         </p>
                     ) : null}
                 </div>
+            </Dialog>
+            <AddSourceDialog
+                open={addOpen}
+                privateMode={privacy.active}
+                onClose={() => setAddOpen(false)}
+                onAdded={(sourceId) => {
+                    setAddOpen(false);
+                    setBanner('媒体源已添加，正在扫描…');
+                    void (async () => {
+                        await load();
+                        await rescan(sourceId);
+                    })();
+                }}
+            />
+            <Dialog
+                open={removeTarget !== null}
+                title="移除媒体源"
+                onClose={() => {
+                    if (!removing) {
+                        setRemoveTarget(null);
+                    }
+                }}
+                footer={
+                    <>
+                        <Button variant="ghost" disabled={removing} onClick={() => setRemoveTarget(null)}>
+                            取消
+                        </Button>
+                        <Button
+                            variant="danger"
+                            loading={removing}
+                            onClick={() => {
+                                if (!removeTarget) {
+                                    return;
+                                }
+                                setRemoving(true);
+                                void (async () => {
+                                    try {
+                                        await removeSource(removeTarget.id);
+                                        setBanner('媒体源已移除');
+                                        setRemoveTarget(null);
+                                        await load();
+                                    } catch (error) {
+                                        setBanner(error instanceof Error ? error.message : '移除失败');
+                                    } finally {
+                                        setRemoving(false);
+                                    }
+                                })();
+                            }}
+                        >
+                            确认移除
+                        </Button>
+                    </>
+                }
+            >
+                <p className="source-edit-note">
+                    移除「{removeTarget?.name}」会同时删除该源的条目、观看记录与收藏，操作不可撤销。
+                </p>
             </Dialog>
         </section>
     );

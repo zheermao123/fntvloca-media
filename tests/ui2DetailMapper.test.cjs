@@ -89,3 +89,57 @@ test('file helpers are robust', () => {
     assert.equal(mapper.basenameOf('E:\\a\\b\\c.mkv'), 'c.mkv');
     assert.equal(mapper.basenameOf('/mnt/a/b.mkv'), 'b.mkv');
 });
+
+test('detail actions expose watched/favorite targets', () => {
+    const movie = mapper.mapMovieDetail(
+        {
+            id: 'm1',
+            kind: 'movie',
+            title: 'Movie',
+            year: 2020,
+            posterPath: null,
+            overview: null,
+            rating: null,
+            runtime: null,
+            filePath: 'm.mkv',
+            fileSize: 1,
+            resolution: '1080p',
+            season: null,
+            episode: null,
+            episodeTitle: null,
+        },
+        { watched: true, favorite: true }
+    );
+    assert.equal(movie.watched, true);
+    assert.equal(movie.favorite, true);
+    assert.deepEqual(movie.favoriteTarget, { type: 'movie', id: 'm1' });
+    assert.equal(movie.watchedItemId, 'm1');
+
+    const season = mapper.mapSeasonDetail(
+        { id: 's1', title: 'Show', year: 2020, posterPath: null, overview: null },
+        2,
+        [
+            {
+                id: 'e1',
+                kind: 'episode',
+                title: 'Show',
+                year: 2020,
+                posterPath: null,
+                overview: null,
+                rating: null,
+                runtime: null,
+                filePath: 'e1.mkv',
+                fileSize: 1,
+                resolution: '1080p',
+                season: 2,
+                episode: 1,
+                episodeTitle: 'E1',
+            },
+        ],
+        { e1: { watched: false, positionTs: 100, durationTs: 1000, lastPlayedAt: 1 } },
+        { favorite: true }
+    );
+    assert.equal(season.favorite, true);
+    assert.deepEqual(season.favoriteTarget, { type: 'season', id: 's1', season: 2 });
+    assert.equal(season.watchedItemId, 'e1');
+});

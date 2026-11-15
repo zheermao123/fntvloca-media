@@ -11,7 +11,7 @@ test('router uses HashRouter and defines all Phase 2 routes', () => {
     const router = read('src', 'renderer', 'app', 'AppRouter.tsx');
     assert.match(router, /HashRouter/, '必须使用 HashRouter（file:// 兼容）');
     assert.doesNotMatch(router, /BrowserRouter/, '不得使用 BrowserRouter');
-    for (const route of ['/home', '/library/:category', '/media/:id', '/sources', '/tasks']) {
+    for (const route of ['/home', '/library/:category', '/privacy', '/media/:id', '/sources', '/tasks']) {
         assert.ok(router.includes(route), `缺少路由: ${route}`);
     }
 });

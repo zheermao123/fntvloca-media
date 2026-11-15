@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePrivacyState } from '../../app/PrivacyStateProvider';
 import { Button } from '../../components/ui/Button';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -22,6 +23,7 @@ type StatusState =
     | { status: 'success'; running: boolean; lastSummary: ScrapeSummaryDto | null };
 
 export function TasksPage() {
+    const privacy = usePrivacyState();
     const [state, setState] = useState<StatusState>({ status: 'loading' });
     const [scanPending, setScanPending] = useState(false);
     const [scrapePending, setScrapePending] = useState(false);
@@ -241,6 +243,7 @@ export function TasksPage() {
                             </Button>
                         </div>
                     </div>
+                    {!privacy.active ? (
                     <div className="task-card">
                         <h3 className="task-card__title">TMDB 刮削</h3>
                         <p className="task-card__desc">
@@ -269,7 +272,11 @@ export function TasksPage() {
                             </Button>
                         </div>
                     </div>
+                    ) : null}
                 </div>
+            ) : null}
+            {privacy.active ? (
+                <p className="task-note">隐私模式：刮削不可用，仅保留媒体库扫描。</p>
             ) : null}
             {running ? (
                 <p className="task-note">

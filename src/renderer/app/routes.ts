@@ -14,6 +14,7 @@ export const ROUTES = {
     home: '/home',
     library: (category: LibraryCategory) => `/library/${CATEGORY_META[category].segment}`,
     media: (id: string) => `/media/${encodeURIComponent(id)}`,
+    privacy: '/privacy',
     sources: '/sources',
     tasks: '/tasks',
 } as const;

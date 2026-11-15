@@ -1,9 +1,10 @@
 import { PosterImage } from '../../components/media/PosterImage';
 import { MetadataLine } from './MetadataLine';
 import { PrimaryActions } from './PrimaryActions';
+import { DetailActions } from './DetailActions';
 import type { MediaDetailModel } from './detail.types';
 
-export function DetailHero({ model }: { model: MediaDetailModel }) {
+export function DetailHero({ model, onChanged }: { model: MediaDetailModel; onChanged: () => void }) {
     return (
         <div className="detail-hero">
             <div className="detail-hero__poster">
@@ -13,6 +14,7 @@ export function DetailHero({ model }: { model: MediaDetailModel }) {
                 <h2 className="detail-hero__title">{model.title}</h2>
                 <MetadataLine items={model.meta} />
                 <PrimaryActions targetId={model.playTargetId} label={model.playLabel} />
+                <DetailActions model={model} onChanged={onChanged} />
             </div>
         </div>
     );

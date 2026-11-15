@@ -58,6 +58,8 @@ export function mapCatalogEntry(entry: CatalogEntryDto): MediaCardModel {
         badges,
         statusText: seasonStatusText(entry.watchedCount, entry.episodeCount, entry.progressPct),
         route: seasonRoute(entry.show.id, entry.season),
+        favorite: entry.favorite,
+        favoriteTarget: { type: 'season', id: entry.show.id, season: entry.season },
     };
 }
 

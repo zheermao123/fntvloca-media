@@ -37,13 +37,13 @@ export function MediaDetailPage() {
                 if (requestSeqRef.current === seq) {
                     setState({
                         status: 'success',
-                        model: mapSeasonDetail(result.show, parsed.season, result.episodes, result.states),
+                        model: mapSeasonDetail(result.show, parsed.season, result.episodes, result.states, { favorite: result.favorite }),
                     });
                 }
             } else {
                 const result = await fetchItemInfo(parsed.itemId);
                 if (requestSeqRef.current === seq) {
-                    setState({ status: 'success', model: mapMovieDetail(result.item) });
+                    setState({ status: 'success', model: mapMovieDetail(result.item, { watched: result.watchState?.watched, favorite: result.favorite }) });
                 }
             }
         } catch (error) {
@@ -81,7 +81,7 @@ export function MediaDetailPage() {
             ) : null}
             {state.status === 'success' ? (
                 <div className="detail-page">
-                    <DetailHero model={state.model} />
+                    <DetailHero model={state.model} onChanged={() => void load()} />
                     <OverviewSection overview={state.model.overview} />
                     <FileInfoSection file={state.model.file} />
                     {state.model.episodes.length > 0 ? (

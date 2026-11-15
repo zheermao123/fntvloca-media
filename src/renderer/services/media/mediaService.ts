@@ -1,5 +1,5 @@
 /** 媒体详情与播放动作适配（复用 library:show / library:item / play-library-item） */
-import { invoke, sendChannel } from '../desktop/desktopBridge';
+import { invoke, onceReply, sendChannel } from '../desktop/desktopBridge';
 import type { DetailItemDto, DetailShowDto, DetailStateDto } from '../../pages/detail/detail.mapper';
 
 export type ShowInfoResult = {
@@ -47,4 +47,31 @@ export async function fetchItemInfo(itemId: string): Promise<ItemInfoResult> {
 /** 播放为既有链路（fire-and-forget，无成功/失败回包；不虚构播放状态） */
 export function playLibraryItem(itemId: string): boolean {
     return sendChannel('play-library-item', { itemId });
+}
+
+export async function setWatched(itemId: string, watched: boolean): Promise<void> {
+    const reply = onceReply<{ success?: boolean; error?: string }>('library:watched-set', 8000);
+    if (!sendChannel('library:set-watched', { id: itemId, watched })) {
+        throw new Error('BRIDGE_UNAVAILABLE');
+    }
+    const result = await reply;
+    if (!result?.success) {
+        throw new Error(result?.error || '更新观看状态失败');
+    }
+}
+
+export async function setFavorite(
+    type: 'movie' | 'season',
+    id: string,
+    favorite: boolean,
+    season?: number
+): Promise<void> {
+    const reply = onceReply<{ success?: boolean; error?: string }>('library:favorite-set', 8000);
+    if (!sendChannel('library:set-favorite', { type, id, favorite, season })) {
+        throw new Error('BRIDGE_UNAVAILABLE');
+    }
+    const result = await reply;
+    if (!result?.success) {
+        throw new Error(result?.error || '更新收藏失败');
+    }
 }

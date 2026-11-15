@@ -5,6 +5,7 @@ import {
     FilmIcon,
     FolderIcon,
     HomeIcon,
+    LockIcon,
     MoreHorizontalIcon,
     ScanIcon,
     SparklesIcon,
@@ -23,7 +24,13 @@ function itemClass({ isActive }: { isActive: boolean }): string {
     return `app-nav__item${isActive ? ' app-nav__item--active' : ''}`;
 }
 
-export function PrimaryNavigation({ variant = 'primary' }: { variant?: 'primary' | 'secondary' }) {
+export function PrimaryNavigation({
+    variant = 'primary',
+    privacyActive = false,
+}: {
+    variant?: 'primary' | 'secondary';
+    privacyActive?: boolean;
+}) {
     if (variant === 'secondary') {
         return (
             <nav className="app-nav" aria-label="管理">
@@ -38,6 +45,19 @@ export function PrimaryNavigation({ variant = 'primary' }: { variant?: 'primary'
                         <ScanIcon size={15} />
                     </span>
                     <span>任务状态</span>
+                </NavLink>
+            </nav>
+        );
+    }
+
+    if (privacyActive) {
+        return (
+            <nav className="app-nav" aria-label="隐私库">
+                <NavLink to={ROUTES.privacy} className={itemClass}>
+                    <span className="app-nav__icon" aria-hidden="true">
+                        <LockIcon size={15} />
+                    </span>
+                    <span>隐私库</span>
                 </NavLink>
             </nav>
         );

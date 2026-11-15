@@ -112,13 +112,15 @@ async function waitForPageTarget(timeoutMs = 30000) {
 function writePrivateFixture(profile) {
     const mediaDir = path.join(profile, 'media');
     fs.mkdirSync(mediaDir, { recursive: true });
-    const file = path.join(mediaDir, 'Private.E2E.Movie.2024.1080p.mp4');
     const buffer = Buffer.alloc(96);
     buffer.writeUInt32BE(24, 0);
     buffer.write('ftypisom', 4, 'ascii');
     buffer.write('isomiso2avc1mp41', 16, 'ascii');
-    fs.writeFileSync(file, buffer);
-    return mediaDir;
+    fs.writeFileSync(path.join(mediaDir, 'Private.E2E.Movie.2024.1080p.mp4'), buffer);
+    const secondDir = path.join(profile, 'media2');
+    fs.mkdirSync(secondDir, { recursive: true });
+    fs.writeFileSync(path.join(secondDir, 'UiAddRemove.E2E.2024.mp4'), buffer);
+    return { mediaDir, secondDir };
 }
 
 function spawnApp(profile) {
@@ -196,7 +198,7 @@ async function main() {
         path.join(profile, 'config.json'),
         JSON.stringify({ privacyPasswordHash: privacy.hashPrivacyPassword(PASSWORD) }, null, 2)
     );
-    const mediaDir = writePrivateFixture(profile);
+    const { mediaDir, secondDir } = writePrivateFixture(profile);
 
     const report = { profile, steps: [], ok: true };
     let child = spawnApp(profile);
@@ -297,6 +299,80 @@ async function main() {
                 'privacy active label'
             );
             return 'unlocked';
+        });
+
+        await step('auto opens privacy library', async () => {
+            await cdp.waitFor(`location.hash === '#/privacy'`, 'auto privacy route');
+            await cdp.waitFor(
+                `document.querySelector('.library-page__title')?.textContent === '隐私库'`,
+                'privacy library title'
+            );
+            const nav = await cdp.evaluate(`document.querySelector('.app-nav')?.innerText ?? ''`);
+            if (nav.includes('电影') || nav.includes('首页')) {
+                throw new Error('public navigation still visible in privacy mode: ' + nav);
+            }
+            if (!nav.includes('隐私库')) {
+                throw new Error('privacy nav missing');
+            }
+            return 'privacy library opened';
+        });
+
+        await step('source add/remove works in new UI', async () => {
+            await cdp.evaluate(`location.hash = '#/sources'; true`);
+            await cdp.waitFor(`document.querySelectorAll('.source-row').length > 0`, 'source rows');
+            const before = await cdp.evaluate(`document.querySelectorAll('.source-row').length`);
+            await cdp.evaluate(
+                `Array.from(document.querySelectorAll('button')).find((el) => (el.textContent || '').trim() === '添加媒体源')?.click(); true`
+            );
+            await cdp.waitFor(`!!document.querySelector('.ui-dialog')`, 'add source dialog');
+            const setInput = (index, value) =>
+                cdp.evaluate(`(() => {
+                    const input = document.querySelectorAll('.ui-dialog input')[${index}];
+                    if (!input) return false;
+                    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+                    setter.call(input, ${JSON.stringify(value)});
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    return true;
+                })()`);
+            if (!(await setInput(1, secondDir))) {
+                throw new Error('scan path input missing');
+            }
+            await cdp.evaluate(
+                `Array.from(document.querySelectorAll('.ui-dialog__footer button')).find((el) => (el.textContent || '').includes('添加并扫描'))?.click(); true`
+            );
+            await cdp.waitFor(`!document.querySelector('.ui-dialog')`, 'add dialog closed');
+            await cdp.waitFor(
+                `Array.from(document.querySelectorAll('.source-row')).some((row) => row.textContent.includes('media2'))`,
+                'new source row'
+            );
+            await cdp.waitFor(
+                `Array.from(document.querySelectorAll('.source-row')).some((row) =>
+                    row.textContent.includes('media2') &&
+                    Array.from(row.querySelectorAll('button')).some((el) => (el.textContent || '').trim() === '重新扫描'))`,
+                'new source scan settled',
+                60000
+            );
+            await cdp.evaluate(`(() => {
+                const row = Array.from(document.querySelectorAll('.source-row')).find((item) => item.textContent.includes('media2'));
+                const btn = row && Array.from(row.querySelectorAll('button')).find((el) => (el.textContent || '').trim() === '移除');
+                if (!btn) return false;
+                btn.click();
+                return true;
+            })()`);
+            await cdp.waitFor(`!!document.querySelector('.ui-dialog')`, 'remove confirm dialog');
+            await cdp.evaluate(
+                `Array.from(document.querySelectorAll('.ui-dialog__footer button')).find((el) => (el.textContent || '').includes('确认移除'))?.click(); true`
+            );
+            await cdp.waitFor(
+                `!Array.from(document.querySelectorAll('.source-row')).some((row) => row.textContent.includes('media2'))`,
+                'source removed'
+            );
+            await cdp.evaluate(`location.hash = '#/privacy'; true`);
+            await cdp.waitFor(
+                `document.querySelector('.library-page__title')?.textContent === '隐私库'`,
+                'back to privacy library'
+            );
+            return { before, after: before };
         });
 
         await step('source test and update work on isolated source', async () => {
@@ -401,9 +477,19 @@ async function main() {
             return { id, username: initial.config.username };
         });
 
-        await step('task center scan and scrape failures are honest', async () => {
+        await step('privacy mode hides scrape and keeps scan', async () => {
             await cdp.evaluate(`location.hash = '#/tasks'; true`);
-            await cdp.waitFor(`document.querySelectorAll('.task-card').length === 2`, 'task cards');
+            await cdp.waitFor(`document.querySelectorAll('.task-card').length === 1`, 'single scan card');
+            const hasScrape = await cdp.evaluate(
+                `Array.from(document.querySelectorAll('.task-card button')).some((el) => el.textContent.includes('开始刮削'))`
+            );
+            if (hasScrape) {
+                throw new Error('scrape visible in privacy mode');
+            }
+            const note = await cdp.evaluate(`document.querySelector('.task-note')?.textContent ?? ''`);
+            if (!note.includes('刮削不可用')) {
+                throw new Error('missing privacy scrape note');
+            }
             await cdp.evaluate(
                 `Array.from(document.querySelectorAll('.task-card button')).find((el) => el.textContent.includes('开始扫描'))?.click(); true`
             );
@@ -416,26 +502,16 @@ async function main() {
                 'scan finished',
                 60000
             );
-            const scanStatus = await cdp.evaluate(
-                `document.querySelector('.task-history__status')?.textContent?.trim() ?? ''`
-            );
-            await cdp.evaluate(
-                `Array.from(document.querySelectorAll('.task-card button')).find((el) => el.textContent.includes('开始刮削'))?.click(); true`
-            );
-            await cdp.evaluate(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+            await cdp.evaluate(`location.hash = '#/privacy'; true`);
             await cdp.waitFor(
-                `Array.from(document.querySelectorAll('.task-history__item')).some((item) =>
-                    (item.querySelector('.task-history__status')?.textContent ?? '').includes('失败')) ||
-                 (document.body.innerText || '').includes('TMDB API Key')`,
-                'scrape error surfaced',
-                20000
+                `document.querySelector('.library-page__title')?.textContent === '隐私库'`,
+                'back to privacy library'
             );
-            return { scanStatus };
+            return note;
         });
 
         let privateHref = '';
         await step('privacy library shows private fixture only', async () => {
-            await cdp.evaluate(`location.hash = '#/library/movies'; true`);
             await cdp.waitFor(
                 `document.querySelector('.library-page__title')?.textContent === '隐私库'`,
                 'privacy library title'
@@ -463,6 +539,32 @@ async function main() {
                 throw new Error('private detail title missing: ' + title);
             }
             return title;
+        });
+
+        await step('detail favorite and watched actions work', async () => {
+            const clickAction = (label) =>
+                cdp.evaluate(`(() => {
+                    const btn = Array.from(document.querySelectorAll('.detail-actions button'))
+                        .find((el) => (el.textContent || '').trim() === ${JSON.stringify(label)});
+                    if (!btn) return false;
+                    btn.click();
+                    return true;
+                })()`);
+            if (!(await clickAction('收藏'))) {
+                throw new Error('favorite action missing');
+            }
+            await cdp.waitFor(
+                `Array.from(document.querySelectorAll('.detail-actions button')).some((el) => (el.textContent || '').trim() === '取消收藏')`,
+                'favorite applied'
+            );
+            if (!(await clickAction('标记本集已看'))) {
+                throw new Error('watched action missing');
+            }
+            await cdp.waitFor(
+                `Array.from(document.querySelectorAll('.detail-actions button')).some((el) => (el.textContent || '').trim() === '标记未看')`,
+                'watched applied'
+            );
+            return 'actions applied';
         });
 
         await step('private search works in privacy mode', async () => {

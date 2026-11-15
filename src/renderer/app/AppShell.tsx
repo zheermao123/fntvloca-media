@@ -13,6 +13,9 @@ function titleForPath(pathname: string): string {
     if (pathname === '/home' || pathname === '/') {
         return '首页';
     }
+    if (pathname === '/privacy') {
+        return '隐私库';
+    }
     if (pathname.startsWith('/library/')) {
         const segment = pathname.split('/')[2];
         const category = resolveCategoryFromSegment(segment);
@@ -39,12 +42,23 @@ export function AppShell() {
     const prevPrivacyActive = useRef(privacy.active);
 
     useEffect(() => {
-        if (prevPrivacyActive.current && !privacy.active) {
+        if (!prevPrivacyActive.current && privacy.active) {
+            setSearchOpen(false);
+            navigate(ROUTES.privacy, { replace: true });
+        } else if (prevPrivacyActive.current && !privacy.active) {
             setSearchOpen(false);
             navigate(ROUTES.home, { replace: true });
         }
         prevPrivacyActive.current = privacy.active;
     }, [privacy.active, navigate]);
+
+    useEffect(() => {
+        if (privacy.active && (location.pathname === ROUTES.home || location.pathname.startsWith('/library/'))) {
+            navigate(ROUTES.privacy, { replace: true });
+        } else if (!privacy.active && location.pathname === ROUTES.privacy) {
+            navigate(ROUTES.home, { replace: true });
+        }
+    }, [privacy.active, location.pathname, navigate]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {

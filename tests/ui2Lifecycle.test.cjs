@@ -9,6 +9,8 @@ test('privacy deactivation returns to home and closes search', () => {
     const shell = read('src/renderer/app/AppShell.tsx');
     assert.ok(shell.includes('prevPrivacyActive'));
     assert.ok(shell.includes('navigate(ROUTES.home'));
+    assert.ok(shell.includes('navigate(ROUTES.privacy'));
+    assert.ok(shell.includes("location.pathname === ROUTES.home"));
     assert.ok(shell.includes('setSearchOpen(false)'));
     const provider = read('src/renderer/app/PrivacyStateProvider.tsx');
     assert.ok(provider.includes('if (busy)'));

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
 import { fetchHomeOverview } from '../../services/library/libraryService';
 import type { HomeOverview } from '../../services/library/library.types';
 import { ErrorState } from '../../components/ui/ErrorState';
-import { EmptyState } from '../../components/ui/EmptyState';
-import { LockIcon } from '../../components/icons';
 import { HomeHeader } from './HomeHeader';
 import { LibraryOverview, LibraryOverviewSkeleton } from './LibraryOverview';
 import { RecentlyAddedSection, RecentlyAddedSkeleton } from './RecentlyAddedSection';
@@ -47,15 +46,7 @@ export function HomePage() {
     }, [load, privacy.active]);
 
     if (privacy.active) {
-        return (
-            <section className="app-page">
-                <EmptyState
-                    icon={<LockIcon size={24} />}
-                    title="隐私模式中"
-                    description="首页不展示隐私媒体与统计。媒体库与详情页将在隐私模式下按可见性规则展示内容。"
-                />
-            </section>
-        );
+        return <Navigate to="/privacy" replace />;
     }
 
     if (state.status === 'loading') {
