@@ -46,4 +46,6 @@
 
 - 复查发现 D3 遗漏：`HomeEmptyState.tsx` 仍引导“在经典界面完成”添加源与扫描；D3 的“渲染层不再出现回经典界面指引”在 3.5.0 中不成立。
 - 已修复为引导左侧「媒体源」添加本地文件夹或 WebDAV 并扫描；`renderer:typecheck` 通过，无测试断言该文案。
-- 修正随 3.5.1 构建安装；复查记录见 `docs/ui2/ISSUES_INVENTORY.md` 第七节。
+- 修正已随 3.5.1 构建安装；CI run `43703583623` 成功，`FNMedia_3.5.1_win_x64.exe` 139,663,084 字节，SHA256 `F3CEB496BCB598659859E12233C9B69BFBC04C1A6E5915FF30045FC4A923ADC9`；安装前备份 `C:\Users\Administrator\.fntv-backup-20261115-182451-pre351`。
+- 已从安装版 `app.asar` 提取 renderer bundle 核对：固定文案存在、旧“请在经典界面完成”不存在。
+- 复查记录见 `docs/ui2/ISSUES_INVENTORY.md` 第七节。
