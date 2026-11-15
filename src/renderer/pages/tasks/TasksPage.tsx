@@ -199,10 +199,10 @@ export function TasksPage() {
     const summaryText = state.status === 'success' ? describeScrapeSummary(state.lastSummary) : null;
 
     return (
-        <section className="app-page" aria-label="任务状态">
+        <section className="app-page" aria-label="库维护">
             <header className="library-page__header">
                 <div>
-                    <h2 className="library-page__title">任务状态</h2>
+                    <h2 className="library-page__title">库维护</h2>
                     <p className="library-page__count">扫描与 TMDB 刮削（数据来自既有主进程任务）</p>
                 </div>
             </header>
@@ -223,7 +223,7 @@ export function TasksPage() {
                 </div>
             ) : null}
             {state.status === 'error' ? (
-                <ErrorState title="任务状态加载失败" description={state.message} onRetry={() => void load()} />
+                <ErrorState title="库维护加载失败" description={state.message} onRetry={() => void load()} />
             ) : null}
             {state.status === 'success' ? (
                 <div className="tasks-grid">

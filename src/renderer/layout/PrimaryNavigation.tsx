@@ -46,7 +46,7 @@ export function PrimaryNavigation({
                     <span className="app-nav__icon" aria-hidden="true">
                         <ScanIcon size={15} />
                     </span>
-                    <span>任务状态</span>
+                    <span>库维护</span>
                 </NavLink>
             </nav>
         );

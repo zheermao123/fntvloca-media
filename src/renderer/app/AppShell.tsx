@@ -40,7 +40,7 @@ function titleForPath(pathname: string): string {
         return '媒体源';
     }
     if (pathname === '/tasks') {
-        return '任务状态';
+        return '库维护';
     }
     if (pathname === '/settings') {
         return '设置';
