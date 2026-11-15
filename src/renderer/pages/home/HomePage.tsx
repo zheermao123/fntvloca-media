@@ -90,6 +90,7 @@ export function HomePage() {
         <section className="app-page">
             <HomeHeader />
             <CategoryQuickLinks />
+            <ContinueWatchingSection items={state.data.continueWatching} />
             <LibraryOverview categories={state.data.categories} />
             <RecentlyAddedSection items={state.data.recent} />
         </section>

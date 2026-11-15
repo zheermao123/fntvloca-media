@@ -21,7 +21,7 @@
 
 | 项 | 结果 |
 |---|---|
-| `npm test` | **271 / 271 通过** |
+| `npm test` | **274 / 274 通过**（追加首页继续观看渲染回归 + SQLite/JSON 中文多页排序测试） |
 | `npm run compile` / `renderer:typecheck` / `renderer:build` | exit 0 |
 | CI Windows run | `43669168400`（clean install、271 测试、NSIS、安装/回退/卸载冒烟全部通过） |
 

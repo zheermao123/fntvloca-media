@@ -1,6 +1,7 @@
 import type { LibraryStore } from './store';
 import type { LibraryItem, Show } from './types';
 import { categoryOfSource, isPrivateSource, type SourceCategory } from './sourceCategory';
+import { compareCodePoints } from './sort';
 
 export type CatalogQuery = {
     kind?: 'all' | 'movie' | 'episode';
@@ -275,20 +276,19 @@ export function buildCatalogPage(store: LibraryStore, query: CatalogQuery = {}):
         switch (sort) {
             case 'title':
                 return (
-                    entryTitle(a).localeCompare(entryTitle(b), 'zh', { sensitivity: 'base' }) ||
-                    entryKey(a).localeCompare(entryKey(b))
+                    compareCodePoints(entryTitle(a), entryTitle(b)) || compareCodePoints(entryKey(a), entryKey(b))
                 );
             case 'year':
                 return (
                     entryYear(b) - entryYear(a) ||
-                    entryTitle(a).localeCompare(entryTitle(b), 'zh') ||
-                    entryKey(a).localeCompare(entryKey(b))
+                    compareCodePoints(entryTitle(a), entryTitle(b)) ||
+                    compareCodePoints(entryKey(a), entryKey(b))
                 );
             case 'recentPlayed':
-                return b.lastPlayedAt - a.lastPlayedAt || entryKey(a).localeCompare(entryKey(b));
+                return b.lastPlayedAt - a.lastPlayedAt || compareCodePoints(entryKey(a), entryKey(b));
             case 'added':
             default:
-                return b.addedAt - a.addedAt || entryKey(a).localeCompare(entryKey(b));
+                return b.addedAt - a.addedAt || compareCodePoints(entryKey(a), entryKey(b));
         }
     });
 

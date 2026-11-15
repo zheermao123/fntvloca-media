@@ -20,6 +20,7 @@ import type {
 } from './types';
 import { AUTO_WATCH_THRESHOLD } from './types';
 import type { LibraryStore, ShowMetadataPatch } from './store';
+import { compareCodePoints } from './sort';
 
 const CONTINUE_WATCHING_MAX_RATIO = 0.98;
 const FLUSH_DELAY_MS = 300;
@@ -369,24 +370,22 @@ export class JsonLibraryStore implements LibraryStore {
             switch (sort) {
                 case 'title':
                     return (
-                        a.title.localeCompare(b.title, 'zh', { sensitivity: 'base' }) ||
-                        a.id.localeCompare(b.id)
+                        compareCodePoints(a.title, b.title) || compareCodePoints(a.id, b.id)
                     );
                 case 'year':
                     return (
                         (b.year ?? 0) - (a.year ?? 0) ||
-                        a.title.localeCompare(b.title, 'zh', { sensitivity: 'base' }) ||
-                        a.id.localeCompare(b.id)
+                        compareCodePoints(a.title, b.title) || compareCodePoints(a.id, b.id)
                     );
                 case 'recentPlayed':
                     return (
                         (this.data.watchStates[b.id]?.lastPlayedAt ?? 0) -
                             (this.data.watchStates[a.id]?.lastPlayedAt ?? 0) ||
-                        a.id.localeCompare(b.id)
+                        compareCodePoints(a.id, b.id)
                     );
                 case 'added':
                 default:
-                    return b.addedAt - a.addedAt || a.id.localeCompare(b.id);
+                    return b.addedAt - a.addedAt || compareCodePoints(a.id, b.id);
             }
         });
         const total = movies.length;

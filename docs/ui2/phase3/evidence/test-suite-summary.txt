@@ -1,6 +1,5 @@
 ﻿命令：npm test
-日期：2026-11-15
+日期：2026-11-15（P2 修复后）
 分支：feature/ui2-phase3
-commit：54ae250（功能提交）+ 后续文档提交
-结果：tests 271 / pass 271 / fail 0
-备注：CI run 43669168400 在 Node 22.23.4 clean install 环境亦为 271/271。
+结果：tests 274 / pass 274 / fail 0
+备注：新增首页 ContinueWatching 渲染回归与 SQLite/JSON 中文多页排序测试；PR CI 以最新 run 为准。

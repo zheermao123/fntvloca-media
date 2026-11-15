@@ -582,9 +582,9 @@ export class SqliteLibraryStore implements LibraryStore {
     private buildMovieOrderBy(sort?: ListItemQuery['sort']): string {
         switch (sort) {
             case 'title':
-                return 'ORDER BY i.title COLLATE NOCASE ASC, i.id ASC';
+                return 'ORDER BY i.title ASC, i.id ASC';
             case 'year':
-                return 'ORDER BY i.year DESC, i.title COLLATE NOCASE ASC, i.id ASC';
+                return 'ORDER BY i.year DESC, i.title ASC, i.id ASC';
             case 'recentPlayed':
                 return 'ORDER BY COALESCE(w.last_played_at, 0) DESC, i.id ASC';
             case 'added':
