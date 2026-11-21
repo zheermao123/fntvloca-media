@@ -37,5 +37,7 @@
 
 ## 交付
 
-- 打包版 CI 构建/安装验证待补充；无数据库 schema、IPC 白名单或用户数据结构变更。
-- 回滚：按提交 revert；不涉及数据迁移。
+- CI：run `44884057131` 成功；`FNMedia_3.5.3_win_x64.exe` 139,662,769 字节，SHA256 `78922C7F66CF037F923CBD0092A8340500D686BE90A60E7ABA515F06B9290463`。
+- 已安装 3.5.3（Installer exit 0，文件版本 3.5.3）；安装前备份 `C:\Users\Administrator\.fntv-backup-20261121-162135-pre353`。
+- 打包版首页实测与源码一致：顺序 `home-header → stats-grid → home-chips → 最近播放 → 最近入库`；分类计数 41 / 40 / 30 / 0；最近入库 12 条；无“继续观看”；无运行时异常。
+- 无数据库 schema、IPC 白名单或用户数据结构变更；回滚按提交 revert，不涉及数据迁移。
