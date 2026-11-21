@@ -400,12 +400,13 @@ function init(): void {
     });
 
     registerHandler('library:catalog', (event: IpcMainEvent, payload: Record<string, unknown> = {}) => {
+        const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
         try {
             const kind = payload.kind === 'movie' || payload.kind === 'episode' ? payload.kind : 'all';
             const sort = payload.sort;
             const wantsPrivate = payload.private === true;
             if (wantsPrivate && !isPrivacyUnlocked()) {
-                reply(event, 'library:catalog-info', { entries: [], locked: true });
+                reply(event, 'library:catalog-info', { requestId, entries: [], locked: true });
                 return;
             }
             const page = buildCatalogPage(store, {
@@ -420,6 +421,7 @@ function init(): void {
                 offset: typeof payload.offset === 'number' ? payload.offset : undefined,
             });
             reply(event, 'library:catalog-info', {
+                requestId,
                 entries: page.entries,
                 total: page.total,
                 limit: page.limit,
@@ -428,7 +430,7 @@ function init(): void {
             });
         } catch (error) {
             log.error('[library] 目录查询失败:', error);
-            reply(event, 'library:catalog-info', { entries: [] });
+            reply(event, 'library:catalog-info', { requestId, entries: [] });
         }
     });
 

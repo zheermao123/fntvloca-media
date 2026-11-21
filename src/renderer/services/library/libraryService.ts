@@ -1,7 +1,7 @@
 /** 媒体库查询适配（复用既有 library:catalog / library:show / library:item） */
-import { invoke } from '../desktop/desktopBridge';
+import { invoke, onceReplyMatching, sendChannel } from '../desktop/desktopBridge';
 import { LIBRARY_CATEGORIES } from '../../app/routes';
-import { mapCatalogEntries, mapContinueEntries, mapHistoryEntries, summarizeCategory } from './library.mapper';
+import { mapCatalogEntries, mapHistoryEntries, summarizeCategory } from './library.mapper';
 import type {
     CatalogEntryDto,
     CatalogPage,
@@ -12,6 +12,7 @@ import type {
 } from './library.types';
 
 const RECENT_LIMIT = 12;
+let catalogRequestSeq = 0;
 
 export async function fetchContinueWatching(privateActive: boolean, limit?: number): Promise<ContinueEntryDto[]> {
     const result = await invoke<{ entries?: ContinueEntryDto[]; error?: string }>(
@@ -38,11 +39,17 @@ export async function fetchHistory(privateActive: boolean, limit = RECENT_LIMIT)
 }
 
 export async function queryCatalogPage(params: CatalogQuery): Promise<CatalogPage> {
-    const result = await invoke<Partial<CatalogPage> & { error?: string }>(
-        'library:catalog',
-        params,
-        'library:catalog-info'
+    const requestId = `catalog-${Date.now()}-${++catalogRequestSeq}`;
+    const reply = onceReplyMatching<Partial<CatalogPage> & { requestId?: string; error?: string }>(
+        'library:catalog-info',
+        (data) => data?.requestId === requestId,
+        8000
     );
+    if (!sendChannel('library:catalog', { ...params, requestId })) {
+        reply.catch(() => undefined);
+        throw new Error('BRIDGE_UNAVAILABLE');
+    }
+    const result = await reply;
     if (!result || result.error) {
         throw new Error(result?.error || '目录查询失败');
     }
@@ -66,15 +73,13 @@ export async function fetchHomeOverview(): Promise<HomeOverview> {
         })
     );
     const categories = perCategory.map(({ category, total }) => summarizeCategory(category, total));
-    const [recent, continueEntries, history] = await Promise.all([
+    const [recent, history] = await Promise.all([
         queryCatalogPage({ sort: 'added', limit: RECENT_LIMIT }),
-        fetchContinueWatching(false),
         fetchHistory(false, RECENT_LIMIT),
     ]);
     return {
         categories,
         recent: mapCatalogEntries(recent.entries),
-        continueWatching: mapContinueEntries(continueEntries),
         recentPlayed: mapHistoryEntries(history),
     };
 }
