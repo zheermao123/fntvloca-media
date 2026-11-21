@@ -1,4 +1,5 @@
-import { MenuIcon, MoonIcon, SearchIcon, SunIcon } from '../components/icons';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ChevronLeftIcon, MenuIcon, MoonIcon, SearchIcon, SunIcon } from '../components/icons';
 import { useTheme } from '../theme/ThemeProvider';
 
 function isMacPlatform(): boolean {
@@ -17,8 +18,11 @@ export interface PageHeaderProps {
 
 export function PageHeader({ title, breadcrumb, onSearchOpen, onMenuOpen }: PageHeaderProps) {
     const theme = useTheme();
+    const location = useLocation();
+    const navigate = useNavigate();
     const shortcut = isMacPlatform() ? '⌘ K' : 'Ctrl K';
     const dark = theme.resolved === 'dark';
+    const showBack = location.pathname.startsWith('/media/');
     return (
         <header className="app-header">
             {onMenuOpen ? (
@@ -29,6 +33,12 @@ export function PageHeader({ title, breadcrumb, onSearchOpen, onMenuOpen }: Page
                     aria-label="打开导航菜单"
                 >
                     <MenuIcon size={16} />
+                </button>
+            ) : null}
+            {showBack ? (
+                <button type="button" className="app-back app-back--header" onClick={() => navigate(-1)}>
+                    <ChevronLeftIcon size={14} />
+                    返回
                 </button>
             ) : null}
             {breadcrumb ? <span className="app-header__breadcrumb">{breadcrumb} /</span> : null}

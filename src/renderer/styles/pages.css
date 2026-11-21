@@ -623,6 +623,13 @@
     color: var(--color-text-primary);
 }
 
+.app-back--header {
+    margin-bottom: 0;
+    margin-right: var(--space-1);
+    padding: 4px 6px;
+    flex: 0 0 auto;
+}
+
 .detail-page {
     display: flex;
     flex-direction: column;

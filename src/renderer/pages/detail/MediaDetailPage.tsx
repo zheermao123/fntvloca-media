@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { parseMediaRoute } from '../../services/library/library.mapper';
 import { fetchItemInfo, fetchShowInfo, playLibraryItem } from '../../services/media/mediaService';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { ChevronLeftIcon } from '../../components/icons';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
 import { DetailHero } from './DetailHero';
 import type { ScrapeTarget } from './DetailHero';
@@ -23,7 +22,6 @@ export function MediaDetailPage() {
     const { id } = useParams();
     const privacy = usePrivacyState();
     const location = useLocation();
-    const navigate = useNavigate();
     const parsed = useMemo(() => parseMediaRoute(id ?? '', location.search), [id, location.search]);
     const [state, setState] = useState<LoadState>({ status: 'loading' });
     const requestSeqRef = useRef(0);
@@ -80,10 +78,6 @@ export function MediaDetailPage() {
 
     return (
         <section className="app-page">
-            <button type="button" className="app-back" onClick={() => navigate(-1)}>
-                <ChevronLeftIcon size={14} />
-                返回
-            </button>
             {state.status === 'loading' ? (
                 <div className="detail-hero" aria-hidden="true">
                     <div className="detail-hero__poster">

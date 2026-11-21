@@ -41,3 +41,9 @@
 - 已安装 3.5.3（Installer exit 0，文件版本 3.5.3）；安装前备份 `C:\Users\Administrator\.fntv-backup-20261121-162135-pre353`。
 - 打包版首页实测与源码一致：顺序 `home-header → stats-grid → home-chips → 最近播放 → 最近入库`；分类计数 41 / 40 / 30 / 0；最近入库 12 条；无“继续观看”；无运行时异常。
 - 无数据库 schema、IPC 白名单或用户数据结构变更；回滚按提交 revert，不涉及数据迁移。
+
+## 3.5.4 补充
+
+- 详情页返回按钮移入顶栏标题左侧（`PageHeader` 按 `/media/*` 显示），详情内容区不再单占一行。
+- 源码 Electron 截图确认布局；`npm test` 288/288、typecheck、renderer build 通过。
+- 打包版构建/安装验证待补充。
