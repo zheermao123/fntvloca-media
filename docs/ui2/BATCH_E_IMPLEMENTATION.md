@@ -46,4 +46,6 @@
 
 - 详情页返回按钮移入顶栏标题左侧（`PageHeader` 按 `/media/*` 显示），详情内容区不再单占一行。
 - 源码 Electron 截图确认布局；`npm test` 288/288、typecheck、renderer build 通过。
-- 打包版构建/安装验证待补充。
+- CI：run `44891499248` 成功；`FNMedia_3.5.4_win_x64.exe` 139,663,605 字节，SHA256 `CD0D5B49CF0526E11F0526C50C5FBD1299D1496C63F3DCDBD84A2B04BECB4B08`。
+- 已安装 3.5.4；安装前备份 `C:\Users\Administrator\.fntv-backup-20261121-175635-pre354`。
+- 打包版实测：顶栏存在 1 个「返回」按钮，详情内容区无旧按钮，标题「媒体详情」，版本 3.5.4；截图确认位置。
