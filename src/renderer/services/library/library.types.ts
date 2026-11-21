@@ -133,6 +133,5 @@ export type HistoryItemDto = {
 export type HomeOverview = {
     categories: HomeCategorySummary[];
     recent: MediaCardModel[];
-    continueWatching: MediaCardModel[];
     recentPlayed: MediaCardModel[];
 };

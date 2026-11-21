@@ -16,7 +16,7 @@ export function HomeHeader() {
     return (
         <div className="home-header">
             <h2 className="home-header__greeting">{greeting}，欢迎回来</h2>
-            <p className="home-header__hint">浏览本地媒体库，继续上次观看，或发现最近入库的内容。</p>
+            <p className="home-header__hint">浏览本地媒体库，查看最近播放或最近入库的内容。</p>
         </div>
     );
 }
