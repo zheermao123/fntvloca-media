@@ -4,6 +4,7 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
 import { addSource, pickFolder } from '../../services/library/sourcesService';
 import type { AddSourceInput } from '../../services/library/sourcesService';
+import { finishOperation, startOperation } from '../../app/operationLog';
 
 function folderName(path: string): string {
     const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
@@ -101,6 +102,15 @@ export function AddSourceDialog({
             input.username = username.trim();
             input.password = password;
         }
+        const operationId = startOperation({
+            kind: 'sourceAdd',
+            title: '添加媒体源',
+            private: privateMode,
+            summary:
+                type === 'local'
+                    ? `正在添加 ${localPaths.length} 个本地文件夹`
+                    : '正在添加 WebDAV 源',
+        });
         setBusy(true);
         try {
             if (type === 'local') {
@@ -117,13 +127,17 @@ export function AddSourceDialog({
                     });
                     ids.push(source.id);
                 }
+                finishOperation(operationId, 'success', `已添加 ${ids.length} 个媒体源`);
                 onAdded(ids);
             } else {
                 const source = await addSource(input);
+                finishOperation(operationId, 'success', '已添加 1 个媒体源');
                 onAdded([source.id]);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : '添加媒体源失败');
+            const message = err instanceof Error ? err.message : '添加媒体源失败';
+            finishOperation(operationId, 'error', message);
+            setError(message);
         } finally {
             setBusy(false);
         }

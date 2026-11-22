@@ -889,10 +889,22 @@
     gap: 10px;
 }
 
+.task-history__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
 .task-history__title {
     margin: 0;
     font-size: var(--font-size-lg);
     font-weight: var(--font-weight-semibold);
+}
+
+.task-history__hint {
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
 }
 
 .task-history__empty {
@@ -912,7 +924,7 @@
 
 .task-history__item {
     display: grid;
-    grid-template-columns: 96px 64px 56px 1fr auto;
+    grid-template-columns: 96px 64px 56px 1fr;
     align-items: center;
     gap: 10px;
     padding: 8px 12px;

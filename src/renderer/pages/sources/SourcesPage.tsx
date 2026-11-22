@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/Input';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { FolderIcon, LockIcon } from '../../components/icons';
 import { fetchSources, removeSource, runLibraryScan, testSource, updateSource } from '../../services/library/sourcesService';
+import { finishOperation, startOperation } from '../../app/operationLog';
 import { AddSourceDialog } from './AddSourceDialog';
 import { formatScanResult, formatSourceTestResult, toSourceRows } from './sources.mapper';
 import type { SourceDto, SourceRowModel } from './sources.mapper';
@@ -64,8 +65,7 @@ export function SourcesPage() {
         aliveRef.current = true;
         return () => {
             aliveRef.current = false;
-            scanAbortRef.current?.abort();
-            scanAbortRef.current = null;
+            // 扫描等待继续执行，完成后写入本次软件运行的操作记录。
         };
     }, []);
 
@@ -94,7 +94,7 @@ export function SourcesPage() {
         void load();
     }, [load]);
 
-    const rescan = async (sourceId: string) => {
+    const rescan = async (sourceId: string, targetName?: string, privateSource = privacy.active) => {
         if (scanningId) {
             return;
         }
@@ -102,15 +102,29 @@ export function SourcesPage() {
         scanAbortRef.current = controller;
         setScanningId(sourceId);
         setBanner('正在扫描，完成后显示结果…');
+        const operationId = startOperation({
+            kind: 'sourceScan',
+            title: '扫描媒体源',
+            target: targetName ?? null,
+            private: privateSource,
+        });
         try {
             const result = await runLibraryScan(sourceId, controller.signal);
-            if (aliveRef.current && !controller.signal.aborted) {
-                setBanner(formatScanResult(result));
-                await load();
+            if (!controller.signal.aborted) {
+                const summary = formatScanResult(result);
+                finishOperation(operationId, result.error ? 'error' : 'success', summary);
+                if (aliveRef.current) {
+                    setBanner(summary);
+                    await load();
+                }
             }
         } catch (error) {
-            if (aliveRef.current && !controller.signal.aborted) {
-                setBanner(`扫描失败：${error instanceof Error ? error.message : '未知错误'}`);
+            if (!controller.signal.aborted) {
+                const message = `扫描失败：${error instanceof Error ? error.message : '未知错误'}`;
+                finishOperation(operationId, 'error', message);
+                if (aliveRef.current) {
+                    setBanner(message);
+                }
             }
         } finally {
             if (scanAbortRef.current === controller) {
@@ -298,7 +312,7 @@ export function SourcesPage() {
                                     variant="secondary"
                                     size="sm"
                                     disabled={scanningId !== null}
-                                    onClick={() => void rescan(row.id)}
+                                    onClick={() => void rescan(row.id, row.name, privacy.active)}
                                 >
                                     {scanningId === row.id ? '扫描中…' : '重新扫描'}
                                 </Button>
@@ -415,7 +429,7 @@ export function SourcesPage() {
                     void (async () => {
                         await load();
                         for (const sourceId of sourceIds) {
-                            await rescan(sourceId);
+                            await rescan(sourceId, '新增媒体源', privacy.active);
                         }
                     })();
                 }}
@@ -441,14 +455,23 @@ export function SourcesPage() {
                                     return;
                                 }
                                 setRemoving(true);
+                                const operationId = startOperation({
+                                    kind: 'sourceRemove',
+                                    title: '移除媒体源',
+                                    target: removeTarget.name,
+                                    private: privacy.active,
+                                });
                                 void (async () => {
                                     try {
                                         await removeSource(removeTarget.id);
+                                        finishOperation(operationId, 'success', '媒体源已移除');
                                         setBanner('媒体源已移除');
                                         setRemoveTarget(null);
                                         await load();
                                     } catch (error) {
-                                        setBanner(error instanceof Error ? error.message : '移除失败');
+                                        const message = error instanceof Error ? error.message : '移除失败';
+                                        finishOperation(operationId, 'error', message);
+                                        setBanner(message);
                                     } finally {
                                         setRemoving(false);
                                     }

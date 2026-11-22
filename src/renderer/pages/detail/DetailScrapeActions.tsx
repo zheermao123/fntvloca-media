@@ -6,6 +6,7 @@ import { useToast } from '../../components/ui/ToastProvider';
 import { SparklesIcon } from '../../components/icons';
 import { applyMatch, scrapeItem, searchTmdb } from '../../services/media/mediaService';
 import type { TmdbSearchResult } from '../../services/media/mediaService';
+import { finishOperation, startOperation } from '../../app/operationLog';
 
 export function DetailScrapeActions({
     itemId,
@@ -33,12 +34,15 @@ export function DetailScrapeActions({
         }
         setBusy(true);
         setError('');
+        const operationId = startOperation({ kind: 'itemScrape', title: '重新刮削', target: title });
         try {
             const summary = await scrapeItem(itemId);
+            finishOperation(operationId, 'success', `刮削完成：${summary.scraped} 项更新`);
             showToast(`重新刮削完成（${summary.scraped} 项更新）`, 'success');
             onChanged();
         } catch (err) {
             const message = err instanceof Error ? err.message : '重新刮削失败';
+            finishOperation(operationId, 'error', message);
             setError(message);
             showToast(message, 'error');
         } finally {
@@ -68,13 +72,17 @@ export function DetailScrapeActions({
         }
         setApplyingId(tmdbId);
         setError('');
+        const operationId = startOperation({ kind: 'match', title: '手动匹配', target: title });
         try {
             await applyMatch(itemId, tmdbId);
+            finishOperation(operationId, 'success', '已应用 TMDB 匹配');
             showToast('已应用 TMDB 匹配', 'success');
             setMatchOpen(false);
             onChanged();
         } catch (err) {
-            setError(err instanceof Error ? err.message : '应用匹配失败');
+            const message = err instanceof Error ? err.message : '应用匹配失败';
+            finishOperation(operationId, 'error', message);
+            setError(message);
         } finally {
             setApplyingId(null);
         }

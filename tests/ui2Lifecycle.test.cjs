@@ -32,16 +32,16 @@ test('async catalog pages guard against stale responses', () => {
     }
 });
 
-test('long-lived task waits are cancellable and listeners are cleaned', () => {
+test('long-lived task waits use cancellable services and keep software-session records', () => {
     const tasksPage = read('src/renderer/pages/tasks/TasksPage.tsx');
     assert.ok(tasksPage.includes('scanInFlightRef'));
     assert.ok(tasksPage.includes('scrapeInFlightRef'));
-    assert.ok(tasksPage.includes('scanAbortRef'));
-    assert.ok(tasksPage.includes('scrapeAbortRef'));
     assert.ok(tasksPage.includes('unsubscribeRef.current?.()'));
+    assert.ok(tasksPage.includes('startOperation'));
+    assert.ok(tasksPage.includes('finishOperation'));
     const sourcesPage = read('src/renderer/pages/sources/SourcesPage.tsx');
-    assert.ok(sourcesPage.includes('scanAbortRef'));
-    assert.ok(sourcesPage.includes('.abort()'));
+    assert.ok(sourcesPage.includes('rescan'));
+    assert.ok(sourcesPage.includes('finishOperation(operationId'));
     const tasksService = read('src/renderer/services/library/tasksService.ts');
     assert.ok(tasksService.includes('onceReplyCancellable'));
     assert.ok(tasksService.includes('IPC_CANCELLED'));
