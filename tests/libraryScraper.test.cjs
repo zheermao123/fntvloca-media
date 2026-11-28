@@ -477,6 +477,56 @@ test('cleanSearchQuery removes release noise and completion tags', () => {
     assert.equal(cleanSearchQuery('Game of Thrones'), 'Game of Thrones');
 });
 
+test('show scrape falls back to no year and seasonless title', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'Test' });
+        const { show } = store.upsertShow({
+            sourceId: source.id,
+            groupKey: 'got-season2@2020',
+            title: 'Game of Thrones 2 1080P',
+            year: 2020,
+        });
+        store.upsertItem({
+            sourceId: source.id,
+            kind: 'episode',
+            showId: show.id,
+            title: 'Game of Thrones 2 1080P',
+            season: 2,
+            episode: 1,
+            filePath: 'e1',
+        });
+        const calls = [];
+        const scraper = makeScraper(store, tmpDir(), {
+            calls,
+            getJson: async (url) => {
+                calls.push({ url, binary: false });
+                if (url.includes('/search/tv')) {
+                    const query = new URL(url).searchParams.get('query');
+                    if (query === 'Game of Thrones') {
+                        return JSON.parse(SEARCH_TV);
+                    }
+                    return { results: [] };
+                }
+                if (url.includes('/tv/1399/season/1')) {
+                    return JSON.parse(SEASON_DETAIL);
+                }
+                if (url.includes('/tv/1399')) {
+                    return JSON.parse(TV_DETAIL);
+                }
+                return { results: [] };
+            },
+            getBinary: async () => Buffer.from('fake-image-bytes'),
+        });
+        const summary = await scraper.scrapeLibrary();
+        assert.equal(summary.scraped, 1);
+        const searchCalls = calls.filter((call) => call.url.includes('/search/tv'));
+        assert.ok(searchCalls.some((call) => new URL(call.url).searchParams.get('query') === 'Game of Thrones'));
+    } finally {
+        store.close();
+    }
+});
+
 test('show scrape cleans release noise from the search query', async () => {
     const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
     try {

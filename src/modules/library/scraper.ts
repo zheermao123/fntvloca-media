@@ -323,7 +323,19 @@ export class LibraryScraper {
             }
         }
         const query = cleanSearchQuery(show.title);
-        const results = await this.client.searchTv(query, show.year ?? undefined);
+        const primaryResults = await this.client.searchTv(query, show.year ?? undefined);
+        let results = primaryResults;
+        if (results.length === 0 && show.year != null) {
+            // 剧集目录年份常是“本季年份”，而 TMDB search/tv 的 year 过滤的是首播年份。
+            results = await this.client.searchTv(query);
+        }
+        if (results.length === 0) {
+            // “半泽直树2 1080P”可能在 TMDB 中没有独立条目，回退到去掉尾部季号的主标题。
+            const baseQuery = query.replace(/\s*\d{1,2}$/, '').trim();
+            if (baseQuery.length >= 2 && baseQuery !== query) {
+                results = await this.client.searchTv(baseQuery);
+            }
+        }
         const best = pickBestResult(results, query, show.year);
         if (!best) {
             return false;
