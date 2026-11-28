@@ -72,3 +72,45 @@ export async function updateSource(patch: {
     const result = await reply;
     return { success: result?.success === true, error: result?.error };
 }
+export type AddSourceInput = {
+    type: 'local' | 'webdav';
+    name?: string;
+    rootPath?: string;
+    url?: string;
+    username?: string;
+    password?: string;
+    category?: string;
+    private?: boolean;
+};
+
+export async function addSource(input: AddSourceInput): Promise<SourceDto> {
+    const reply = onceReply<{ source?: SourceDto; error?: string }>('library:source-added', 15000);
+    if (!sendChannel('library:add-source', input)) {
+        throw new Error('BRIDGE_UNAVAILABLE');
+    }
+    const result = await reply;
+    if (!result || result.error || !result.source) {
+        throw new Error(result?.error || '添加媒体源失败');
+    }
+    return result.source;
+}
+
+export async function pickFolder(multiple = false): Promise<string[]> {
+    const reply = onceReply<{ paths?: string[]; path?: string | null }>('library:pick-folder-result', 60000);
+    if (!sendChannel('library:pick-folder', { multiple })) {
+        throw new Error('BRIDGE_UNAVAILABLE');
+    }
+    const result = await reply;
+    return result?.paths && result.paths.length > 0 ? result.paths : result?.path ? [result.path] : [];
+}
+
+export async function removeSource(sourceId: string): Promise<void> {
+    const reply = onceReply<{ success?: boolean; error?: string }>('library:source-removed', 15000);
+    if (!sendChannel('library:remove-source', { id: sourceId })) {
+        throw new Error('BRIDGE_UNAVAILABLE');
+    }
+    const result = await reply;
+    if (!result?.success) {
+        throw new Error(result?.error || '移除媒体源失败');
+    }
+}

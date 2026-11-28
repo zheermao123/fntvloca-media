@@ -7,7 +7,7 @@ const mainwinConfig: BrowserWindowConstructorOptions = {
     width: 1400,
     height: 800,
     minWidth: 800,
-    minHeight: 800,
+    minHeight: 600,
     autoHideMenuBar: true,
     show: false,
     icon: path.join(__dirname, '../../../build/icon.ico'),

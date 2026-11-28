@@ -35,7 +35,7 @@ const RECEIVE_CHANNELS = new Set([
     'library:item-info', 'library:continue-info', 'library:watched-set',
     'library:favorite-set',
     'library:scrape-started', 'library-scrape-progress', 'library-scrape-done',
-    'library-playback-ended',
+    'library-playback-ended', 'play-library-item-result',
     'library:settings-info', 'library:settings-set',
     'library:search-results', 'library:match-applied',
     'library:catalog-info', 'library:show-info',

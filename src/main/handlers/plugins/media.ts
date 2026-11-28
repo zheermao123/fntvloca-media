@@ -531,10 +531,30 @@ function libraryEventHandler(store: LibraryStore) {
     };
 }
 
+function sendLibraryPlaybackResult(
+    event: IpcMainEvent,
+    itemId: string,
+    error?: string
+): void {
+    try {
+        if (!event.sender.isDestroyed()) {
+            event.sender.send('play-library-item-result', { itemId, ok: !error, error });
+        }
+    } catch (sendError) {
+        log.warn('[library] 播放结果回传失败:', sendError);
+    }
+}
+
 // 库条目播放入口
-async function handlePlayLibraryItem(_event: IpcMainEvent, request: LibraryPlayRequest): Promise<void> {
+async function handlePlayLibraryItem(event: IpcMainEvent, request: LibraryPlayRequest): Promise<void> {
+    const itemId = typeof request?.itemId === 'string' ? request.itemId : '';
+    if (!itemId) {
+        sendLibraryPlaybackResult(event, itemId, '播放参数无效');
+        return;
+    }
     if (playbackStarting) {
         log.warn('播放器正在启动，忽略重复播放请求');
+        sendLibraryPlaybackResult(event, itemId, '播放器正在启动，请稍候');
         return;
     }
     if (currentPlayer?.isPlaying()) {
@@ -545,6 +565,11 @@ async function handlePlayLibraryItem(_event: IpcMainEvent, request: LibraryPlayR
     playbackStarting = true;
     try {
         await startLibraryPlayback(request);
+        sendLibraryPlaybackResult(event, itemId);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.error('[library] 播放启动失败:', message);
+        sendLibraryPlaybackResult(event, itemId, message);
     } finally {
         playbackStarting = false;
     }
@@ -561,13 +586,13 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     const isPrivatePlayback = !!(targetSource && isPrivateSource(targetSource));
     if (isPrivatePlayback && !isPrivacyUnlocked()) {
         log.warn('[library] 隐私内容未解锁，拒绝播放:', itemId);
-        return;
+        throw new Error('隐私库已锁定，请先解锁');
     }
 
     const playlistResult = buildLibraryPlaylist(store, itemId);
     if (!playlistResult) {
         log.error('媒体库条目不存在:', itemId);
-        return;
+        throw new Error('媒体条目不存在或已被移除');
     }
 
     // 过滤掉源不存在的条目（文件被删除或 strm 内容为空）
@@ -576,7 +601,7 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     );
     if (validEntries.length === 0) {
         log.error('播放列表条目均不可用:', itemId);
-        return;
+        throw new Error('文件不可用或已被移动，请重新扫描媒体库');
     }
 
     const clickedGuid = playlistResult.entries[playlistResult.currentIndex]?.itemGuid ?? itemId;
@@ -646,7 +671,7 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     const playerPath = getMpvPlayerPath();
     if (!playerPath) {
         log.error('无法找到MPV播放器路径');
-        return;
+        throw new Error('未找到 MPV 播放器，请检查安装是否完整');
     }
 
     const mpvArgs = buildMpvArgs();
@@ -717,8 +742,16 @@ async function startLibraryPlayback({ itemId }: LibraryPlayRequest): Promise<voi
     currentPlayer = player;
 
     const started = await player.playList(playList, currentIndex);
-    if (!started && currentPlayer === player) {
-        currentPlayer = null;
+    if (!started) {
+        if (currentPlayer === player) {
+            currentPlayer = null;
+        }
+        try {
+            player.stop();
+        } catch (stopError) {
+            log.warn('[library] 启动失败后停止播放器失败:', stopError);
+        }
+        throw new Error('播放器启动失败，请确认 MPV 与播放文件可用');
     }
 
     // mpv 启动瞬间（4K HDR 初始化等）系统负载高，主窗口可能被 Windows 标记"(未响应)"；

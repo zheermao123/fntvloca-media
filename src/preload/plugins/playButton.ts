@@ -1,4 +1,5 @@
 import logger from '../core/logger';
+import { isUi2ReactDocument } from '../core/uiShell';
 import { registerHook, HookType } from '../core/hooks';
 import {
     findItemGuid,
@@ -38,7 +39,9 @@ function handleSetup(): void {
     });
 }
 
-registerHook(HookType.OnReady, handleSetup);
-registerHook(HookType.OnDomChange, handleSetup);
+if (!isUi2ReactDocument(window.location)) {
+    registerHook(HookType.OnReady, handleSetup);
+    registerHook(HookType.OnDomChange, handleSetup);
+}
 
 export {};

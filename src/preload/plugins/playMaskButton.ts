@@ -1,4 +1,5 @@
 import logger from '../core/logger';
+import { isUi2ReactDocument } from '../core/uiShell';
 import {
     findItemGuid,
     getPlayButtonConfig,
@@ -88,7 +89,7 @@ function handleClick(event: MouseEvent): void {
 }
 
 async function setupDelegatedPlayHandler(): Promise<void> {
-    if (initialized) return;
+    if (initialized || isUi2ReactDocument(window.location)) return;
 
     const config = await getPlayButtonConfig();
     if (!config.hideOriginalPlayButton) return;

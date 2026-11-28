@@ -1,0 +1,48 @@
+{
+  "run_id": 43683101178,
+  "ref": "release",
+  "commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d",
+  "version": "3.3.0",
+  "approved_at": "2026-11-15T06:02:56.101Z",
+  "release_verified": true,
+  "artifacts": [
+    {
+      "file": "FNMedia_3.3.0_win_x64.exe",
+      "platform": "windows-build",
+      "bytes": 139653885,
+      "sha256": "5C733306A54F696A5AC80E8BB120BC04CF479DB29F18D284826EB3406873E025"
+    },
+    {
+      "file": "FNMedia_3.3.0_mac_x64.dmg",
+      "platform": "macos-build",
+      "bytes": 144850563,
+      "sha256": "0B47EDE92E8D5D909E22BD4D146D7FE11CE6011A7368CF11012E75129511CB79"
+    },
+    {
+      "file": "FNMedia_3.3.0_mac_arm64.dmg",
+      "platform": "macos-build",
+      "bytes": 139628527,
+      "sha256": "106CF4E002073D62CFE62E38891EFCC1F4BC30A50A46FC81CEBB1370B3CC0916"
+    },
+    {
+      "file": "FNMedia_3.3.0_linux_x86_64.AppImage",
+      "platform": "linux-build",
+      "bytes": 139398882,
+      "sha256": "0B2B53CBE6BDFD5D41A706F21027B38282564DDFB22C240555CDF899E2797550"
+    },
+    {
+      "file": "FNMedia_3.3.0_linux_arm64.AppImage",
+      "platform": "linux-build",
+      "bytes": 139185409,
+      "sha256": "8034A8678F4C278480B59EC17BFC674B60FC1FC8CB4E6FA0A20F060EC6B8FD32"
+    }
+  ],
+  "release": {
+    "tag": "v3.3.0",
+    "tag_commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d",
+    "url": "https://github.com/zheermao123/fntvloca-media/releases/tag/v3.3.0",
+    "merge_commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d",
+    "release_job": "success",
+    "assets_hashes_match_preapproval": true
+  }
+}

@@ -66,9 +66,9 @@ export class Logger {
             const isPackaged = app.isPackaged;
 
             if (isPackaged) {
-                // 打包后，使用用户数据目录的logs子文件夹
-                // 这样日志文件不会在重新安装时被删除
-                const userDataPath = app.getPath('userData');
+                // 打包后与应用配置/媒体库保持同一数据目录，避免 userData
+                // 在 logger 初始化时早于 config 的 setPath 生效而落到 AppData。
+                const userDataPath = path.join(app.getPath('home'), '.fntv');
                 return path.join(userDataPath, 'logs');
             } else {
                 // 开发环境，使用项目根目录的log文件夹

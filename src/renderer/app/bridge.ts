@@ -66,3 +66,43 @@ export function onceReplyCancellable<T>(channel: string, timeoutMs = 5000): Canc
 export function onceReply<T>(channel: string, timeoutMs = 5000): Promise<T> {
     return onceReplyCancellable<T>(channel, timeoutMs).promise;
 }
+
+/** 按回包内容匹配的一次性回复（用于同一通道的并发请求，如 catalog requestId）。 */
+export function onceReplyMatching<T>(
+    channel: string,
+    match: (data: T) => boolean,
+    timeoutMs = 5000
+): Promise<T> {
+    const bridge = getBridge();
+    if (!bridge) {
+        return Promise.reject(new Error('BRIDGE_UNAVAILABLE'));
+    }
+    return new Promise<T>((resolve, reject) => {
+        let settled = false;
+        const cleanup = () => {
+            bridge.off?.(channel, listener);
+            window.clearTimeout(timer);
+        };
+        const listener = (_event: unknown, data: unknown) => {
+            if (settled) {
+                return;
+            }
+            const payload = data as T;
+            if (!match(payload)) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            resolve(payload);
+        };
+        const timer = window.setTimeout(() => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            reject(new Error('IPC_TIMEOUT'));
+        }, timeoutMs);
+        bridge.on(channel, listener);
+    });
+}

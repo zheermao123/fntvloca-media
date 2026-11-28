@@ -13,6 +13,7 @@ import { ingestScanResult } from '../../../modules/library/ingest';
 import type { IngestSummary } from '../../../modules/library/ingest';
 import { LibraryScraper } from '../../../modules/library/scraper';
 import { buildCatalogPage } from '../../../modules/library/catalog';
+import { pickMovieVersions } from '../../../modules/library/movieVersions';
 import { categoryOfSource, folderNameFromPath, guessSourceCategory, normalizeCategory } from '../../../modules/library/sourceCategory';
 import { isPrivateSource, toRendererSource } from '../../../modules/library/sourceCategory';
 import { testLocalRoot, testWebdavSource } from '../../../modules/library/sourceTest';
@@ -376,6 +377,10 @@ function init(): void {
             const siblings = item.showId
                 ? store.listItems({ showId: item.showId, sort: 'title' })
                 : [];
+            const movieVersions =
+                item.kind === 'movie' && item.tmdbId
+                    ? pickMovieVersions(item, store.listItems({ kind: 'movie', sourceId: item.sourceId }))
+                    : [item];
             reply(event, 'library:item-info', {
                 item,
                 show,
@@ -387,7 +392,7 @@ function init(): void {
                           ? store.getFavorite('season', `${item.showId}:${item.season ?? 1}`)
                           : false,
                 episodes: item.kind === 'episode' ? siblings : [],
-                versions: item.kind === 'movie' ? siblings : [],
+                versions: item.kind === 'movie' ? movieVersions : [],
             });
         } catch (error) {
             reply(event, 'library:item-info', { error: error instanceof Error ? error.message : String(error) });
@@ -395,12 +400,13 @@ function init(): void {
     });
 
     registerHandler('library:catalog', (event: IpcMainEvent, payload: Record<string, unknown> = {}) => {
+        const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
         try {
             const kind = payload.kind === 'movie' || payload.kind === 'episode' ? payload.kind : 'all';
             const sort = payload.sort;
             const wantsPrivate = payload.private === true;
             if (wantsPrivate && !isPrivacyUnlocked()) {
-                reply(event, 'library:catalog-info', { entries: [], locked: true });
+                reply(event, 'library:catalog-info', { requestId, entries: [], locked: true });
                 return;
             }
             const page = buildCatalogPage(store, {
@@ -415,6 +421,7 @@ function init(): void {
                 offset: typeof payload.offset === 'number' ? payload.offset : undefined,
             });
             reply(event, 'library:catalog-info', {
+                requestId,
                 entries: page.entries,
                 total: page.total,
                 limit: page.limit,
@@ -423,7 +430,7 @@ function init(): void {
             });
         } catch (error) {
             log.error('[library] 目录查询失败:', error);
-            reply(event, 'library:catalog-info', { entries: [] });
+            reply(event, 'library:catalog-info', { requestId, entries: [] });
         }
     });
 
@@ -606,8 +613,12 @@ function init(): void {
         }
     });
 
-    registerHandler('library:continue', (event: IpcMainEvent, payload?: { private?: boolean }) => {
+    registerHandler('library:continue', (event: IpcMainEvent, payload?: { private?: boolean; limit?: number }) => {
         const wantPrivate = payload?.private === true;
+        const limit =
+            typeof payload?.limit === 'number' && Number.isFinite(payload.limit)
+                ? Math.max(1, Math.min(50, Math.floor(payload.limit)))
+                : CONTINUE_LIST_LIMIT;
         if (wantPrivate && !isPrivacyUnlocked()) {
             reply(event, 'library:continue-info', { entries: [] });
             return;
@@ -697,7 +708,7 @@ function init(): void {
         }
 
         finalEntries.sort((a, b) => b.activityAt - a.activityAt);
-        reply(event, 'library:continue-info', { entries: finalEntries.slice(0, CONTINUE_LIST_LIMIT) });
+        reply(event, 'library:continue-info', { entries: finalEntries.slice(0, limit) });
     });
 
     registerHandler('library:set-watched', (event: IpcMainEvent, payload: { id?: string; watched?: boolean }) => {

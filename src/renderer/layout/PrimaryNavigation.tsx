@@ -5,9 +5,12 @@ import {
     FilmIcon,
     FolderIcon,
     HomeIcon,
+    LockIcon,
     MoreHorizontalIcon,
+    PlayIcon,
     ScanIcon,
     SparklesIcon,
+    StarIcon,
     TvIcon,
 } from '../components/icons';
 import type { ReactNode } from 'react';
@@ -23,7 +26,13 @@ function itemClass({ isActive }: { isActive: boolean }): string {
     return `app-nav__item${isActive ? ' app-nav__item--active' : ''}`;
 }
 
-export function PrimaryNavigation({ variant = 'primary' }: { variant?: 'primary' | 'secondary' }) {
+export function PrimaryNavigation({
+    variant = 'primary',
+    privacyActive = false,
+}: {
+    variant?: 'primary' | 'secondary';
+    privacyActive?: boolean;
+}) {
     if (variant === 'secondary') {
         return (
             <nav className="app-nav" aria-label="管理">
@@ -37,7 +46,20 @@ export function PrimaryNavigation({ variant = 'primary' }: { variant?: 'primary'
                     <span className="app-nav__icon" aria-hidden="true">
                         <ScanIcon size={15} />
                     </span>
-                    <span>任务状态</span>
+                    <span>库维护</span>
+                </NavLink>
+            </nav>
+        );
+    }
+
+    if (privacyActive) {
+        return (
+            <nav className="app-nav" aria-label="隐私库">
+                <NavLink to={ROUTES.privacy} className={itemClass}>
+                    <span className="app-nav__icon" aria-hidden="true">
+                        <LockIcon size={15} />
+                    </span>
+                    <span>隐私库</span>
                 </NavLink>
             </nav>
         );
@@ -50,6 +72,24 @@ export function PrimaryNavigation({ variant = 'primary' }: { variant?: 'primary'
                     <HomeIcon size={15} />
                 </span>
                 <span>首页</span>
+            </NavLink>
+            <NavLink to={ROUTES.allLibrary} className={itemClass} end>
+                <span className="app-nav__icon" aria-hidden="true">
+                    <FilmIcon size={15} />
+                </span>
+                <span>全部媒体</span>
+            </NavLink>
+            <NavLink to={ROUTES.continueWatching} className={itemClass}>
+                <span className="app-nav__icon" aria-hidden="true">
+                    <PlayIcon size={15} />
+                </span>
+                <span>继续观看</span>
+            </NavLink>
+            <NavLink to={ROUTES.favorites} className={itemClass}>
+                <span className="app-nav__icon" aria-hidden="true">
+                    <StarIcon size={15} />
+                </span>
+                <span>收藏</span>
             </NavLink>
             {LIBRARY_CATEGORIES.map((category) => (
                 <NavLink key={category} to={ROUTES.library(category)} className={itemClass}>

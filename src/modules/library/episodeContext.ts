@@ -54,6 +54,8 @@ export function extractTmdbIdHint(text: string): number | null {
 }
 const RELEASE_NOISE = /(1080|2160|720)[pi]|x[._-]?26[45]|bluray|bdrip|web-?dl|hevc|ma10p|flac|10bit/i;
 const EXPLICIT_EPISODE = /[sS]\d{1,2}[\s._-]*[eE]\d{1,3}|第\s*\d{1,3}\s*[集话]|\[\d{1,3}\]|(?:^|[\s._-])[eE][pP]?[._-]?\d{1,3}(?!\d)/;
+/** 显式 SxxE00 是合法的第 0 集/特别集，不能按“无效集号”丢弃目录上下文。 */
+const EXPLICIT_ZERO_EPISODE = /[sS]\d{1,2}[\s._-]*[eE]0{1,2}(?!\d)/;
 
 export type SeasonDirInfo = { season: number; showPrefix: string | null };
 
@@ -252,7 +254,8 @@ export function resolveFolderEpisodeContext(
     if (episode === null && isSpecial) {
         episode = 1;
     }
-    if (episode === null || episode < 1 || episode > MAX_EPISODE) {
+    const explicitZeroEpisode = episode === 0 && EXPLICIT_ZERO_EPISODE.test(fileName);
+    if (episode === null || (episode < 1 && !explicitZeroEpisode) || episode > MAX_EPISODE) {
         return null;
     }
 

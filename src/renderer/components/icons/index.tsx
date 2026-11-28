@@ -178,3 +178,28 @@ export function ListIcon({ size = 16, ...rest }: IconProps) {
         </svg>
     );
 }
+
+export function MenuIcon({ size = 16, ...rest }: IconProps) {
+    return (
+        <svg {...baseProps(size)} {...rest}>
+            <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    );
+}
+
+export function SunIcon({ size = 16, ...rest }: IconProps) {
+    return (
+        <svg {...baseProps(size)} {...rest}>
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+        </svg>
+    );
+}
+
+export function MoonIcon({ size = 16, ...rest }: IconProps) {
+    return (
+        <svg {...baseProps(size)} {...rest}>
+            <path d="M20.2 14.6A8.5 8.5 0 1 1 9.4 3.8a6.8 6.8 0 0 0 10.8 10.8Z" />
+        </svg>
+    );
+}

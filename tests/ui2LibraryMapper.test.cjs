@@ -147,6 +147,7 @@ test('continue entries map to episode/movie routes with progress status', () => 
     ]);
     assert.equal(models[0].route, '/media/show-1?season=2');
     assert.equal(models[0].statusText, '观看中 50%');
+    assert.equal(models[0].progressPct, 50);
     assert.equal(models[0].subtitle, 'S02E03 · E3');
     assert.equal(models[1].route, '/media/movie-1');
     assert.equal(models[1].statusText, '继续观看');

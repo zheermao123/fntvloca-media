@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { onceReply, sendChannel } from '../app/bridge';
 import { usePrivacyState } from '../app/PrivacyStateProvider';
+import { ROUTES } from '../app/routes';
 import { PrimaryNavigation } from './PrimaryNavigation';
-import { LockIcon } from '../components/icons';
+import { LockIcon, SettingsIcon } from '../components/icons';
 
 function useAppVersion(): string | null {
     const [version, setVersion] = useState<string | null>(null);
@@ -25,7 +27,7 @@ function useAppVersion(): string | null {
     return version;
 }
 
-export function Sidebar() {
+export function Sidebar({ open = false }: { open?: boolean }) {
     const privacy = usePrivacyState();
     const version = useAppVersion();
 
@@ -36,7 +38,7 @@ export function Sidebar() {
           : '进入隐私模式';
 
     return (
-        <aside className="app-sidebar" aria-label="主导航">
+        <aside className={`app-sidebar${open ? ' app-sidebar--open' : ''}`} aria-label="主导航">
             <div className="app-brand">
                 <span className="app-brand__logo" aria-hidden="true">
                     FN
@@ -44,10 +46,30 @@ export function Sidebar() {
                 <span className="app-brand__name">飞牛影视</span>
             </div>
 
-            <PrimaryNavigation />
+            <div className="app-sidebar__section-title">媒体库</div>
+            <PrimaryNavigation privacyActive={privacy.active} />
 
             <div className="app-sidebar__section-title">管理</div>
-            <PrimaryNavigation variant="secondary" />
+            <PrimaryNavigation variant="secondary" privacyActive={privacy.active} />
+
+            {!privacy.active ? (
+                <>
+                    <div className="app-sidebar__section-title">系统</div>
+                    <nav className="app-nav" aria-label="系统">
+                        <NavLink
+                            to={ROUTES.settings}
+                            className={({ isActive }) =>
+                                `app-nav__item${isActive ? ' app-nav__item--active' : ''}`
+                            }
+                        >
+                            <span className="app-nav__icon" aria-hidden="true">
+                                <SettingsIcon size={15} />
+                            </span>
+                            <span>设置</span>
+                        </NavLink>
+                    </nav>
+                </>
+            ) : null}
 
             <div className="app-sidebar__spacer" />
 
@@ -72,7 +94,15 @@ export function Sidebar() {
                 {privacy.active ? <div className="app-privacy__status">隐私库内容仅在本模式可见</div> : null}
             </div>
 
-            <div className="app-sidebar__footer">{version ? `版本 ${version}` : ' '}</div>
+            <div className="app-profile">
+                <span className="app-profile__avatar" aria-hidden="true">
+                    FN
+                </span>
+                <span className="app-profile__body">
+                    <span className="app-profile__name">本地媒体库</span>
+                    <span className="app-profile__meta">{version ? `版本 ${version}` : ' '}</span>
+                </span>
+            </div>
         </aside>
     );
 }

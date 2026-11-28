@@ -33,6 +33,8 @@ export type SeasonCatalogEntry = {
     favorite: boolean;
     /** 续播集的播放进度（0-100；与"继续观看"同口径，用于卡片/详情展示"观看中 N%"） */
     progressPct: number;
+    /** 该季最高清晰度（来自剧集文件元数据；无则为 null） */
+    resolution: string | null;
     posterPath: string | null;
     resumeItemId: string;
     addedAt: number;
@@ -74,6 +76,11 @@ type EpisodeState = {
     durationTs: number;
     lastPlayedAt: number | null;
 };
+
+function resolutionRank(resolution: string): number {
+    const match = /^(\d{3,4})p/i.exec(resolution);
+    return match ? Number(match[1]) : 0;
+}
 
 function compareEpisodes(a: LibraryItem, b: LibraryItem): number {
     return (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0);
@@ -247,6 +254,11 @@ export function buildCatalogPage(store: LibraryStore, query: CatalogQuery = {}):
                     resumeState && !resumeState.watched && resumeState.positionTs > 0 && resumeState.durationTs > 0
                         ? Math.min(100, Math.round((resumeState.positionTs / resumeState.durationTs) * 100))
                         : 0;
+                const resolution =
+                    seasonEpisodes
+                        .map((episode) => episode.resolution)
+                        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+                        .sort((a, b) => resolutionRank(b) - resolutionRank(a))[0] ?? null;
                 seasonEntries.push({
                     type: 'season',
                     show,
@@ -256,6 +268,7 @@ export function buildCatalogPage(store: LibraryStore, query: CatalogQuery = {}):
                     watchedCount,
                     favorite: favoriteKeys.has(`season:${show.id}:${season}`),
                     progressPct,
+                    resolution,
                     posterPath,
                     resumeItemId: resumeEpisode.id,
                     addedAt,

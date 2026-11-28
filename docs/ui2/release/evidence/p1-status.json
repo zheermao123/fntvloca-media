@@ -1,23 +1,22 @@
 {
   "p1_01_version": {
-    "status": "decided_in_prep_branch",
+    "status": "released",
     "version": "3.3.0",
-    "branch": "chore/release-3.3.0",
-    "merged_to_release": false,
-    "final_candidate": "pending_release_merge_and_rebuild"
+    "tag": "v3.3.0",
+    "release_url": "https://github.com/zheermao123/fntvloca-media/releases/tag/v3.3.0",
+    "merge_commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d"
   },
   "p1_02_branch_protection": {
-    "status": "enabled",
-    "required_pr_reviews": 1,
-    "require_last_push_approval": true,
+    "status": "enabled_without_pr_review_requirement_per_user_decision",
+    "required_pr_reviews": 0,
+    "comment": "2026-11-15 用户决定取消第二审批人限制；保留检查/禁 force/禁删除/enforce_admins。",
     "required_status_checks": [
       "build-and-test"
     ],
     "strict": true,
     "force_push": false,
     "deletions": false,
-    "enforce_admins": true,
-    "restriction_note": "personal repo: users/teams restrictions unsupported by API"
+    "enforce_admins": true
   },
   "p1_03_environment": {
     "reviewers": [
@@ -25,21 +24,12 @@
     ],
     "prevent_self_review": false,
     "can_admins_bypass": false,
-    "independent_dual_approval": "pending_second_reviewer_decision"
+    "independent_dual_approval": "not_required_per_user_decision_2026-11-15"
   },
   "p1_04_artifact_provenance": {
-    "evidence": "docs/ui2/release/evidence/run-artifact-hashes.json",
-    "acceptance_run_windows_sha256": "62FA6B8DE8584CDEC80AAF8A810B63AD4F5C263DABED688018677DA4AE83F69A",
-    "positive_run_windows_sha256": "8C4D675B8B0390E5EAD33122DC18EE301B719232FD505DD6181B931C0499B78B",
-    "final_candidate": "pending_version_bump_and_rebuild",
-    "candidate_run": {
-      "run_id": 43682151541,
-      "ref": "chore/release-3.3.0",
-      "commit": "63bced3194fab32a7702097d50154650f051b208",
-      "windows_sha256": "568FCCEC400A8B8808DD59097B974CCAAAD9B4DEF31B3BBBD8A2CAD6126DF730",
-      "all_platforms": "success",
-      "release_job": "skipped",
-      "final": "pending_release_merge_rebuild"
-    }
+    "final_run": 43683101178,
+    "final_commit": "1a40e8df7ab5114e0b47f838854fbeb431b2489d",
+    "evidence": "docs/ui2/release/evidence/v3.3.0-final-run.json",
+    "release_verified": true
   }
 }

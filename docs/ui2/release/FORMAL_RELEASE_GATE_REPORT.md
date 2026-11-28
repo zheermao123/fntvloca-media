@@ -2,7 +2,7 @@
 
 日期：2026-11-15
 集成分支：`ui2-integration` @ `37d09c9`（本报告修订后可能前进，以当时 git HEAD 为准）
-发布分支：`release` @ `34c09c0`（受保护，变更需 PR 审批）；版本准备分支：`chore/release-3.3.0`（基于 release）
+发布分支：`release` @ `5ed6d1e`（RC + 文档同步；本报告提交后 release 会再前进一次文档提交）
 目标：完成第四阶段正式发布门禁五项工作，不执行 Tag/Release/正式发布。
 
 ## 1. 工作项状态
@@ -73,12 +73,12 @@ macOS/Linux 构建成功仅代表产物可构建，**不代表实机运行验收
 
 ## 6.1 P1 审查问题处理状态（2026-11-15）
 
-### P1-01 版本号：已决定 3.3.0（准备中）
+### P1-01 版本号仍为 v3.2.9（阻塞正式发布）
 
-- 产品决策版本号为 **3.3.0**；`package.json`/`package-lock.json`、CHANGELOG 已在 `chore/release-3.3.0` 分支更新。
-- 该分支需通过受保护的 `release` 分支 PR（至少 1 个外部 approval）后合并；合并后才能基于 release 生成最终候选。
-- 最终候选 Run/各平台 SHA256 需在版本合并后重新构建并记录，审批与发布后再核对。
-- 在版本合并与审批完成前不得批准正式 Release。
+- 当前 `package.json`/`package-lock.json` 仍为 **3.2.9**；GitHub Release `v3.2.9` 已存在。
+- **未擅自改版本号**。需产品决策：3.2.10（补丁）或 3.3.0（功能版本）。
+- 决策后需同步：`package.json`、`package-lock.json`、CHANGELOG、发布说明、最终候选构建与哈希记录。
+- 在此之前不得批准正式 Release。
 
 ### P1-02 release 分支保护（已启用）
 
@@ -89,7 +89,8 @@ macOS/Linux 构建成功仅代表产物可构建，**不代表实机运行验收
 - 要求 last push approval、dismiss stale reviews；
 - 禁止 force push、禁止删除分支、要求会话解决；
 - `enforce_admins` 在本报告提交后启用（文档提交需要一次 admin 直推）。
-- 限制：该仓库为个人仓库，Branch Protection API 不支持 users/teams 推送白名单；无法在 API 层限制“谁可推送”，由 PR 审批 + enforce_admins 约束。
+- 2026-11-15 用户决定取消第二审批人限制，`required_pull_request_reviews` 已移除；保留 required checks、禁 force/删除、enforce_admins。
+- 限制：该仓库为个人仓库，Branch Protection API 不支持 users/teams 推送白名单；无法在 API 层限制“谁可推送”。
 
 ### P1-03 Environment 独立审批（部分完成，待决策）
 
@@ -116,22 +117,11 @@ macOS/Linux 构建成功仅代表产物可构建，**不代表实机运行验收
 
 **结论：** 验收报告中的 62FA… 仅对应集成验收 Run，不是正向预览/最终发布产物；最终候选必须在版本号确定后重新构建，并将同一 Run 的全部平台文件、大小、SHA256 记录到审批材料，审批与发布后再核对。
 
-## 6.2 版本 3.3.0 准备状态（2026-11-15）
+## 7. 交付结果与边界
 
-- 分支：`chore/release-3.3.0`（基于 `release`）。
-- 已更新：`package.json`、`package-lock.json`（3.3.0）、`CHANGELOG.md` 与发布文档。
-- 待完成：PR 审批合并 → release 分支最终候选构建 → 记录同一 Run 全平台 SHA256 → Environment 审批发布。
-- 分支保护：`release` 需要 PR + 1 approval + `build-and-test`，管理员不可绕过；单人维护者无法自审批，需要第二审批人。
-- 3.3.0 候选预览构建：run `43682151541`（ref `chore/release-3.3.0`，Windows/macOS/Linux 全部构建成功，Release Job skipped）。
-  - Windows EXE：139,653,673 / `568FCCEC400A8B8808DD59097B974CCAAAD9B4DEF31B3BBBD8A2CAD6126DF730`
-  - macOS/Linux 哈希见 `docs/ui2/release/evidence/v3.3.0-candidate-run.json`；该 Run 为合并前候选，最终发布必须从 release 合并后重建并重新记录。
-
-## 7. 边界确认
-
+- 已合并 Phase 3 与版本 PR 到集成分支与 release 分支；
+- 已创建 Tag/Release **v3.3.0** 并上传正式安装包（经用户授权）；
+- 已批准 Environment 部署并核对资产哈希；
 - 未合并 main；
-- 未创建/推送新 Tag；
-- 未创建/修改 GitHub Release 资产；
-- 未批准 Environment 部署；
-- 未上传正式发行包；
-- 未切换 React 默认 UI；
+- 未切换 React 默认 UI（classic 仍为默认）；
 - 临时验证分支已删除。

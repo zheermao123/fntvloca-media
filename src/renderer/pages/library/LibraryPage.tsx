@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { usePrivacyState } from '../../app/PrivacyStateProvider';
+import { useLibraryPreferences } from '../../app/LibraryPreferencesProvider';
 import { CATEGORY_META, resolveCategoryFromSegment } from '../../app/routes';
 import { queryCatalogPage } from '../../services/library/libraryService';
 import { mapCatalogEntries } from '../../services/library/library.mapper';
@@ -14,7 +15,7 @@ import { LibraryEmptyState } from './LibraryEmptyState';
 import { LibraryErrorState } from './LibraryErrorState';
 import { Button } from '../../components/ui/Button';
 import { mapLibraryRows } from './library.mapper';
-import type { FavoriteFilterKey, SortKey, ViewMode, WatchedFilterKey } from './library.types';
+
 
 const PAGE_SIZE = 120;
 
@@ -32,12 +33,11 @@ type LoadState =
 export function LibraryPage() {
     const { category: segment } = useParams();
     const category = resolveCategoryFromSegment(segment);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const queryText = (searchParams.get('q') ?? '').trim();
     const privacy = usePrivacyState();
 
-    const [sort, setSort] = useState<SortKey>('added');
-    const [watched, setWatched] = useState<WatchedFilterKey>('all');
-    const [favorite, setFavorite] = useState<FavoriteFilterKey>('all');
-    const [view, setView] = useState<ViewMode>('grid');
+    const { sort, watched, favorite, view, update } = useLibraryPreferences();
     const [state, setState] = useState<LoadState>({ status: 'loading' });
     const requestSeqRef = useRef(0);
     const loadingMoreRef = useRef(false);
@@ -45,18 +45,16 @@ export function LibraryPage() {
     const queryBase = useMemo(
         () => ({
             category: category ?? undefined,
+            query: queryText || undefined,
             sort,
             watched: watched === 'all' ? undefined : watched === 'watched',
             favorite: favorite === 'all' ? undefined : favorite === 'fav',
             private: privacy.active,
         }),
-        [category, sort, watched, favorite, privacy.active]
+        [category, queryText, sort, watched, favorite, privacy.active]
     );
 
     const load = useCallback(async () => {
-        if (!category) {
-            return;
-        }
         const seq = ++requestSeqRef.current;
         loadingMoreRef.current = false;
         setState({ status: 'loading' });
@@ -114,10 +112,6 @@ export function LibraryPage() {
         }
     }, [state, queryBase]);
 
-    if (!category) {
-        return <Navigate to="/home" replace />;
-    }
-
     const cards: MediaCardModel[] = useMemo(
         () => (state.status === 'success' ? mapCatalogEntries(state.entries) : []),
         [state]
@@ -127,20 +121,40 @@ export function LibraryPage() {
         [state]
     );
     const count = state.status === 'success' ? state.total : 0;
-    const title = privacy.active ? '隐私库' : CATEGORY_META[category].label;
+    const title = privacy.active ? '隐私库' : category ? CATEGORY_META[category].label : '全部媒体';
+
+    if (segment && !category) {
+        return <Navigate to="/home" replace />;
+    }
 
     return (
         <section className="app-page" aria-label={title}>
             <LibraryPageHeader title={title} count={count} capped={false} />
+            {queryText ? (
+                <div className="library-search-note">
+                    <span>搜索“{queryText}”</span>
+                    <button
+                        type="button"
+                        className="library-search-note__clear"
+                        onClick={() => {
+                            const next = new URLSearchParams(searchParams);
+                            next.delete('q');
+                            setSearchParams(next, { replace: true });
+                        }}
+                    >
+                        清除
+                    </button>
+                </div>
+            ) : null}
             <LibraryToolbar
                 sort={sort}
                 watched={watched}
                 favorite={favorite}
                 view={view}
-                onSortChange={setSort}
-                onWatchedChange={setWatched}
-                onFavoriteChange={setFavorite}
-                onViewChange={setView}
+                onSortChange={(value) => update({ sort: value })}
+                onWatchedChange={(value) => update({ watched: value })}
+                onFavoriteChange={(value) => update({ favorite: value })}
+                onViewChange={(value) => update({ view: value })}
             />
             {state.status === 'loading' ? <LibraryLoadingState /> : null}
             {state.status === 'error' ? <LibraryErrorState message={state.message} onRetry={() => void load()} /> : null}

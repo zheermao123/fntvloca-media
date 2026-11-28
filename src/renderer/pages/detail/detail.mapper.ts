@@ -1,5 +1,5 @@
 /** library:item / library:show 回复 → MediaDetailModel（纯函数，可单测） */
-import type { EpisodeRowModel, MediaDetailModel, MetaItem } from './detail.types';
+import type { EpisodeRowModel, MediaDetailModel, MetaItem, MovieVersionModel } from './detail.types';
 
 export type DetailItemDto = {
     id: string;
@@ -7,6 +7,7 @@ export type DetailItemDto = {
     title: string;
     year: number | null;
     posterPath: string | null;
+    backdropPath?: string | null;
     overview: string | null;
     rating: number | null;
     runtime: number | null;
@@ -30,6 +31,7 @@ export type DetailShowDto = {
     title: string;
     year: number | null;
     posterPath: string | null;
+    backdropPath?: string | null;
     overview: string | null;
 };
 
@@ -51,6 +53,15 @@ export function basenameOf(filePath: string): string {
     const normalized = filePath.replace(/\\/g, '/');
     const parts = normalized.split('/').filter((part) => part.length > 0);
     return parts.length > 0 ? parts[parts.length - 1] : filePath;
+}
+
+export function mapMovieVersions(items: readonly DetailItemDto[]): MovieVersionModel[] {
+    return items.map((item) => ({
+        id: item.id,
+        fileName: basenameOf(item.filePath),
+        sizeLabel: formatFileSize(item.fileSize),
+        resolution: item.resolution,
+    }));
 }
 
 export function progressPercent(state: DetailStateDto | undefined): number {
@@ -103,7 +114,10 @@ export function toEpisodeRows(
     });
 }
 
-export function mapMovieDetail(item: DetailItemDto): MediaDetailModel {
+export function mapMovieDetail(
+    item: DetailItemDto,
+    extras: { watched?: boolean; favorite?: boolean; versions?: readonly DetailItemDto[] } = {}
+): MediaDetailModel {
     const meta: MetaItem[] = [];
     if (item.year) {
         meta.push({ label: '年份', value: String(item.year) });
@@ -122,6 +136,7 @@ export function mapMovieDetail(item: DetailItemDto): MediaDetailModel {
         kind: 'movie',
         title: item.title,
         poster: item.posterPath,
+        backdrop: item.backdropPath ?? null,
         overview: item.overview,
         meta,
         file: {
@@ -130,8 +145,13 @@ export function mapMovieDetail(item: DetailItemDto): MediaDetailModel {
             resolution: item.resolution,
         },
         episodes: [],
+        versions: mapMovieVersions(extras.versions ?? []),
         playTargetId: item.id,
         playLabel: '播放',
+        favorite: extras.favorite === true,
+        watched: extras.watched === true,
+        watchedItemId: item.id,
+        favoriteTarget: { type: 'movie', id: item.id },
     };
 }
 
@@ -139,7 +159,8 @@ export function mapSeasonDetail(
     show: DetailShowDto,
     season: number,
     episodes: readonly DetailItemDto[],
-    states: Readonly<Record<string, DetailStateDto>>
+    states: Readonly<Record<string, DetailStateDto>>,
+    extras: { favorite?: boolean } = {}
 ): MediaDetailModel {
     const sorted = [...episodes].sort(
         (a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0)
@@ -160,6 +181,7 @@ export function mapSeasonDetail(
         kind: 'season',
         title: `${show.title} 第 ${season} 季`,
         poster: show.posterPath,
+        backdrop: show.backdropPath ?? null,
         overview: show.overview,
         meta,
         file: resume
@@ -170,7 +192,12 @@ export function mapSeasonDetail(
               }
             : null,
         episodes: toEpisodeRows(sorted, states),
+        versions: [],
         playTargetId: resume ? resume.id : null,
         playLabel: resumePct > 0 ? '继续播放' : '播放',
+        favorite: extras.favorite === true,
+        watched: resume ? states[resume.id]?.watched === true : false,
+        watchedItemId: resume ? resume.id : null,
+        favoriteTarget: { type: 'season', id: show.id, season },
     };
 }

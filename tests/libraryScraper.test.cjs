@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const { createJsonLibraryStore } = require('../dest/modules/library/store');
 const { pickBestResult } = require('../dest/modules/library/tmdb');
+const { cleanSearchQuery } = require('../dest/modules/library/chineseTitle');
 const { LibraryScraper } = require('../dest/modules/library/scraper');
 const { makeTmpDir } = require('./helpers/tmpRoot.cjs');
 
@@ -402,6 +403,204 @@ test('scraper resolves Chinese title via zh-TW/zh-HK fallback', async () => {
         const updated = store.getItem(item.id);
         assert.equal(updated.title, '全面啟動');
         assert.equal(updated.overview, '夢境');
+    } finally {
+        store.close();
+    }
+});
+
+test('refresh falls back to absolute episode numbers in another season', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'Test' });
+        const { show } = store.upsertShow({
+            sourceId: source.id,
+            groupKey: 'absolute@2025',
+            title: 'Kaiju No. 8',
+            year: 2024,
+        });
+        store.updateShowMetadata(show.id, { tmdbId: '207468' });
+        const item = store.upsertItem({
+            sourceId: source.id,
+            kind: 'episode',
+            showId: show.id,
+            title: 'Kaiju No. 8',
+            season: 2,
+            episode: 13,
+            filePath: 'e13',
+        }).item;
+        const tvDetail = JSON.stringify({
+            id: 207468,
+            name: '怪兽8号',
+            overview: '',
+            poster_path: null,
+            backdrop_path: null,
+            number_of_seasons: 2,
+            seasons: [{ season_number: 1 }, { season_number: 2 }],
+        });
+        const seasonOne = JSON.stringify({
+            name: 'Season 1',
+            poster_path: null,
+            episodes: [{ episode_number: 13, name: 'Kaiju Weapon', still_path: null }],
+        });
+        const calls = [];
+        const scraper = makeScraper(store, tmpDir(), {
+            calls,
+            getJson: async (url) => {
+                calls.push({ url, binary: false });
+                if (url.includes('/tv/207468/season/2')) {
+                    return { name: 'Season 2', poster_path: null, episodes: [] };
+                }
+                if (url.includes('/tv/207468/season/1')) {
+                    return JSON.parse(seasonOne);
+                }
+                if (url.includes('/tv/207468')) {
+                    return JSON.parse(tvDetail);
+                }
+                return { results: [] };
+            },
+            getBinary: async () => Buffer.from('fake-image-bytes'),
+        });
+        const summary = await scraper.scrapeLibrary();
+        assert.equal(summary.scraped, 1);
+        const refreshed = store.getItem(item.id);
+        assert.equal(refreshed.metadataSource, 'tmdb');
+        assert.equal(refreshed.episodeTitle, 'Kaiju Weapon');
+    } finally {
+        store.close();
+    }
+});
+
+test('cleanSearchQuery removes release noise and completion tags', () => {
+    assert.equal(cleanSearchQuery('半泽直树 1080P'), '半泽直树');
+    assert.equal(cleanSearchQuery('半泽直树2 1080P'), '半泽直树2');
+    assert.equal(cleanSearchQuery('F 非自然死亡 4K 【已完结】'), '非自然死亡');
+    assert.equal(cleanSearchQuery('Game of Thrones'), 'Game of Thrones');
+});
+
+test('show scrape falls back to no year and seasonless title', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'Test' });
+        const { show } = store.upsertShow({
+            sourceId: source.id,
+            groupKey: 'got-season2@2020',
+            title: 'Game of Thrones 2 1080P',
+            year: 2020,
+        });
+        store.upsertItem({
+            sourceId: source.id,
+            kind: 'episode',
+            showId: show.id,
+            title: 'Game of Thrones 2 1080P',
+            season: 2,
+            episode: 1,
+            filePath: 'e1',
+        });
+        const calls = [];
+        const scraper = makeScraper(store, tmpDir(), {
+            calls,
+            getJson: async (url) => {
+                calls.push({ url, binary: false });
+                if (url.includes('/search/tv')) {
+                    const query = new URL(url).searchParams.get('query');
+                    if (query === 'Game of Thrones') {
+                        return JSON.parse(SEARCH_TV);
+                    }
+                    return { results: [] };
+                }
+                if (url.includes('/tv/1399/season/1')) {
+                    return JSON.parse(SEASON_DETAIL);
+                }
+                if (url.includes('/tv/1399')) {
+                    return JSON.parse(TV_DETAIL);
+                }
+                return { results: [] };
+            },
+            getBinary: async () => Buffer.from('fake-image-bytes'),
+        });
+        const summary = await scraper.scrapeLibrary();
+        assert.equal(summary.scraped, 1);
+        const searchCalls = calls.filter((call) => call.url.includes('/search/tv'));
+        assert.ok(searchCalls.some((call) => new URL(call.url).searchParams.get('query') === 'Game of Thrones'));
+    } finally {
+        store.close();
+    }
+});
+
+test('show scrape cleans release noise from the search query', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'Test' });
+        const { show } = store.upsertShow({
+            sourceId: source.id,
+            groupKey: 'got-noise@2011',
+            title: 'Game of Thrones 1080P',
+            year: 2011,
+        });
+        store.upsertItem({
+            sourceId: source.id,
+            kind: 'episode',
+            showId: show.id,
+            title: 'Game of Thrones 1080P',
+            season: 1,
+            episode: 1,
+            filePath: 'e1',
+        });
+        const transport = makeTransport();
+        const scraper = makeScraper(store, tmpDir(), transport);
+        const summary = await scraper.scrapeLibrary();
+        assert.equal(summary.scraped, 1);
+        const searchCall = transport.calls.find((call) => call.url.includes('/search/tv'));
+        assert.ok(searchCall);
+        assert.equal(new URL(searchCall.url).searchParams.get('query'), 'Game of Thrones');
+    } finally {
+        store.close();
+    }
+});
+
+test('known show with new filename episodes is refreshed by tmdb id', async () => {
+    const store = createJsonLibraryStore(path.join(tmpDir(), 'db.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'Test' });
+        const { show } = store.upsertShow({
+            sourceId: source.id,
+            groupKey: 'got-refresh@2011',
+            title: 'Game of Thrones',
+            year: 2011,
+        });
+        store.updateShowMetadata(show.id, { tmdbId: '1399' });
+        const oldEpisode = store.upsertItem({
+            sourceId: source.id,
+            kind: 'episode',
+            showId: show.id,
+            title: 'Game of Thrones',
+            season: 1,
+            episode: 1,
+            filePath: 'e1',
+        }).item;
+        store.updateItemMetadata(oldEpisode.id, { metadataSource: 'tmdb', episodeTitle: 'Winter Is Coming' });
+        const newEpisode = store.upsertItem({
+            sourceId: source.id,
+            kind: 'episode',
+            showId: show.id,
+            title: 'Game of Thrones',
+            season: 1,
+            episode: 2,
+            filePath: 'e2',
+        }).item;
+
+        const transport = makeTransport();
+        const scraper = makeScraper(store, tmpDir(), transport);
+        const first = await scraper.scrapeLibrary();
+        assert.equal(first.scraped, 1);
+        assert.ok(transport.calls.some((call) => call.url.includes('/tv/1399')));
+        assert.ok(!transport.calls.some((call) => call.url.includes('/search/tv')));
+        const refreshed = store.getItem(newEpisode.id);
+        assert.equal(refreshed.metadataSource, 'tmdb');
+        assert.equal(refreshed.episodeTitle, 'The Kingsroad');
+
+        const second = await scraper.scrapeLibrary();
+        assert.equal(second.scraped, 0);
     } finally {
         store.close();
     }

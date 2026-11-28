@@ -1,25 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { parseMediaRoute } from '../../services/library/library.mapper';
 import { fetchItemInfo, fetchShowInfo, playLibraryItem } from '../../services/media/mediaService';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { ChevronLeftIcon } from '../../components/icons';
+import { usePrivacyState } from '../../app/PrivacyStateProvider';
 import { DetailHero } from './DetailHero';
+import type { ScrapeTarget } from './DetailHero';
 import { OverviewSection } from './OverviewSection';
 import { FileInfoSection } from './FileInfoSection';
+import { VersionSection } from './VersionSection';
 import { mapMovieDetail, mapSeasonDetail } from './detail.mapper';
 import type { MediaDetailModel } from './detail.types';
 
 type LoadState =
     | { status: 'loading' }
     | { status: 'error'; message: string }
-    | { status: 'success'; model: MediaDetailModel };
+    | { status: 'success'; model: MediaDetailModel; scrapeTarget: ScrapeTarget | null };
 
 export function MediaDetailPage() {
     const { id } = useParams();
+    const privacy = usePrivacyState();
     const location = useLocation();
-    const navigate = useNavigate();
     const parsed = useMemo(() => parseMediaRoute(id ?? '', location.search), [id, location.search]);
     const [state, setState] = useState<LoadState>({ status: 'loading' });
     const requestSeqRef = useRef(0);
@@ -35,15 +37,31 @@ export function MediaDetailPage() {
             if (parsed.kind === 'season') {
                 const result = await fetchShowInfo(parsed.showId, parsed.season);
                 if (requestSeqRef.current === seq) {
+                    const scrapeEpisode = result.episodes[0] ?? null;
                     setState({
                         status: 'success',
-                        model: mapSeasonDetail(result.show, parsed.season, result.episodes, result.states),
+                        model: mapSeasonDetail(result.show, parsed.season, result.episodes, result.states, { favorite: result.favorite }),
+                        scrapeTarget: scrapeEpisode
+                            ? { itemId: scrapeEpisode.id, title: result.show.title, year: result.show.year }
+                            : null,
                     });
                 }
             } else {
                 const result = await fetchItemInfo(parsed.itemId);
                 if (requestSeqRef.current === seq) {
-                    setState({ status: 'success', model: mapMovieDetail(result.item) });
+                    setState({
+                        status: 'success',
+                        model: mapMovieDetail(result.item, {
+                            watched: result.watchState?.watched,
+                            favorite: result.favorite,
+                            versions: result.versions,
+                        }),
+                        scrapeTarget: {
+                            itemId: result.item.id,
+                            title: result.item.title,
+                            year: result.item.year,
+                        },
+                    });
                 }
             }
         } catch (error) {
@@ -60,10 +78,6 @@ export function MediaDetailPage() {
 
     return (
         <section className="app-page">
-            <button type="button" className="app-back" onClick={() => navigate(-1)}>
-                <ChevronLeftIcon size={14} />
-                返回
-            </button>
             {state.status === 'loading' ? (
                 <div className="detail-hero" aria-hidden="true">
                     <div className="detail-hero__poster">
@@ -81,8 +95,13 @@ export function MediaDetailPage() {
             ) : null}
             {state.status === 'success' ? (
                 <div className="detail-page">
-                    <DetailHero model={state.model} />
+                    <DetailHero
+                        model={state.model}
+                        onChanged={() => void load()}
+                        scrapeTarget={privacy.active ? null : state.scrapeTarget}
+                    />
                     <OverviewSection overview={state.model.overview} />
+                    <VersionSection versions={state.model.versions} />
                     <FileInfoSection file={state.model.file} />
                     {state.model.episodes.length > 0 ? (
                         <section className="detail-section">

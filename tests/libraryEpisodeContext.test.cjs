@@ -243,3 +243,17 @@ test('movies and root-level files are not converted into episodes', () => {
         null
     );
 });
+
+test('explicit SxxE00 stays in the parent season as episode 0', () => {
+    const ctx = resolveFolderEpisodeContext(
+        ['Show', 'Season 2'],
+        'Show.S02E00.2020.DC.1080p.BluRay.x265.10bit.AC3-BitsTV.mkv'
+    );
+    assert.ok(ctx);
+    assert.equal(ctx.showTitle, 'Show');
+    assert.equal(ctx.season, 2);
+    assert.equal(ctx.episode, 0);
+
+    // 非显式 E00 仍不能被当作有效集号，避免把普通“00”文件误归组。
+    assert.equal(resolveFolderEpisodeContext(['Show', 'Season 2'], 'Show.00.mkv'), null);
+});

@@ -7,7 +7,9 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { Input } from '../../components/ui/Input';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { FolderIcon, LockIcon } from '../../components/icons';
-import { fetchSources, runLibraryScan, testSource, updateSource } from '../../services/library/sourcesService';
+import { fetchSources, removeSource, runLibraryScan, testSource, updateSource } from '../../services/library/sourcesService';
+import { finishOperation, startOperation } from '../../app/operationLog';
+import { AddSourceDialog } from './AddSourceDialog';
 import { formatScanResult, formatSourceTestResult, toSourceRows } from './sources.mapper';
 import type { SourceDto, SourceRowModel } from './sources.mapper';
 
@@ -52,6 +54,9 @@ export function SourcesPage() {
     });
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [addOpen, setAddOpen] = useState(false);
+    const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
+    const [removing, setRemoving] = useState(false);
     const aliveRef = useRef(true);
     const requestSeqRef = useRef(0);
     const scanAbortRef = useRef<AbortController | null>(null);
@@ -60,8 +65,7 @@ export function SourcesPage() {
         aliveRef.current = true;
         return () => {
             aliveRef.current = false;
-            scanAbortRef.current?.abort();
-            scanAbortRef.current = null;
+            // 扫描等待继续执行，完成后写入本次软件运行的操作记录。
         };
     }, []);
 
@@ -90,7 +94,7 @@ export function SourcesPage() {
         void load();
     }, [load]);
 
-    const rescan = async (sourceId: string) => {
+    const rescan = async (sourceId: string, targetName?: string, privateSource = privacy.active) => {
         if (scanningId) {
             return;
         }
@@ -98,15 +102,29 @@ export function SourcesPage() {
         scanAbortRef.current = controller;
         setScanningId(sourceId);
         setBanner('正在扫描，完成后显示结果…');
+        const operationId = startOperation({
+            kind: 'sourceScan',
+            title: '扫描媒体源',
+            target: targetName ?? null,
+            private: privateSource,
+        });
         try {
             const result = await runLibraryScan(sourceId, controller.signal);
-            if (aliveRef.current && !controller.signal.aborted) {
-                setBanner(formatScanResult(result));
-                await load();
+            if (!controller.signal.aborted) {
+                const summary = formatScanResult(result);
+                finishOperation(operationId, result.error ? 'error' : 'success', summary);
+                if (aliveRef.current) {
+                    setBanner(summary);
+                    await load();
+                }
             }
         } catch (error) {
-            if (aliveRef.current && !controller.signal.aborted) {
-                setBanner(`扫描失败：${error instanceof Error ? error.message : '未知错误'}`);
+            if (!controller.signal.aborted) {
+                const message = `扫描失败：${error instanceof Error ? error.message : '未知错误'}`;
+                finishOperation(operationId, 'error', message);
+                if (aliveRef.current) {
+                    setBanner(message);
+                }
             }
         } finally {
             if (scanAbortRef.current === controller) {
@@ -226,6 +244,9 @@ export function SourcesPage() {
                         {state.status === 'success' ? `共 ${state.rows.length} 个源` : '正在加载…'}
                     </p>
                 </div>
+                <Button variant="primary" onClick={() => setAddOpen(true)}>
+                    添加媒体源
+                </Button>
             </header>
             {privacy.active ? (
                 <div className="task-banner">
@@ -254,7 +275,7 @@ export function SourcesPage() {
                     description={
                         state.locked
                             ? '请先在侧边栏解锁隐私库后再查看隐私源。'
-                            : '请在经典界面「设置 → 媒体库」中添加媒体源；此处仅用于查看、测试与重新扫描。'
+                            : '点击右上角「添加媒体源」即可添加本地文件夹或 WebDAV；添加后可在此查看、测试与重新扫描。'
                     }
                 />
             ) : null}
@@ -291,9 +312,17 @@ export function SourcesPage() {
                                     variant="secondary"
                                     size="sm"
                                     disabled={scanningId !== null}
-                                    onClick={() => void rescan(row.id)}
+                                    onClick={() => void rescan(row.id, row.name, privacy.active)}
                                 >
                                     {scanningId === row.id ? '扫描中…' : '重新扫描'}
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={scanningId !== null || removing}
+                                    onClick={() => setRemoveTarget({ id: row.id, name: row.name })}
+                                >
+                                    移除
                                 </Button>
                             </div>
                         </div>
@@ -389,6 +418,74 @@ export function SourcesPage() {
                         </p>
                     ) : null}
                 </div>
+            </Dialog>
+            <AddSourceDialog
+                open={addOpen}
+                privateMode={privacy.active}
+                onClose={() => setAddOpen(false)}
+                onAdded={(sourceIds) => {
+                    setAddOpen(false);
+                    setBanner('媒体源已添加，正在扫描…');
+                    void (async () => {
+                        await load();
+                        for (const sourceId of sourceIds) {
+                            await rescan(sourceId, '新增媒体源', privacy.active);
+                        }
+                    })();
+                }}
+            />
+            <Dialog
+                open={removeTarget !== null}
+                title="移除媒体源"
+                onClose={() => {
+                    if (!removing) {
+                        setRemoveTarget(null);
+                    }
+                }}
+                footer={
+                    <>
+                        <Button variant="ghost" disabled={removing} onClick={() => setRemoveTarget(null)}>
+                            取消
+                        </Button>
+                        <Button
+                            variant="danger"
+                            loading={removing}
+                            onClick={() => {
+                                if (!removeTarget) {
+                                    return;
+                                }
+                                setRemoving(true);
+                                const operationId = startOperation({
+                                    kind: 'sourceRemove',
+                                    title: '移除媒体源',
+                                    target: removeTarget.name,
+                                    private: privacy.active,
+                                });
+                                void (async () => {
+                                    try {
+                                        await removeSource(removeTarget.id);
+                                        finishOperation(operationId, 'success', '媒体源已移除');
+                                        setBanner('媒体源已移除');
+                                        setRemoveTarget(null);
+                                        await load();
+                                    } catch (error) {
+                                        const message = error instanceof Error ? error.message : '移除失败';
+                                        finishOperation(operationId, 'error', message);
+                                        setBanner(message);
+                                    } finally {
+                                        setRemoving(false);
+                                    }
+                                })();
+                            }}
+                        >
+                            确认移除
+                        </Button>
+                    </>
+                }
+            >
+                <p className="source-edit-note">
+                    移除「{removeTarget?.name}」会同时删除该源的条目、观看记录与收藏，操作不可撤销。
+                </p>
             </Dialog>
         </section>
     );
