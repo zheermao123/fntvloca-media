@@ -35,7 +35,7 @@
 
 ## 验证
 
-- `npm test`：295/295。
+- `npm test`：296/296。
 - 真实 TMDB 补刮已验证：
   - 怪兽8号 S02E13-23 已获取 TMDB 集名；
   - 灵笼 S01E14/15 已获取“终章 上/下”；
@@ -48,3 +48,12 @@
   - `FNMedia_3.5.7_win_x64.exe` 139,666,430 字节，SHA256 `3F727061CA1A1A38F2D6F4A5A87C2FA06B0989C2DCB26917105215A6FDAF2A6D`；
   - 已安装 3.5.7，安装前备份 `C:\Users\Administrator\.fntv-backup-20261128-121033-pre357`；
   - 打包版详情页可见 TMDB 集名；`~/.fntv/logs/app.log` 存在。
+
+## 正式 Release
+
+- Tag / Release：`v3.5.7`
+- Release URL：`https://github.com/zheermao123/fntvloca-media/releases/tag/v3.5.7`
+- PR：`#6`，已合并到 `release`（merge commit `4cab863c78a724a118ef67e8d3d05a249e1f8032`）
+- Release CI run：`46107910182`（Windows/macOS/Linux/Release Job 全部成功）
+- Windows EXE：139,665,048 字节，SHA256 `04B49E07232562509807B599CDEE6DEB1E084F445DF900247C93C799EED32BCE`
+- 产物：Windows x64 EXE、macOS arm64/x64 DMG、Linux arm64/x86_64 AppImage。
