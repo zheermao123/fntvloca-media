@@ -43,7 +43,7 @@
   - 半泽直树2 与非自然死亡刮削成功，获得 TMDB ID/海报/集名；
   - 重复刮削不会重复搜索。
 - 打包版验证：
-  - CI run `46105920840` 成功；
-  - `FNMedia_3.5.7_win_x64.exe` 139,666,307 字节，SHA256 `63BD2343C0F9CA97C2A555165BE0BB5B82F4BBC86C4A55DE38601807DD95A059`；
+  - CI run `46106923949` 成功；
+  - `FNMedia_3.5.7_win_x64.exe` 139,666,430 字节，SHA256 `3F727061CA1A1A38F2D6F4A5A87C2FA06B0989C2DCB26917105215A6FDAF2A6D`；
   - 已安装 3.5.7，安装前备份 `C:\Users\Administrator\.fntv-backup-20261128-121033-pre357`；
   - 打包版详情页可见 TMDB 集名；`~/.fntv/logs/app.log` 存在。
