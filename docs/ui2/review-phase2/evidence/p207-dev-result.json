@@ -1,0 +1,121 @@
+{
+  "mode": "dev",
+  "url": "http://127.0.0.1:5273/#/home",
+  "steps": [
+    {
+      "name": "app-shell boot",
+      "ok": true,
+      "detail": "飞牛影视"
+    },
+    {
+      "name": "styles applied",
+      "ok": true,
+      "detail": {
+        "styleTags": 6,
+        "sheetRules": 240,
+        "bodyBg": "rgb(245, 245, 247)",
+        "linkColor": "rgb(0, 113, 227)",
+        "sidebarDisplay": "flex"
+      }
+    },
+    {
+      "name": "library movies",
+      "ok": true,
+      "detail": {
+        "cards": 41,
+        "title": "电影",
+        "count": "41 部 / 季",
+        "first": "黑客帝国4：矩阵重启",
+        "firstHref": "#/media/1930c381-f99d-4a19-bc7b-efc15dfe2ed0"
+      }
+    },
+    {
+      "name": "movie detail",
+      "ok": true,
+      "detail": {
+        "title": "黑客帝国4：矩阵重启",
+        "play": "播放",
+        "meta": [
+          "年份：2021",
+          "类型：电影",
+          "清晰度：2160P",
+          "时长：148 分钟",
+          "评分：★ 6.303"
+        ],
+        "hasFile": true,
+        "hasOverview": true
+      }
+    },
+    {
+      "name": "library tv",
+      "ok": true,
+      "detail": {
+        "cards": 40,
+        "seasonHref": "#/media/f2aff26e-a91a-4d04-9f4f-6294d831a8dd?season=2"
+      }
+    },
+    {
+      "name": "season detail",
+      "ok": true,
+      "detail": {
+        "title": "半泽直树2 1080P 第 2 季",
+        "play": "播放",
+        "episodes": 9,
+        "firstEpisode": "S02E012020 DC -BitsTV"
+      }
+    },
+    {
+      "name": "search panel",
+      "ok": true,
+      "detail": {
+        "keyword": "的",
+        "dialogTitle": "全局搜索",
+        "results": 20,
+        "hint": "按标题搜索（含剧集名），不支持按文件名搜索；结果最多 50 条。"
+      }
+    },
+    {
+      "name": "sources page",
+      "ok": true,
+      "detail": {
+        "rows": 6,
+        "first": "电影本地文件夹 · D:\\【电影】上次扫描：2026-11-13 19:4841 个条目重新扫描",
+        "count": "共 6 个源"
+      }
+    },
+    {
+      "name": "tasks page",
+      "ok": true,
+      "detail": {
+        "cards": 2,
+        "titles": [
+          "扫描媒体库",
+          "TMDB 刮削"
+        ],
+        "desc": [
+          "重新扫描所有本地媒体源，添加新文件并清理失效条目。扫描不提供实时进度，完成后显示汇总。",
+          "尚未执行过刮削。刮削需要先在设置中配置 TMDB API Key。"
+        ]
+      }
+    },
+    {
+      "name": "privacy dialog",
+      "ok": true,
+      "detail": {
+        "title": "进入隐私模式",
+        "hasPasswordInput": true
+      }
+    },
+    {
+      "name": "console errors",
+      "ok": true,
+      "detail": {
+        "consoleErrors": 0,
+        "securityViolations": 0
+      }
+    }
+  ],
+  "consoleErrors": [],
+  "securityViolations": [],
+  "ok": true
+}

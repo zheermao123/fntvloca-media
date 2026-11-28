@@ -21,14 +21,17 @@ on:
           - windows
           - macos
           - linux
-      release_tag:
-        description: Existing prerelease tag to upload binaries to
-        required: false
-        type: string
+      publish:
+        description: 'Create a formal GitHub Release (preview builds MUST keep false)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   # 检查提交消息是否应该跳过构建
@@ -113,14 +116,14 @@ jobs:
         continue-on-error: true
 
       - name: Install dependencies
-        run: npm install --no-optional --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
         timeout-minutes: 10
 
       - name: Setup macOS specific dependencies
         if: runner.os == 'macOS'
         run: |
-          # 确保 dmg-license 正确安装
-          npm install dmg-license --save-dev
+          # 确保 dmg-license 正确安装（不修改 package.json / lockfile）
+          npm install dmg-license --no-save --no-audit --no-fund
         timeout-minutes: 5
 
       - name: Setup Python (for native modules)
@@ -186,6 +189,14 @@ jobs:
         run: npm run compile
         timeout-minutes: 5
 
+      - name: Run tests
+        run: npm test
+        timeout-minutes: 10
+
+      - name: Build renderer (UI 2.0)
+        run: npm run renderer:build
+        timeout-minutes: 5
+
       - name: Build application
         run: |
           if [ "${{ matrix.platform }}" = "windows" ]; then
@@ -201,33 +212,59 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Upload preview release assets
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+      - name: Windows install and shell smoke
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        timeout-minutes: 8
         run: |
-          case "${{ matrix.platform }}" in
-            windows) assets=(release/*.exe) ;;
-            macos) assets=(release/*.dmg) ;;
-            linux) assets=(release/*.AppImage) ;;
-            *)
-              echo "Unsupported platform: ${{ matrix.platform }}" >&2
-              exit 1
-              ;;
-          esac
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem release -Filter 'FNMedia_*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'CI installer not found' }
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          $appExe = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\fntv') -Filter '*.exe' |
+            Where-Object { $_.Name -notmatch '卸载|Uninstall' } | Select-Object -First 1
+          if (-not $appExe) { throw 'installed exe not found' }
 
-          for asset in "${assets[@]}"; do
-            if [ ! -f "$asset" ]; then
-              echo "Missing release asset: $asset" >&2
-              exit 1
-            fi
-          done
+          function Test-Shell([string]$tag, [string]$expectedUrl) {
+            Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
+            Start-Sleep -Seconds 2
+            $proc = Start-Process -FilePath $appExe.FullName -ArgumentList '--remote-debugging-port=9222' -PassThru
+            try {
+              $deadline = (Get-Date).AddSeconds(75)
+              $page = $null
+              while ((Get-Date) -lt $deadline) {
+                Start-Sleep -Seconds 2
+                try {
+                  $pages = Invoke-RestMethod 'http://127.0.0.1:9222/json' -TimeoutSec 3
+                  $page = $pages | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
+                } catch { $page = $null }
+                if ($page -and $page.title -match '媒体库|飞牛影视') { break }
+              }
+              if (-not $page) { throw "[$tag] no CDP page" }
+              if ($page.url -notmatch $expectedUrl) { throw "[$tag] unexpected url: $($page.url)" }
+              if ($page.title -notmatch '媒体库|飞牛影视') { throw "[$tag] unexpected title: $($page.title)" }
+              Write-Output "[$tag] shell smoke OK: $($page.title) -> $($page.url)"
+            } finally {
+              Get-Process -Name '飞牛影视' -ErrorAction SilentlyContinue | Stop-Process -Force
+              try { $proc | Stop-Process -Force } catch {}
+            }
+          }
 
-          gh release upload "$RELEASE_TAG" "${assets[@]}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --clobber
+          Test-Shell 'default-react' 'ui2-renderer/index\.html'
+          $env:FNTV_UI_SHELL = 'classic'
+          Test-Shell 'classic-escape' 'app\.asar/resource/library/index\.html'
+          Remove-Item Env:FNTV_UI_SHELL -ErrorAction SilentlyContinue
+
+          $uninstaller = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\fntv') -Filter 'Uninstall*.exe' | Select-Object -First 1
+          if (-not $uninstaller) { throw 'uninstaller not found' }
+          Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait
+          $removed = $false
+          for ($i = 0; $i -lt 15; $i++) {
+            if (-not (Test-Path $appExe.FullName)) { $removed = $true; break }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $removed) { throw 'app still present after uninstall' }
+          Write-Output 'uninstall smoke OK'
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -262,15 +299,24 @@ jobs:
             echo "No leftover volumes."
             fi
 
+  # 正式 Release 仅在手动 workflow_dispatch + publish=true + platform=all 时执行；
+  # 建议同时在仓库 Settings → Environments 为 release 配置 Required reviewers。
+  # 向 release 分支 push 现在只构建并上传 Actions artifacts，不再自动发布。
   release:
     name: Create Release
     needs: [check-commit, build]
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
     if: >-
       success() &&
       needs.check-commit.outputs.should-skip != 'true' &&
       github.repository == 'zheermao123/fntvloca-media' &&
-      (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all')
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/release' &&
+      github.event.inputs.publish == 'true' &&
+      github.event.inputs.platform == 'all'
 
     steps:
       - name: Checkout code
@@ -316,10 +362,9 @@ jobs:
 
             ---
 
-            ### 💻 支持平台
-            - ✅ Windows (x64)
-            - ✅ macOS (Intel & Apple Silicon)
-            - ✅ Linux (x64 & ARM64)
+            ### 💻 构建产物与验证范围
+            - Windows (x64)：安装包已通过 CI 安装/启动冒烟（classic 默认）
+            - macOS / Linux：仅提供构建产物，尚未进行实机运行验证（用户已接受该风险）
             
             ### 📥 下载指南
             | 平台 | 文件类型 | 说明 |

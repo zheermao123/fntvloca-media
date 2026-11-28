@@ -59,7 +59,7 @@ npm run build:linux  # 构建 Linux 安装包
 | `~/.fntv/config.json` | 应用配置（凭据经系统密钥环加密） |
 | `~/.fntv/library/` | 媒体库数据库 |
 | `~/.fntv/library-cache/` | 海报 / 剧照缓存 |
-| `~/.fntv/logs/` | 运行日志（自动脱敏） |
+| `~/.fntv/logs/` | 运行日志（自动脱敏；v3.5.7 起；旧版打包日志在 `%APPDATA%\fntv\logs`） |
 
 ## ❓ 常见问题
 

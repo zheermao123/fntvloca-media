@@ -167,6 +167,7 @@ export async function ingestScanResult(
                 privateShowId = store.upsertShow({ sourceId, groupKey, title: groupName, year: null }).show.id;
                 showIdsByGroupKey.set(groupKey, privateShowId);
             }
+            const previous = store.getItemByPath(sourceId, file.path);
             const { item, created } = store.upsertItem({
                 sourceId,
                 kind: 'episode',
@@ -185,9 +186,10 @@ export async function ingestScanResult(
             if (poster) {
                 store.updateItemMetadata(item.id, { posterPath: poster });
             }
+            // 只有文件事实（大小/修改时间）变化才计“更新”；纯元数据刷新不算。
             if (created) {
                 summary.added += 1;
-            } else {
+            } else if (previous && (previous.fileSize !== file.size || previous.mtime !== file.mtime)) {
                 summary.updated += 1;
             }
             keptIds.add(item.id);
@@ -241,6 +243,7 @@ export async function ingestScanResult(
             year = enrich.year;
         }
 
+        const previous = store.getItemByPath(sourceId, file.path);
         const { item, created } = store.upsertItem({
             sourceId,
             kind: episode !== null ? 'episode' : 'movie',
@@ -268,9 +271,10 @@ export async function ingestScanResult(
             store.updateItemMetadata(item.id, enrich);
         }
 
+        // 只有文件事实（大小/修改时间）变化才计“更新”；纯元数据刷新不算。
         if (created) {
             summary.added += 1;
-        } else {
+        } else if (previous && (previous.fileSize !== file.size || previous.mtime !== file.mtime)) {
             summary.updated += 1;
         }
         keptIds.add(item.id);

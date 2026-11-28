@@ -1,0 +1,39 @@
+/** UI 2.0 路由常量与分类映射（HashRouter；category=other → /library/others） */
+export type LibraryCategory = 'movie' | 'tv' | 'anime' | 'other';
+
+export const CATEGORY_META: Record<LibraryCategory, { label: string; segment: string }> = {
+    movie: { label: '电影', segment: 'movies' },
+    tv: { label: '剧集', segment: 'tv' },
+    anime: { label: '动漫', segment: 'anime' },
+    other: { label: '其他视频', segment: 'others' },
+};
+
+export const LIBRARY_CATEGORIES: readonly LibraryCategory[] = ['movie', 'tv', 'anime', 'other'];
+
+export const ROUTES = {
+    home: '/home',
+    allLibrary: '/library',
+    library: (category: LibraryCategory) => `/library/${CATEGORY_META[category].segment}`,
+    librarySearch: (query: string, category?: LibraryCategory) => {
+        const params = new URLSearchParams({ q: query });
+        if (category) {
+            params.set('category', CATEGORY_META[category].segment);
+        }
+        return `/library?${params.toString()}`;
+    },
+    favorites: '/favorites',
+    continueWatching: '/continue',
+    media: (id: string) => `/media/${encodeURIComponent(id)}`,
+    privacy: '/privacy',
+    sources: '/sources',
+    tasks: '/tasks',
+    settings: '/settings',
+} as const;
+
+export function resolveCategoryFromSegment(segment: string | undefined): LibraryCategory | null {
+    if (!segment) {
+        return null;
+    }
+    const found = LIBRARY_CATEGORIES.find((category) => CATEGORY_META[category].segment === segment);
+    return found ?? null;
+}

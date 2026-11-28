@@ -1,6 +1,7 @@
 import type { LibraryStore } from './store';
 import type { LibraryItem, Show } from './types';
 import { categoryOfSource, isPrivateSource, type SourceCategory } from './sourceCategory';
+import { compareCodePoints } from './sort';
 
 export type CatalogQuery = {
     kind?: 'all' | 'movie' | 'episode';
@@ -16,6 +17,8 @@ export type CatalogQuery = {
     query?: string;
     sort?: 'added' | 'title' | 'year' | 'recentPlayed';
     limit?: number;
+    /** 分页偏移（在筛选/排序后的稳定序列上切分） */
+    offset?: number;
 };
 
 export type SeasonCatalogEntry = {
@@ -30,6 +33,8 @@ export type SeasonCatalogEntry = {
     favorite: boolean;
     /** 续播集的播放进度（0-100；与"继续观看"同口径，用于卡片/详情展示"观看中 N%"） */
     progressPct: number;
+    /** 该季最高清晰度（来自剧集文件元数据；无则为 null） */
+    resolution: string | null;
     posterPath: string | null;
     resumeItemId: string;
     addedAt: number;
@@ -49,12 +54,33 @@ export type MovieCatalogEntry = {
 
 export type CatalogEntry = MovieCatalogEntry | SeasonCatalogEntry;
 
+export type CatalogPage = {
+    entries: CatalogEntry[];
+    /** 当前筛选/可见性下的稳定总数 */
+    total: number;
+    limit: number | null;
+    offset: number;
+    hasMore: boolean;
+};
+
+function entryKey(entry: CatalogEntry): string {
+    if (entry.type === 'movie') {
+        return `movie:${entry.item.id}`;
+    }
+    return `season:${entry.show.id}:${entry.season}`;
+}
+
 type EpisodeState = {
     watched: boolean;
     positionTs: number;
     durationTs: number;
     lastPlayedAt: number | null;
 };
+
+function resolutionRank(resolution: string): number {
+    const match = /^(\d{3,4})p/i.exec(resolution);
+    return match ? Number(match[1]) : 0;
+}
 
 function compareEpisodes(a: LibraryItem, b: LibraryItem): number {
     return (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0);
@@ -91,13 +117,16 @@ function pickResume(episodes: LibraryItem[], states: Map<string, EpisodeState>):
  * 聚合媒体库目录：电影条目 + 剧集季条目（每季一张卡片，含季专属海报）。
  * 观看筛选语义：未看=该季还有未看的集；已看=该季全部集均已看。
  */
-export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): CatalogEntry[] {
-    const entries: CatalogEntry[] = [];
+export function buildCatalogPage(store: LibraryStore, query: CatalogQuery = {}): CatalogPage {
+    const movieEntries: CatalogEntry[] = [];
+    const seasonEntries: CatalogEntry[] = [];
     const needle = (query.query ?? '').trim().toLowerCase();
+    const watchStates = new Map(store.listWatchStates().map((state) => [state.itemId, state]));
 
+    const sources = store.listSources();
     const categoryBySource = new Map<string, SourceCategory>();
     const privateSourceIds = new Set<string>();
-    for (const source of store.listSources()) {
+    for (const source of sources) {
         if (isPrivateSource(source)) {
             privateSourceIds.add(source.id);
         }
@@ -115,22 +144,43 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
         query.category === undefined ||
         (typeof sourceId === 'string' && categoryBySource.get(sourceId) === query.category);
 
+    const episodesByShow = new Map<string, LibraryItem[]>();
+    if (query.kind !== 'movie') {
+        for (const episode of store.listItems({ kind: 'episode' })) {
+            if (!episode.showId) {
+                continue;
+            }
+            const group = episodesByShow.get(episode.showId);
+            if (group) {
+                group.push(episode);
+            } else {
+                episodesByShow.set(episode.showId, [episode]);
+            }
+        }
+    }
+
+    const offset = Math.max(0, Math.floor(query.offset ?? 0));
+    const limit = query.limit !== undefined ? Math.max(0, Math.floor(query.limit)) : null;
+
+    let movieTotal = 0;
     if (query.kind !== 'episode') {
-        let movies = store.listItems({ kind: 'movie' });
-        if (needle.length > 0) {
-            movies = movies.filter(
-                (m) =>
-                    m.title.toLowerCase().includes(needle) ||
-                    (m.originalTitle ?? '').toLowerCase().includes(needle)
-            );
-        }
-        if (query.watched !== undefined) {
-            movies = movies.filter((m) => (store.getWatchState(m.id)?.watched ?? false) === query.watched);
-        }
-        movies = movies.filter((m) => matchesVisibility(m.sourceId) && matchesCategory(m.sourceId));
-        for (const item of movies) {
-            const state = store.getWatchState(item.id);
-            entries.push({
+        const movieSourceIds = sources
+            .filter((source) => matchesVisibility(source.id) && matchesCategory(source.id))
+            .map((source) => source.id);
+        const prefixLimit = limit !== null ? offset + limit : undefined;
+        const moviePage = store.queryMovieCatalog({
+            sourceIds: movieSourceIds,
+            needle: (query.query ?? '').trim(),
+            watched: query.watched,
+            favorite: query.favorite,
+            sort: query.sort,
+            limit: prefixLimit,
+            offset: 0,
+        });
+        movieTotal = moviePage.total;
+        for (const item of moviePage.items) {
+            const state = watchStates.get(item.id);
+            movieEntries.push({
                 type: 'movie',
                 item,
                 watched: state?.watched ?? false,
@@ -152,13 +202,13 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
             if (!matchesCategory(show.sourceId)) {
                 continue;
             }
-            const episodes = store.listItems({ showId: show.id }).sort(compareEpisodes);
+            const episodes = (episodesByShow.get(show.id) ?? []).sort(compareEpisodes);
             if (episodes.length === 0) {
                 continue;
             }
             const states = new Map<string, EpisodeState>();
             for (const episode of episodes) {
-                const state = store.getWatchState(episode.id);
+                const state = watchStates.get(episode.id);
                 states.set(episode.id, {
                     watched: state?.watched ?? false,
                     positionTs: state?.positionTs ?? 0,
@@ -204,7 +254,12 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
                     resumeState && !resumeState.watched && resumeState.positionTs > 0 && resumeState.durationTs > 0
                         ? Math.min(100, Math.round((resumeState.positionTs / resumeState.durationTs) * 100))
                         : 0;
-                entries.push({
+                const resolution =
+                    seasonEpisodes
+                        .map((episode) => episode.resolution)
+                        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+                        .sort((a, b) => resolutionRank(b) - resolutionRank(a))[0] ?? null;
+                seasonEntries.push({
                     type: 'season',
                     show,
                     season,
@@ -213,6 +268,7 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
                     watchedCount,
                     favorite: favoriteKeys.has(`season:${show.id}:${season}`),
                     progressPct,
+                    resolution,
                     posterPath,
                     resumeItemId: resumeEpisode.id,
                     addedAt,
@@ -222,23 +278,45 @@ export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): Cat
         }
     }
 
-    const visibleEntries =
-        query.favorite === undefined ? entries : entries.filter((entry) => entry.favorite === query.favorite);
+    const seasonVisible =
+        query.favorite === undefined
+            ? seasonEntries
+            : seasonEntries.filter((entry) => entry.favorite === query.favorite);
+    const visibleEntries = [...movieEntries, ...seasonVisible];
 
     const sort = query.sort ?? 'added';
     visibleEntries.sort((a, b) => {
         switch (sort) {
             case 'title':
-                return entryTitle(a).localeCompare(entryTitle(b), 'zh', { sensitivity: 'base' });
+                return (
+                    compareCodePoints(entryTitle(a), entryTitle(b)) || compareCodePoints(entryKey(a), entryKey(b))
+                );
             case 'year':
-                return entryYear(b) - entryYear(a) || entryTitle(a).localeCompare(entryTitle(b), 'zh');
+                return (
+                    entryYear(b) - entryYear(a) ||
+                    compareCodePoints(entryTitle(a), entryTitle(b)) ||
+                    compareCodePoints(entryKey(a), entryKey(b))
+                );
             case 'recentPlayed':
-                return b.lastPlayedAt - a.lastPlayedAt;
+                return b.lastPlayedAt - a.lastPlayedAt || compareCodePoints(entryKey(a), entryKey(b));
             case 'added':
             default:
-                return b.addedAt - a.addedAt;
+                return b.addedAt - a.addedAt || compareCodePoints(entryKey(a), entryKey(b));
         }
     });
 
-    return query.limit !== undefined ? visibleEntries.slice(0, query.limit) : visibleEntries;
+    const total = movieTotal + seasonVisible.length;
+    const sliced = limit !== null ? visibleEntries.slice(offset, offset + limit) : visibleEntries.slice(offset);
+    return {
+        entries: sliced,
+        total,
+        limit,
+        offset,
+        hasMore: offset + sliced.length < total,
+    };
+}
+
+/** 兼容旧调用方：仅返回当前页条目 */
+export function buildCatalog(store: LibraryStore, query: CatalogQuery = {}): CatalogEntry[] {
+    return buildCatalogPage(store, query).entries;
 }

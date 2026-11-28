@@ -88,12 +88,40 @@ test('ingestScanResult is idempotent and preserves watch state across rescans', 
 
         const second = await ingestScanResult(store, source.id, scan);
         assert.equal(second.added, 0);
-        assert.equal(second.updated, 2);
+        assert.equal(second.updated, 0);
         assert.equal(second.removed, 0);
         assert.equal(store.getWatchState(movie.id).positionTs, 55);
 
         const shows = store.listShows(source.id);
         assert.equal(shows.length, 1);
+    } finally {
+        store.close();
+    }
+});
+
+test('ingestScanResult counts updates only when file facts change', async () => {
+    const root = tmpDir();
+    const moviePath = path.join(root, 'Movies', 'Dune.2021.mkv');
+    writeTree(root, { 'Movies/Dune.2021.mkv': 'v', 'Movies/Heat.1995.mkv': 'v' });
+    const store = createJsonLibraryStore(path.join(root, 'library.json'));
+    try {
+        const source = store.addSource({ type: 'local', name: 'Test' });
+        const firstScan = await scanLocalFolder({ rootPath: root });
+        const first = await ingestScanResult(store, source.id, firstScan);
+        assert.equal(first.added, 2);
+
+        const unchangedScan = await scanLocalFolder({ rootPath: root });
+        const unchanged = await ingestScanResult(store, source.id, unchangedScan);
+        assert.equal(unchanged.added, 0);
+        assert.equal(unchanged.updated, 0);
+        assert.equal(unchanged.removed, 0);
+
+        fs.writeFileSync(moviePath, 'changed-content');
+        const changedScan = await scanLocalFolder({ rootPath: root });
+        const changed = await ingestScanResult(store, source.id, changedScan);
+        assert.equal(changed.added, 0);
+        assert.equal(changed.updated, 1);
+        assert.equal(changed.removed, 0);
     } finally {
         store.close();
     }

@@ -1,0 +1,5 @@
+﻿命令：npm test
+日期：2026-11-15（P2 修复后）
+分支：feature/ui2-phase3
+结果：tests 274 / pass 274 / fail 0
+备注：新增首页 ContinueWatching 渲染回归与 SQLite/JSON 中文多页排序测试；PR CI 以最新 run 为准。

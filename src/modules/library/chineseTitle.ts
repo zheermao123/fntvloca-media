@@ -48,6 +48,24 @@ export function extractChineseTitle(raw: string | null | undefined): string | nu
     return null;
 }
 
+/** 刮削搜索词清洗：去掉画质、编码、发行状态等噪音，避免“半泽直树2 1080P”这类标题搜不到。 */
+const STATUS_TAG_PATTERN =
+    /[\[【（(][^\]】）)]*(?:已完结|连载中|更新至|完结|全\s*\d+\s*集|第\s*[一二三四五六七八九十\d]+\s*季)[^\]】）)]*[\]】）)]/gi;
+
+export function cleanSearchQuery(raw: string | null | undefined): string {
+    const original = String(raw ?? '').trim();
+    let text = original.replace(STATUS_TAG_PATTERN, ' ');
+    text = text.replace(NOISE_PATTERN, ' ');
+    text = text.replace(
+        /\b(?:1080[pi]?|2160p?|720p|4k|uhd|remux|blu-?ray|web-?dl|h\.?26[45]|x26[45]|10bit|hevc)\b/gi,
+        ' '
+    );
+    // 单个拉丁字母前缀（如 “F 非自然死亡”）通常是发布组/分类前缀，不参与搜索。
+    text = text.replace(/^[A-Za-z](?=\s+[\u3400-\u9fff])/, '');
+    text = text.replace(/[\s._\-–—]+/g, ' ').trim();
+    return text.length >= 2 ? text : original;
+}
+
 /** 取第一个"含中文"的候选，否则回退到第一个非空值 */
 export function preferChinese(first: string | null | undefined, ...fallbacks: Array<string | null | undefined>): string {
     const values = [first, ...fallbacks];

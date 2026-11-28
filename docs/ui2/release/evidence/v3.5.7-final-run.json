@@ -1,0 +1,33 @@
+{
+  "version": "3.5.7",
+  "tag": "v3.5.7",
+  "release_url": "https://github.com/zheermao123/fntvloca-media/releases/tag/v3.5.7",
+  "tag_commit": "4cab863c78a724a118ef67e8d3d05a249e1f8032",
+  "pull_request": 6,
+  "release_run": 46107910182,
+  "release_job": "success",
+  "platforms": {
+    "windows": "success",
+    "macos": "success",
+    "linux": "success"
+  },
+  "assets": {
+    "FNMedia_3.5.7_win_x64.exe": {
+      "size": 139665048,
+      "sha256": "04B49E07232562509807B599CDEE6DEB1E084F445DF900247C93C799EED32BCE"
+    },
+    "FNMedia_3.5.7_mac_arm64.dmg": {
+      "size": 139663293
+    },
+    "FNMedia_3.5.7_mac_x64.dmg": {
+      "size": 144865030
+    },
+    "FNMedia_3.5.7_linux_arm64.AppImage": {
+      "size": 139202132
+    },
+    "FNMedia_3.5.7_linux_x86_64.AppImage": {
+      "size": 139411512
+    }
+  },
+  "published_at": "2026-11-28T04:59:58Z"
+}

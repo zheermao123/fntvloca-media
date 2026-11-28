@@ -1,0 +1,141 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { WindowFrame } from '../layout/WindowFrame';
+import { Sidebar } from '../layout/Sidebar';
+import { MainRegion } from '../layout/MainRegion';
+import { PageHeader } from '../layout/PageHeader';
+import { Dialog } from '../components/ui/Dialog';
+import { useToast } from '../components/ui/ToastProvider';
+import { SearchPanel } from '../pages/search/SearchPanel';
+import { onPlaybackResult } from '../services/media/mediaService';
+import { usePrivacyState } from './PrivacyStateProvider';
+import { LibraryPreferencesProvider } from './LibraryPreferencesProvider';
+import { CATEGORY_META, ROUTES, resolveCategoryFromSegment } from './routes';
+
+function titleForPath(pathname: string): string {
+    if (pathname === '/home' || pathname === '/') {
+        return '首页';
+    }
+    if (pathname === '/privacy') {
+        return '隐私库';
+    }
+    if (pathname === '/library') {
+        return '全部媒体';
+    }
+    if (pathname.startsWith('/library/')) {
+        const segment = pathname.split('/')[2];
+        const category = resolveCategoryFromSegment(segment);
+        return category ? CATEGORY_META[category].label : '媒体库';
+    }
+    if (pathname === '/favorites') {
+        return '收藏';
+    }
+    if (pathname === '/continue') {
+        return '继续观看';
+    }
+    if (pathname.startsWith('/media/')) {
+        return '媒体详情';
+    }
+    if (pathname === '/sources') {
+        return '媒体源';
+    }
+    if (pathname === '/tasks') {
+        return '库维护';
+    }
+    if (pathname === '/settings') {
+        return '设置';
+    }
+    return '媒体库';
+}
+
+export function AppShell() {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const privacy = usePrivacyState();
+    const { showToast } = useToast();
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const title = useMemo(() => titleForPath(location.pathname), [location.pathname]);
+    const prevPrivacyActive = useRef(privacy.active);
+
+    useEffect(() => {
+        if (!prevPrivacyActive.current && privacy.active) {
+            setSearchOpen(false);
+            navigate(ROUTES.privacy, { replace: true });
+        } else if (prevPrivacyActive.current && !privacy.active) {
+            setSearchOpen(false);
+            navigate(ROUTES.home, { replace: true });
+        }
+        prevPrivacyActive.current = privacy.active;
+    }, [privacy.active, navigate]);
+
+    useEffect(() => {
+        if (
+            privacy.active &&
+            (location.pathname === ROUTES.home ||
+                location.pathname === ROUTES.allLibrary ||
+                location.pathname.startsWith('/library/') ||
+                location.pathname === ROUTES.favorites ||
+                location.pathname === ROUTES.continueWatching ||
+                location.pathname === ROUTES.settings)
+        ) {
+            navigate(ROUTES.privacy, { replace: true });
+        } else if (!privacy.active && location.pathname === ROUTES.privacy) {
+            navigate(ROUTES.home, { replace: true });
+        }
+    }, [privacy.active, location.pathname, navigate]);
+
+    useEffect(() => {
+        setSidebarOpen(false);
+    }, [location.pathname]);
+
+    useEffect(() => {
+        return onPlaybackResult((result) => {
+            if (!result.ok) {
+                showToast(result.error || '播放启动失败', 'error');
+            }
+        });
+    }, [showToast]);
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+                event.preventDefault();
+                setSearchOpen(true);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
+
+    return (
+        <LibraryPreferencesProvider>
+        <div className="app-shell-root">
+            <WindowFrame>
+                <Sidebar open={sidebarOpen} />
+                {sidebarOpen ? (
+                    <button
+                        type="button"
+                        className="app-sidebar-overlay"
+                        aria-label="关闭导航菜单"
+                        onClick={() => setSidebarOpen(false)}
+                    />
+                ) : null}
+                <MainRegion>
+                    <PageHeader
+                        title={title}
+                        onSearchOpen={() => setSearchOpen(true)}
+                        onMenuOpen={() => setSidebarOpen(true)}
+                    />
+                    <div className="app-main__scroll">
+                        <Outlet />
+                    </div>
+                </MainRegion>
+            </WindowFrame>
+            <Dialog open={searchOpen} title="全局搜索" onClose={() => setSearchOpen(false)}>
+                <SearchPanel onNavigate={() => setSearchOpen(false)} />
+            </Dialog>
+        </div>
+        </LibraryPreferencesProvider>
+    );
+}
