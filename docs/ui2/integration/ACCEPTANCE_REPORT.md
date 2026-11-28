@@ -1,5 +1,7 @@
 # UI 2.0 集成验收报告（Integration Acceptance）
 
+> 本文件为 2026-11-15 / v3.2.9 的历史集成验收记录。当前正式版为 v3.5.7，发布记录见 `docs/ui2/release/RELEASES.md`。
+
 日期：2026-11-15
 分支：`ui2-integration` @ `d400139bc67e883036b0fa0f9021ec809b8034b8`（PR #1 合并提交）
 环境：Windows 10.0.26100 / Electron 38.0.0 / 本机 Node 24.16.0；CI Node 22.23.4 / npm 10.9.9
