@@ -7,7 +7,7 @@ import { TmdbClient, createDefaultTransport, pickBestResult } from './tmdb';
 import type { MovieDetail, ScraperConfig, SearchResult, SeasonDetail, TmdbTransport, TvDetail } from './tmdb';
 import { extractTmdbIdHint } from './episodeContext';
 import { isPrivateSource } from './sourceCategory';
-import { extractChineseTitle, hasCJK, preferChinese } from './chineseTitle';
+import { cleanSearchQuery, extractChineseTitle, hasCJK, preferChinese } from './chineseTitle';
 
 export type ScrapeProgress = {
     done: number;
@@ -79,7 +79,18 @@ export class LibraryScraper {
             .filter((i) => (force || i.metadataSource !== 'tmdb') && !privateSourceIds.has(i.sourceId));
         const shows = this.store
             .listShows()
-            .filter((s) => (force || s.tmdbId === null) && !privateSourceIds.has(s.sourceId));
+            .filter((s) => {
+                if (privateSourceIds.has(s.sourceId)) {
+                    return false;
+                }
+                if (force || s.tmdbId === null) {
+                    return true;
+                }
+                // 已刮削的剧如果有新增/未匹配的 filename 剧集，也要按已知 TMDB ID 补刮。
+                return this.store
+                    .listItems({ showId: s.id })
+                    .some((item) => item.metadataSource === 'filename');
+            });
         const total = movies.length + shows.length;
         let done = 0;
 
@@ -287,6 +298,17 @@ export class LibraryScraper {
 
     private async scrapeShow(show: Show): Promise<boolean> {
         await this.delayFn(this.delayMs);
+        // 已知 TMDB ID 的剧直接按 ID 取详情，避免已刮削的剧新增集后永远不会补刮。
+        const knownId = Number(show.tmdbId);
+        if (show.tmdbId && Number.isFinite(knownId) && knownId > 0) {
+            const knownTv = await this.client.getTv(knownId);
+            if (knownTv) {
+                await this.writeShowMetadata(show, knownTv);
+                await this.refreshEpisodes(show.id, knownTv);
+                return true;
+            }
+            log.w(`[scraper] known tmdb id unavailable, fallback to search: ${show.title} (${knownId})`);
+        }
         // 任一剧集路径内嵌 TMDB ID 时直接按 ID 取详情，跳过搜索
         const hintedId = this.store
             .listItems({ showId: show.id })
@@ -300,8 +322,9 @@ export class LibraryScraper {
                 return true;
             }
         }
-        const results = await this.client.searchTv(show.title, show.year ?? undefined);
-        const best = pickBestResult(results, show.title, show.year);
+        const query = cleanSearchQuery(show.title);
+        const results = await this.client.searchTv(query, show.year ?? undefined);
+        const best = pickBestResult(results, query, show.year);
         if (!best) {
             return false;
         }
@@ -365,9 +388,11 @@ export class LibraryScraper {
             return;
         }
         const seasons = new Set<number>();
+        const currentDetails = new Map<number, SeasonDetail>();
         for (const episode of episodes) {
             seasons.add(episode.season ?? 1);
         }
+        const matchedIds = new Set<string>();
         for (const season of seasons) {
             if (season < 0 || season > MAX_SEASONS) {
                 continue;
@@ -377,6 +402,7 @@ export class LibraryScraper {
                 continue;
             }
             await this.mergeChineseEpisodeNames(tv.id, season, detail);
+            currentDetails.set(season, detail);
             const seasonPoster = await this.cacheImage(
                 'tv',
                 tv.id,
@@ -415,7 +441,61 @@ export class LibraryScraper {
                     patch.posterPath = stillPath;
                 }
                 this.store.updateItemMetadata(episode.id, patch);
+                matchedIds.add(episode.id);
             }
+        }
+        const unmatched = episodes.filter((episode) => !matchedIds.has(episode.id));
+        if (unmatched.length === 0) {
+            return;
+        }
+        // 部分发布组按“全剧绝对集号”命名（如怪兽8号 S02E13-23，而 TMDB 第2季
+        // 只有 E01-11），或把终章/特别篇放在错误季（如灵笼 S01E14-15）。
+        // 当前季找不到时，按集号在其他季中就近匹配，避免新增集永远没有集名。
+        const fallbackDetails = new Map(currentDetails);
+        const missingSeasons = (tv.seasonNumbers ?? [])
+            .filter((season) => season >= 0 && season <= MAX_SEASONS && !fallbackDetails.has(season))
+            .sort((a, b) => a - b);
+        for (const season of missingSeasons) {
+            const detail = await this.client.getSeason(tv.id, season);
+            if (!detail) {
+                continue;
+            }
+            await this.mergeChineseEpisodeNames(tv.id, season, detail);
+            fallbackDetails.set(season, detail);
+        }
+        for (const episode of unmatched) {
+            const episodeNumber = episode.episode ?? -1;
+            const candidates: Array<{ season: number; match: SeasonDetail['episodes'][number] }> = [];
+            for (const [season, detail] of fallbackDetails) {
+                const match = detail.episodes.find((candidate) => candidate.episodeNumber === episodeNumber);
+                if (match) {
+                    candidates.push({ season, match });
+                }
+            }
+            if (candidates.length === 0) {
+                continue;
+            }
+            candidates.sort(
+                (a, b) =>
+                    Math.abs(a.season - (episode.season ?? 1)) - Math.abs(b.season - (episode.season ?? 1)) ||
+                    a.season - b.season
+            );
+            const chosen = candidates[0];
+            const patch: ItemMetadataPatch = { metadataSource: 'tmdb' };
+            if (chosen.match.name) {
+                patch.episodeTitle = chosen.match.name;
+            }
+            const stillPath = await this.cacheImage(
+                'tv',
+                tv.id,
+                `still_${chosen.season}_${episodeNumber}`,
+                chosen.match.stillPath,
+                'w185'
+            );
+            if (stillPath) {
+                patch.posterPath = stillPath;
+            }
+            this.store.updateItemMetadata(episode.id, patch);
         }
     }
 
